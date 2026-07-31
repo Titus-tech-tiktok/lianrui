@@ -138,7 +138,7 @@ test('flagship template-print adds complex preservation instructions', { concurr
   assert.doesNotMatch(captured.imageBodies[0], /filename="master/);
 });
 
-test('standard template-print keeps package prompt override and does not receive flagship complex mode', { concurrency: false }, async (t) => {
+test('standard template-print uses shared complex preservation mode without package prompt override', { concurrency: false }, async (t) => {
   const { runtime, captured, templateRoot, printPath, masterImagePath } = await createFixture(t, 'standard');
   await runtime.saveSelectedModelPackage('standard');
 
@@ -151,8 +151,8 @@ test('standard template-print keeps package prompt override and does not receive
     templateRelativePaths: ['01-complex.png']
   });
 
-  assert.match(captured.imageBodies[0], /STANDARD ONLY PROMPT/);
-  assert.doesNotMatch(captured.imageBodies[0], /FLAGSHIP_COMPLEX_TEMPLATE_PRINT_MODE/);
+  assert.doesNotMatch(captured.imageBodies[0], /STANDARD ONLY PROMPT/);
+  assert.match(captured.imageBodies[0], /FLAGSHIP_COMPLEX_TEMPLATE_PRINT_MODE/);
 });
 
 test('fast template-print bills package image price and uses package concurrency', { concurrency: false }, async (t) => {
@@ -168,8 +168,8 @@ test('fast template-print bills package image price and uses package concurrency
     templateRelativePaths: ['01-complex.png']
   });
 
-  assert.match(captured.imageBodies[0], /FAST ONLY PROMPT/);
-  assert.doesNotMatch(captured.imageBodies[0], /FLAGSHIP_COMPLEX_TEMPLATE_PRINT_MODE/);
+  assert.doesNotMatch(captured.imageBodies[0], /FAST ONLY PROMPT/);
+  assert.match(captured.imageBodies[0], /FLAGSHIP_COMPLEX_TEMPLATE_PRINT_MODE/);
   assert.equal(result.summary.billingCostMinor, 50000);
   const events = await fs.readFile(path.join(result.folder, '.caishen-meta', 'image-api-events.jsonl'), 'utf8');
   assert.match(events, /"maxConcurrency":6/);

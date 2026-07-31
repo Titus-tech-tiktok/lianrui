@@ -846,11 +846,9 @@ function appendPackagePrompt(prompt, packagePrompt) {
 }
 
 function packagePromptFor(api, kind) {
-  const pack = api?.activeModelPackage;
-  if (!pack) return '';
-  if (packageIsFlagship(pack)) return '';
-  if (kind === 'analysis') return String(pack.analysisPrompt ?? defaultPackagePrompt('analysis', pack.promptQuality) ?? '');
-  return String(pack.imagePrompt ?? pack.hiddenPrompt ?? defaultPackagePrompt('image', pack.promptQuality) ?? '');
+  void api;
+  void kind;
+  return '';
 }
 
 function packageIsFlagship(pack) {
@@ -908,7 +906,7 @@ function flagshipComplexTemplatePrintPrompt() {
 function applyPackagePrompt(prompt, api, kind) {
   const pack = api?.activeModelPackage;
   const packagePrompt = packagePromptFor(api, kind);
-  if (pack && !packageIsFlagship(pack)) return packagePrompt;
+  if (pack && !packageIsFlagship(pack) && packagePrompt) return packagePrompt;
   return appendPackagePrompt(prompt, packagePrompt);
 }
 
@@ -1727,8 +1725,7 @@ function analysisContentToString(content) {
 async function analysisApiJson(api, chatPayload, timeoutMs, metadata = null) {
   const wireApi = normalizeAnalysisWireApi(api.analysisWireApi, 'chat_completions');
   const pathName = wireApi === 'responses' ? '/responses' : '/chat/completions';
-  const packagePrompt = packagePromptFor(api, 'analysis');
-  const shouldApplyPackagePrompt = api?.activeModelPackage && !packageIsFlagship(api.activeModelPackage);
+  const shouldApplyPackagePrompt = false;
   const sourcePayload = shouldApplyPackagePrompt
     ? {
       ...chatPayload,
@@ -2856,7 +2853,7 @@ async function generateTemplateJob(job, source, config, options = {}) {
     });
     prompt += '\n\n本次输入图顺序：第一张是当前套图模板图，第二张是已生成的母版产品图，第三张是原始印花图。母版产品图是产品外观、柜门图案、颜色和印花效果的标准；当前套图模板图只提供本页构图、场景、文字、尺寸标注和透视关系；原始印花图只用于核对图案，不允许重新设计、拼贴或替换成相似风格。最终结果必须把母版产品迁移到当前模板场景中，并保持当前模板的文字和页面布局。';
     prompt += '\n\n硬性质量要求：印花只能落在柜门或抽屉的正面可替换面板内部，必须完整保留家具黑色外框、黑色门缝/分隔线、黑色侧板、黑色台面、黑色底边、柜脚、把手、阴影和所有场景物品。不得让印花跨过或覆盖任何黑色边框黑边，不得把黑框染成印花，不得延伸到地面、墙面、台面、咖啡机、杯子、人物或其他道具。';
-    if (packageIsFlagship(activePack) && isComplexTemplatePrintAnalysis(analysis, job)) {
+    if (isComplexTemplatePrintAnalysis(analysis, job)) {
       prompt += `\n\n${flagshipComplexTemplatePrintPrompt()}`;
     }
     if (options.referenceResultPath && fs.existsSync(options.referenceResultPath)) {
@@ -2878,7 +2875,12 @@ async function generateTemplateJob(job, source, config, options = {}) {
         : '',
       templatePath: job.relativePath
     });
-    imagePaths = [masterImage];
+    prompt += '\n\n本次输入图顺序：第一张输入图是当前套图模板图，第二张输入图是已生成的母版产品图，第三张输入图是原始印花图。当前套图模板图是最终画幅、版式、文字、标签、场景、构图和透视标准；母版产品图是商品结构、柜门图案、颜色、材质和印花落位的唯一商品标准；原始印花图只用于核对图案细节、颜色和主体完整性。最终结果必须把母版产品迁移到当前模板图的版式/场景中，不得继承模板旧商品结构、旧图案、旧尺寸或旧 SKU。';
+    prompt += '\n\n硬性质量要求：保留当前模板图的中文标题、卖点标签、SKU 标签、尺寸标注、图标、页面编号、背景、道具、人物、光影和排版层级；商品本体必须来自母版产品图。印花只能落在柜门或抽屉的正面可替换面板内部，必须完整保留家具边框、门缝/抽屉缝、侧板、台面、底边、柜脚、把手、阴影和所有场景物品。不得让印花覆盖文字、标签、边框、把手、柜脚、地面、墙面、人物或道具。';
+    if (isComplexTemplatePrintAnalysis(analysis, job)) {
+      prompt += `\n\n${flagshipComplexTemplatePrintPrompt()}`;
+    }
+    imagePaths = [job.templatePath, masterImage, source.printPath];
   }
   if (options.extraInstruction && source.generationMode === 'template_print') prompt += `\n\n本次运营补充要求：${String(options.extraInstruction).trim()}`;
   if (options.includePreviousResult && fs.existsSync(job.outputPath)) imagePaths.push(job.outputPath);
