@@ -209,6 +209,138 @@ function createBillingService(dataRoot) {
     return totals;
   }
 
+  function statsWindowRange(rangeValue = 'today') {
+    const range = String(rangeValue || 'today').toLowerCase();
+    const now = new Date();
+    const chinaOffsetMs = 8 * 60 * 60 * 1000;
+    const chinaNow = new Date(now.getTime() + chinaOffsetMs);
+    const dayStartUtc = Date.UTC(chinaNow.getUTCFullYear(), chinaNow.getUTCMonth(), chinaNow.getUTCDate()) - chinaOffsetMs;
+    if (range === 'yesterday') {
+      return { range, start: dayStartUtc - 24 * 60 * 60 * 1000, end: dayStartUtc };
+    }
+    if (range === '7d') return { range, start: now.getTime() - 7 * 24 * 60 * 60 * 1000, end: now.getTime() };
+    if (range === '30d') return { range, start: now.getTime() - 30 * 24 * 60 * 60 * 1000, end: now.getTime() };
+    return { range: 'today', start: dayStartUtc, end: now.getTime() };
+  }
+
+  function operationBucket(entry) {
+    const kind = String(entry.kind || '');
+    const description = String(entry.description || '');
+    if (kind === 'image') {
+      if (description.includes('重新生成')) return 'regeneration';
+      if (description.includes('母版')) return 'master';
+      if (description.includes('自由')) return 'free';
+      return 'generation';
+    }
+    if (kind === 'llm') {
+      if (description.includes('套图模板') || description.includes('模板') || description.includes('分析')) return 'analysis';
+      return 'llm';
+    }
+    return kind || 'other';
+  }
+
+  function dayHourKey(ms) {
+    const date = new Date(ms + 8 * 60 * 60 * 1000);
+    return `${date.toISOString().slice(0, 10)} ${String(date.getUTCHours()).padStart(2, '0')}:00`;
+  }
+
+  async function getGlobalStats(rangeValue = 'today', userLookup = new Map()) {
+    const windowRange = statsWindowRange(rangeValue);
+    const totals = {
+      totalCostMinor: 0,
+      averageCostMinor: 0,
+      imageGenerated: 0,
+      imageRegenerated: 0,
+      firstPassImages: 0,
+      successRate: 0,
+      masterGenerated: 0,
+      freeGenerated: 0,
+      analysisCalls: 0,
+      templateAnalysisCalls: 0,
+      templateAnalysisFolders: 0,
+      activeWorkspaces: 0,
+      failedOrRetry: 0
+    };
+    const accounts = new Map();
+    const operations = new Map();
+    const trends = new Map();
+    let text = '';
+    try { text = await fs.readFile(ledgerFile, 'utf8'); } catch { text = ''; }
+    for (const line of text.trim().split('\n').filter(Boolean)) {
+      try {
+        const entry = JSON.parse(line);
+        if (!BILLING_TYPES.has(String(entry.kind || ''))) continue;
+        const created = new Date(entry.createdAt).getTime();
+        if (!Number.isFinite(created) || created < windowRange.start || created >= windowRange.end) continue;
+        const sourceScale = entry?.amountScale === BILLING_SCALE ? BILLING_SCALE : 100;
+        const amountMinor = sourceScale === BILLING_SCALE ? Math.trunc(Number(entry.amountMinor) || 0) : migrateMoney(entry.amountMinor, sourceScale);
+        const costMinor = Math.max(0, -amountMinor);
+        const bucket = operationBucket(entry);
+        totals.totalCostMinor += costMinor;
+        if (bucket === 'generation') totals.imageGenerated += 1;
+        else if (bucket === 'regeneration') totals.imageRegenerated += 1;
+        else if (bucket === 'master') totals.masterGenerated += 1;
+        else if (bucket === 'free') totals.freeGenerated += 1;
+        else if (bucket === 'analysis') {
+          totals.analysisCalls += 1;
+          totals.templateAnalysisCalls += 1;
+        } else if (entry.kind === 'llm') totals.analysisCalls += 1;
+
+        const account = accounts.get(entry.workspaceId) || {
+          workspaceId: entry.workspaceId,
+          username: userLookup.get(entry.workspaceId)?.username || '',
+          displayName: userLookup.get(entry.workspaceId)?.displayName || '',
+          totalCostMinor: 0,
+          imageGenerated: 0,
+          imageRegenerated: 0,
+          analysisCalls: 0,
+          averageCostMinor: 0
+        };
+        account.totalCostMinor += costMinor;
+        if (bucket === 'generation') account.imageGenerated += 1;
+        if (bucket === 'regeneration') account.imageRegenerated += 1;
+        if (entry.kind === 'llm') account.analysisCalls += 1;
+        accounts.set(entry.workspaceId, account);
+
+        const operation = operations.get(bucket) || { key: bucket, count: 0, costMinor: 0 };
+        operation.count += 1;
+        operation.costMinor += costMinor;
+        operations.set(bucket, operation);
+
+        const trendKey = dayHourKey(created);
+        const trend = trends.get(trendKey) || { key: trendKey, costMinor: 0, imageGenerated: 0, imageRegenerated: 0, analysisCalls: 0 };
+        trend.costMinor += costMinor;
+        if (bucket === 'generation') trend.imageGenerated += 1;
+        if (bucket === 'regeneration') trend.imageRegenerated += 1;
+        if (entry.kind === 'llm') trend.analysisCalls += 1;
+        trends.set(trendKey, trend);
+      } catch {}
+    }
+    totals.failedOrRetry = totals.imageRegenerated;
+    totals.firstPassImages = Math.max(0, totals.imageGenerated - totals.imageRegenerated);
+    const successBase = totals.imageGenerated + totals.imageRegenerated;
+    totals.successRate = successBase > 0 ? totals.firstPassImages / successBase : 0;
+    const deliveredImages = totals.imageGenerated + totals.masterGenerated + totals.freeGenerated;
+    totals.averageCostMinor = deliveredImages > 0 ? Math.round(totals.totalCostMinor / deliveredImages) : 0;
+    totals.templateAnalysisFolders = totals.templateAnalysisCalls;
+    totals.activeWorkspaces = accounts.size;
+    const byAccount = [...accounts.values()].map(account => ({
+      ...account,
+      averageCostMinor: account.imageGenerated > 0 ? Math.round(account.totalCostMinor / account.imageGenerated) : 0
+    })).sort((a, b) => b.totalCostMinor - a.totalCostMinor);
+    return {
+      range: windowRange.range,
+      startAt: new Date(windowRange.start).toISOString(),
+      endAt: new Date(windowRange.end).toISOString(),
+      currency: BILLING_CURRENCY,
+      amountScale: BILLING_SCALE,
+      totals,
+      byAccount,
+      byOperation: [...operations.values()].sort((a, b) => b.costMinor - a.costMinor),
+      trend: [...trends.values()].sort((a, b) => a.key.localeCompare(b.key))
+    };
+  }
+
   async function saveRules(payload = {}) {
     return mutate(async () => {
       const imageMin = normalizeMinor(payload.imageFeeMinMinor ?? payload.imageFeeMinor, '成功生图最低单价');
@@ -477,6 +609,7 @@ function createBillingService(dataRoot) {
     commit,
     ensureAccount,
     getRules: readRules,
+    getGlobalStats,
     getSummary,
     getSpendTotals,
     listAccounts,

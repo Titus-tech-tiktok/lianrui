@@ -111,6 +111,8 @@ const state = {
   billingSummary: null,
   billingAdmin: null,
   billingAdminFilter: '',
+  globalStats: null,
+  globalStatsRange: 'today',
   config: null,
   products: [],
   prints: [],
@@ -258,6 +260,7 @@ function applyCurrentUser(user) {
   state.assetPreviewSizes = loadStoredAssetPreviewSizes();
   $('#currentUserName').textContent = user.displayName || user.username;
   $('#currentUserName').title = `${user.username} · ${roleLabel(user.role)}`;
+  $('#globalStatsNav')?.toggleAttribute('hidden', !isSuperAdmin());
   $('#promptSettingsNav').hidden = !canViewPrompts();
   $('[data-settings-tab="general"]').hidden = user.role === 'admin';
   $('#apiSettingsTab').hidden = !isTeamAdmin();
@@ -366,6 +369,110 @@ function formatLocalDateTime(value) {
   const date = typeof value === 'number' ? new Date(value) : new Date(String(value));
   if (!Number.isFinite(date.getTime())) return '';
   return date.toLocaleString('zh-CN', { hour12: false });
+}
+
+function formatInteger(value = 0) {
+  return new Intl.NumberFormat('zh-CN').format(Math.max(0, Math.trunc(Number(value) || 0)));
+}
+
+function formatPercent(value = 0) {
+  return `${(Math.max(0, Math.min(1, Number(value) || 0)) * 100).toFixed(1)}%`;
+}
+
+function globalStatsRangeLabel(range = 'today') {
+  return { today: '今日', yesterday: '昨日', '7d': '近 7 天', '30d': '近 30 天' }[range] || '今日';
+}
+
+function globalStatsOperationLabel(key = '') {
+  return {
+    generation: '首次生图',
+    regeneration: '重新生成',
+    master: '母版图',
+    free: '自由生图',
+    analysis: '套图分析',
+    llm: '文字分析'
+  }[key] || key || '其他';
+}
+
+function ensureGlobalStatsPage() {
+  if (!$('#globalStatsNav')) {
+    const nav = $('.sidebar .nav') || $('nav');
+    const settingsNav = $('#promptSettingsNav') || $('[data-page="settings"]');
+    const button = document.createElement('button');
+    button.className = 'nav-item';
+    button.id = 'globalStatsNav';
+    button.type = 'button';
+    button.dataset.index = '06';
+    button.dataset.icon = '统';
+    button.dataset.page = 'global-stats';
+    button.title = '全局统计';
+    button.textContent = '全局统计';
+    button.hidden = true;
+    if (nav) nav.insertBefore(button, settingsNav || null);
+  }
+  if ($('#page-global-stats')) return;
+  const section = document.createElement('section');
+  section.className = 'page global-stats-page';
+  section.id = 'page-global-stats';
+  section.setAttribute('aria-label', '全局统计');
+  section.innerHTML = `
+    <div class="global-stats-shell">
+      <header class="global-stats-head">
+        <div><span class="eyebrow">SUPER ADMIN</span><h1>全局统计</h1><p>查看所有账号的算力消耗、生成数量、分析次数和一次成功率。</p></div>
+        <div class="global-stats-actions">
+          <div class="segmented global-stats-range" role="tablist">
+            <button class="active" type="button" data-global-stats-range="today">今日</button>
+            <button type="button" data-global-stats-range="yesterday">昨日</button>
+            <button type="button" data-global-stats-range="7d">近 7 天</button>
+            <button type="button" data-global-stats-range="30d">近 30 天</button>
+          </div>
+          <button class="secondary" id="refreshGlobalStatsButton" type="button">刷新</button>
+        </div>
+      </header>
+      <div id="globalStatsContent" class="global-stats-content"><div class="empty-state"><b>正在读取统计</b><span>请稍候。</span></div></div>
+    </div>`;
+  $('main')?.appendChild(section);
+}
+
+function renderGlobalStats() {
+  ensureGlobalStatsPage();
+  $$('.global-stats-range [data-global-stats-range]').forEach(button => button.classList.toggle('active', button.dataset.globalStatsRange === state.globalStatsRange));
+  const target = $('#globalStatsContent');
+  const data = state.globalStats;
+  if (!target) return;
+  if (!data) {
+    target.innerHTML = '<div class="empty-state"><b>暂无统计数据</b><span>点击刷新重新读取。</span></div>';
+    return;
+  }
+  const totals = data.totals || {};
+  const cards = [
+    ['总消耗', formatMoney(totals.totalCostMinor), globalStatsRangeLabel(data.range)],
+    ['平均每张成本', formatMoney(totals.averageCostMinor), '按成功生成图片均摊'],
+    ['首次生图', formatInteger(totals.imageGenerated), `重新生成 ${formatInteger(totals.imageRegenerated)}`],
+    ['一次成功率', formatPercent(totals.successRate), `一次成功 ${formatInteger(totals.firstPassImages)}`],
+    ['套图分析', formatInteger(totals.templateAnalysisFolders), `文字调用 ${formatInteger(totals.analysisCalls)}`],
+    ['活跃账号', formatInteger(totals.activeWorkspaces), '参与消耗的账号']
+  ];
+  const operations = data.byOperation || [];
+  const accounts = data.byAccount || [];
+  target.innerHTML = `
+    <div class="global-stats-grid">${cards.map(([label, value, detail]) => `<article class="global-stat-card"><span>${escapeHtml(label)}</span><b>${escapeHtml(value)}</b><small>${escapeHtml(detail)}</small></article>`).join('')}</div>
+    <div class="global-stats-panels">
+      <section class="global-stats-panel"><h2>消耗结构</h2>${operations.length ? operations.map(item => `<div class="global-stats-row"><span>${escapeHtml(globalStatsOperationLabel(item.key))}</span><b>${formatInteger(item.count)}</b><em>${formatMoney(item.costMinor)}</em></div>`).join('') : '<div class="empty-inline">暂无流水</div>'}</section>
+      <section class="global-stats-panel"><h2>账号排行</h2>${accounts.length ? accounts.slice(0, 12).map(item => `<div class="global-stats-row"><span>${escapeHtml(item.displayName || item.username || item.workspaceId)}</span><b>${formatMoney(item.totalCostMinor)}</b><em>${formatInteger(item.imageGenerated)} 张</em></div>`).join('') : '<div class="empty-inline">暂无账号消耗</div>'}</section>
+    </div>`;
+}
+
+async function loadGlobalStats() {
+  if (!isSuperAdmin()) return;
+  ensureGlobalStatsPage();
+  $('#globalStatsContent').innerHTML = '<div class="empty-state"><b>正在读取统计</b><span>请稍候。</span></div>';
+  try {
+    state.globalStats = await window.caishen.getGlobalStats(state.globalStatsRange);
+    renderGlobalStats();
+  } catch (error) {
+    $('#globalStatsContent').innerHTML = `<div class="empty-state"><b>读取失败</b><span>${escapeHtml(errorText(error))}</span></div>`;
+  }
 }
 
 function reviewElapsedMs(summary, running = false) {
@@ -599,6 +706,7 @@ function shortPath(value) {
 }
 
 function setPage(name) {
+  if (name === 'global-stats' && !isSuperAdmin()) name = 'settings';
   if (name === 'prompts' && !canViewPrompts()) name = 'settings';
   if (name === 'settings') {
     if (state.currentUser?.role === 'admin' && state.settingsTab === 'general') state.settingsTab = 'api';
@@ -628,6 +736,7 @@ function setPage(name) {
     if (name === 'review') loadReviews({ silent: state.reviews.length > 0 });
     if (name === 'titles') loadTitlePage();
     if (name === 'taobao-publish') loadTaobaoPublishPage();
+    if (name === 'global-stats') loadGlobalStats();
     if (name === 'prompts' && canViewPrompts() && !state.promptSettings) loadPromptSettings();
     if (name === 'assets') loadAssetLibraryPreview(state.assetPreviewKey, { preserveSelection: true });
     if (name === 'settings' && isTeamAdmin() && !state.modelPackageSettings) loadModelPackageSettings();
@@ -4946,6 +5055,13 @@ function bindEvents() {
   };
   $$('.nav-item').forEach(button => button.onclick = () => setPage(button.dataset.page));
   $$('[data-page-link]').forEach(button => button.onclick = () => setPage(button.dataset.pageLink));
+  $('#refreshGlobalStatsButton')?.addEventListener('click', () => loadGlobalStats());
+  $('.global-stats-range')?.addEventListener('click', event => {
+    const button = event.target.closest('[data-global-stats-range]');
+    if (!button) return;
+    state.globalStatsRange = button.dataset.globalStatsRange || 'today';
+    loadGlobalStats();
+  });
   $$('.template-source-tabs [data-template-source-tab]').forEach(button => button.onclick = () => setTaskSourceTab(button.dataset.templateSourceTab));
   $$('[data-choose]').forEach(button => button.onclick = () => chooseFolder(button.dataset.choose));
   $$('[data-stage-asset]').forEach(button => button.onclick = () => stageAssetFolder(button.dataset.stageAsset));
@@ -5450,6 +5566,7 @@ async function start() {
     showAuthGate(authStatus.bootstrapRequired);
     return;
   }
+  ensureGlobalStatsPage();
   applyCurrentUser(authStatus.user);
   applySidebarCollapsed(loadSidebarCollapsed());
   setTaskSourceTab(state.taskSourceTab);

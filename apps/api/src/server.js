@@ -1259,6 +1259,18 @@ async function startServer() {
     }
   });
 
+  app.get('/api/billing/global-stats', async (req, res) => {
+    if (!isSuperAdmin(req.user)) return res.status(403).json({ error: '只有超级管理员可以查看全局统计' });
+    try {
+      const users = await auth.listUsers();
+      const userLookup = new Map(users.map(user => [user.workspaceId, user]));
+      const range = String(req.query.range || 'today');
+      return res.json({ data: await runtime.billing.getGlobalStats(range, userLookup) });
+    } catch (error) {
+      return res.status(400).json({ error: error?.message || String(error) });
+    }
+  });
+
   app.put('/api/billing/rules', async (req, res) => {
     if (!isSuperAdmin(req.user)) return res.status(403).json({ error: '只有超级管理员可以修改计费规则' });
     try {

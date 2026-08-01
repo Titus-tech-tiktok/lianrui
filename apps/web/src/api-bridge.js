@@ -331,6 +331,7 @@ window.caishen = {
   deleteUser: id => authRequest(`/api/auth/users/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   getBillingSummary: days => authRequest(`/api/billing/me${Number(days) > 0 ? `?days=${encodeURIComponent(Math.trunc(Number(days)))}` : ''}`),
   getBillingAdmin: () => authRequest('/api/billing/admin'),
+  getGlobalStats: range => authRequest(`/api/billing/global-stats?range=${encodeURIComponent(range || 'today')}`),
   saveBillingRules: payload => authRequest('/api/billing/rules', { method: 'PUT', body: JSON.stringify(payload) }),
   adjustBillingBalance: payload => authRequest('/api/billing/adjust', { method: 'POST', body: JSON.stringify(payload) }),
   clearBillingLedger: () => authRequest('/api/billing/ledger', { method: 'DELETE' }),
