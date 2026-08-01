@@ -6651,6 +6651,389 @@ label input, label textarea {
   font-style: normal;
 }
 
+.app-shell.mobile-stats-mode {
+  display: block;
+  min-height: 100vh;
+  background: #eef4f3;
+}
+
+.app-shell.mobile-stats-mode .topbar {
+  display: none;
+}
+
+.app-shell.mobile-stats-mode main {
+  min-height: 100vh;
+  padding: 0;
+  overflow: visible;
+}
+
+.mobile-stats-page {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 18% 0%, rgba(47, 124, 116, .16), transparent 32%),
+    linear-gradient(180deg, #f7fbfa 0%, #e9f1f0 100%);
+}
+
+.mobile-stats-shell {
+  width: min(100%, 480px);
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: max(18px, env(safe-area-inset-top)) 18px max(24px, env(safe-area-inset-bottom));
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  color: var(--navy);
+}
+
+.mobile-stats-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 8px 2px 2px;
+}
+
+.mobile-stats-header span {
+  display: block;
+  color: #b79453;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .18em;
+}
+
+.mobile-stats-header h1 {
+  margin: 6px 0 4px;
+  color: var(--navy);
+  font-size: 27px;
+  line-height: 1.1;
+}
+
+.mobile-stats-header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.mobile-stats-icon-button {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid rgba(47, 124, 116, .22);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--teal);
+  box-shadow: 0 10px 24px rgba(16, 27, 43, .08);
+}
+
+.mobile-stats-content {
+  display: grid;
+  gap: 14px;
+}
+
+.mobile-stats-loading {
+  padding: 28px 18px;
+  border: 1px solid rgba(47, 124, 116, .18);
+  border-radius: 18px;
+  background: rgba(255,255,255,.82);
+  color: var(--muted);
+  text-align: center;
+}
+
+.mobile-stats-loading.error {
+  color: var(--danger);
+}
+
+.mobile-stats-hero-card,
+.mobile-stats-panel,
+.mobile-stats-range-card,
+.mobile-stats-summary-strip {
+  border: 1px solid rgba(203, 211, 205, .9);
+  background: rgba(255, 255, 255, .92);
+  box-shadow: 0 16px 42px rgba(16, 27, 43, .08);
+}
+
+.mobile-stats-hero-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 118px;
+  align-items: center;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 22px;
+}
+
+.mobile-stats-hero-card span,
+.mobile-stats-card-top span,
+.mobile-stats-panel-head span,
+.mobile-stats-summary-strip span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.mobile-stats-hero-card strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--navy);
+  font-size: 38px;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.mobile-stats-hero-card p {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.mobile-stats-donut {
+  width: 108px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: conic-gradient(var(--teal) var(--rate), #e5eeec 0);
+  display: grid;
+  place-items: center;
+  position: relative;
+}
+
+.mobile-stats-donut::before {
+  content: "";
+  position: absolute;
+  inset: 12px;
+  border-radius: inherit;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px rgba(203, 211, 205, .7);
+}
+
+.mobile-stats-donut b,
+.mobile-stats-donut small {
+  position: relative;
+  z-index: 1;
+  display: block;
+  text-align: center;
+}
+
+.mobile-stats-donut b {
+  color: var(--teal);
+  font-size: 22px;
+  line-height: 1;
+}
+
+.mobile-stats-donut small {
+  margin-top: -22px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.mobile-stats-range-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.mobile-stats-range-card {
+  padding: 15px;
+  border-radius: 18px;
+  display: grid;
+  gap: 8px;
+}
+
+.mobile-stats-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.mobile-stats-card-top em {
+  color: var(--teal);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.mobile-stats-range-card strong {
+  color: var(--teal);
+  font-size: 28px;
+  line-height: 1.1;
+}
+
+.mobile-stats-card-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.mobile-stats-card-meta b {
+  color: var(--navy);
+  font-size: 13px;
+}
+
+.mobile-stats-progress {
+  height: 7px;
+  border-radius: 999px;
+  background: #e9efed;
+  overflow: hidden;
+}
+
+.mobile-stats-progress i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2f7c74, #44aa9d);
+}
+
+.mobile-stats-panel {
+  padding: 16px;
+  border-radius: 22px;
+}
+
+.mobile-stats-panel-head,
+.mobile-stats-account-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.mobile-stats-panel-head h2 {
+  margin: 0;
+  color: var(--navy);
+  font-size: 18px;
+}
+
+.mobile-stats-chart {
+  height: 150px;
+  margin-top: 14px;
+  padding: 10px 2px 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: end;
+  gap: 12px;
+}
+
+.mobile-stats-chart-bar {
+  height: 100%;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  gap: 8px;
+  align-items: end;
+  justify-items: center;
+}
+
+.mobile-stats-chart-bar i {
+  width: 100%;
+  max-width: 42px;
+  min-height: 12px;
+  border-radius: 12px 12px 4px 4px;
+  background: linear-gradient(180deg, #44aa9d, #2f7c74);
+  box-shadow: 0 8px 18px rgba(47, 124, 116, .2);
+}
+
+.mobile-stats-chart-bar span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.mobile-stats-account-head {
+  margin-top: 14px;
+  padding: 0 2px 8px 30px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.mobile-stats-account-head span:first-child {
+  flex: 1;
+}
+
+.mobile-stats-account-list {
+  display: grid;
+  gap: 9px;
+}
+
+.mobile-stats-account-row {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 88px 52px;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+  border-top: 1px solid rgba(203, 211, 205, .65);
+}
+
+.mobile-stats-rank {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: #f1eadc;
+  color: #9b7a3c;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.mobile-stats-account-name {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.mobile-stats-account-name b {
+  overflow: hidden;
+  color: var(--navy);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-stats-account-name i {
+  display: block;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--teal);
+}
+
+.mobile-stats-account-row strong {
+  color: var(--navy);
+  font-size: 13px;
+  text-align: right;
+}
+
+.mobile-stats-account-row em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  text-align: right;
+}
+
+.mobile-stats-empty {
+  padding: 14px 0 2px;
+  color: var(--muted);
+}
+
+.mobile-stats-summary-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border-radius: 18px;
+}
+
+.mobile-stats-summary-strip div {
+  padding: 14px 10px;
+  background: rgba(255,255,255,.65);
+  display: grid;
+  gap: 5px;
+}
+
+.mobile-stats-summary-strip b {
+  color: var(--navy);
+  font-size: 16px;
+}
+
 @media (max-width: 1240px) {
   .global-stats-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }

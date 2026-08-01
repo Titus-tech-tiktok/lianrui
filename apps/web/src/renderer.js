@@ -113,6 +113,8 @@ const state = {
   billingAdminFilter: '',
   globalStats: null,
   globalStatsRange: 'today',
+  mobileStats: null,
+  mobileStatsUpdatedAt: '',
   config: null,
   products: [],
   prints: [],
@@ -475,6 +477,141 @@ async function loadGlobalStats() {
   }
 }
 
+function shouldOpenMobileStats() {
+  const pathname = window.location.pathname.replace(/\/+$/, '') || '/';
+  const params = new URLSearchParams(window.location.search);
+  return pathname === '/mobile-stats' || window.location.hash === '#mobile-stats' || params.get('view') === 'mobile-stats';
+}
+
+function ensureMobileStatsPage() {
+  if ($('#page-mobile-stats')) return;
+  const section = document.createElement('section');
+  section.className = 'page mobile-stats-page';
+  section.id = 'page-mobile-stats';
+  section.setAttribute('aria-label', '手机全局统计');
+  section.innerHTML = `
+    <div class="mobile-stats-shell">
+      <header class="mobile-stats-header">
+        <div>
+          <span>SUPER ADMIN</span>
+          <h1>永沙全局统计</h1>
+          <p id="mobileStatsUpdatedAt">正在读取最新数据</p>
+        </div>
+        <button class="mobile-stats-icon-button" id="refreshMobileStatsButton" type="button" aria-label="刷新">刷新</button>
+      </header>
+      <div id="mobileStatsContent" class="mobile-stats-content">
+        <div class="mobile-stats-loading">正在读取统计数据...</div>
+      </div>
+    </div>`;
+  $('main')?.appendChild(section);
+}
+
+function mobileStatsTotalImages(totals = {}) {
+  return (totals.imageGenerated || 0) + (totals.imageRegenerated || 0) + (totals.masterGenerated || 0) + (totals.freeGenerated || 0);
+}
+
+function mobileStatsRangeCard(item, maxCostMinor) {
+  const totals = item.data?.totals || {};
+  const percent = maxCostMinor > 0 ? Math.min(100, Math.round(((Number(totals.totalCostMinor) || 0) / maxCostMinor) * 100)) : 0;
+  return `
+    <article class="mobile-stats-range-card">
+      <div class="mobile-stats-card-top"><span>${escapeHtml(item.label)}</span><em>${formatPercent(totals.successRate)}</em></div>
+      <strong>${formatMoney(totals.totalCostMinor)}</strong>
+      <div class="mobile-stats-card-meta"><b>${formatInteger(totals.imageGenerated || 0)}</b><span>首次</span><b>${formatInteger(totals.imageRegenerated || 0)}</b><span>重生</span></div>
+      <div class="mobile-stats-progress"><i style="width:${percent}%"></i></div>
+    </article>`;
+}
+
+function renderMobileStats() {
+  const container = $('#mobileStatsContent');
+  if (!container) return;
+  const stats = state.mobileStats;
+  if (!stats) {
+    container.innerHTML = '<div class="mobile-stats-loading">暂无统计数据</div>';
+    return;
+  }
+  const ranges = [
+    { label: '今日', data: stats.today },
+    { label: '昨日', data: stats.yesterday },
+    { label: '近7天', data: stats.d7 },
+    { label: '近30天', data: stats.d30 }
+  ];
+  const d30Totals = stats.d30?.totals || {};
+  const maxCostMinor = Math.max(1, ...ranges.map(item => Number(item.data?.totals?.totalCostMinor) || 0));
+  const maxGenerated = Math.max(1, ...ranges.map(item => Number(item.data?.totals?.imageGenerated) || 0));
+  const chartHtml = ranges.map(item => {
+    const totals = item.data?.totals || {};
+    const height = Math.max(12, Math.round(((Number(totals.imageGenerated) || 0) / maxGenerated) * 100));
+    return `<div class="mobile-stats-chart-bar"><i style="height:${height}%"></i><span>${escapeHtml(item.label)}</span></div>`;
+  }).join('');
+  const accountRows = (stats.d30?.byAccount || []).slice(0, 6);
+  const maxAccountCost = Math.max(1, ...accountRows.map(item => Number(item.totalCostMinor) || 0));
+  const accountHtml = accountRows.length ? accountRows.map((item, index) => {
+    const width = Math.max(6, Math.round(((Number(item.totalCostMinor) || 0) / maxAccountCost) * 100));
+    return `
+      <div class="mobile-stats-account-row">
+        <span class="mobile-stats-rank">${index + 1}</span>
+        <div class="mobile-stats-account-name"><b>${escapeHtml(item.displayName || item.username || '未命名账号')}</b><i style="width:${width}%"></i></div>
+        <strong>${formatMoney(item.totalCostMinor)}</strong>
+        <em>${formatInteger(item.imageGenerated || 0)}张</em>
+      </div>`;
+  }).join('') : '<div class="mobile-stats-empty">近30天暂无账号消耗</div>';
+  const totalImages = mobileStatsTotalImages(d30Totals);
+  const updated = state.mobileStatsUpdatedAt ? `更新 ${formatLocalDateTime(state.mobileStatsUpdatedAt)}` : '已读取最新数据';
+  const updatedNode = $('#mobileStatsUpdatedAt');
+  if (updatedNode) updatedNode.textContent = updated;
+  container.innerHTML = `
+    <section class="mobile-stats-hero-card">
+      <div>
+        <span>近30天总消耗</span>
+        <strong>${formatMoney(d30Totals.totalCostMinor)}</strong>
+        <p>首次生图 ${formatInteger(d30Totals.imageGenerated || 0)} 张 · 重生成 ${formatInteger(d30Totals.imageRegenerated || 0)} 张</p>
+      </div>
+      <div class="mobile-stats-donut" style="--rate:${Math.round((Number(d30Totals.successRate) || 0) * 360)}deg">
+        <b>${formatPercent(d30Totals.successRate)}</b>
+        <small>一次成功</small>
+      </div>
+    </section>
+    <section class="mobile-stats-range-grid">${ranges.map(item => mobileStatsRangeCard(item, maxCostMinor)).join('')}</section>
+    <section class="mobile-stats-panel">
+      <div class="mobile-stats-panel-head"><h2>生成趋势</h2><span>按首次生图对比</span></div>
+      <div class="mobile-stats-chart">${chartHtml}</div>
+    </section>
+    <section class="mobile-stats-panel">
+      <div class="mobile-stats-panel-head"><h2>账号排行</h2><span>近30天 · ${formatInteger((stats.d30?.byAccount || []).length)} 个账号</span></div>
+      <div class="mobile-stats-account-head"><span>账号</span><span>消耗金额</span><span>成功张数</span></div>
+      <div class="mobile-stats-account-list">${accountHtml}</div>
+    </section>
+    <section class="mobile-stats-summary-strip">
+      <div><span>平均成本</span><b>${formatMoney(d30Totals.averageCostMinor)}</b></div>
+      <div><span>总张数</span><b>${formatInteger(totalImages)}</b></div>
+      <div><span>套图分析</span><b>${formatInteger(d30Totals.templateAnalysisFolders || 0)}</b></div>
+    </section>`;
+}
+
+async function loadMobileStats() {
+  if (!isSuperAdmin()) return;
+  const button = $('#refreshMobileStatsButton');
+  if (button) button.disabled = true;
+  try {
+    const [today, yesterday, d7, d30] = await Promise.all([
+      window.caishen.getGlobalStats('today'),
+      window.caishen.getGlobalStats('yesterday'),
+      window.caishen.getGlobalStats('7d'),
+      window.caishen.getGlobalStats('30d')
+    ]);
+    state.mobileStats = { today, yesterday, d7, d30 };
+    state.mobileStatsUpdatedAt = new Date().toISOString();
+    renderMobileStats();
+  } catch (error) {
+    const container = $('#mobileStatsContent');
+    if (container) container.innerHTML = `<div class="mobile-stats-loading error">${escapeHtml(errorText(error))}</div>`;
+    toast(errorText(error), true);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
 function reviewElapsedMs(summary, running = false) {
   if (Number(summary.elapsedMs) > 0) return Number(summary.elapsedMs);
   if (!summary.startedAt) return 0;
@@ -707,6 +844,7 @@ function shortPath(value) {
 
 function setPage(name) {
   if (name === 'global-stats' && !isSuperAdmin()) name = 'settings';
+  if (name === 'mobile-stats' && !isSuperAdmin()) name = 'settings';
   if (name === 'prompts' && !canViewPrompts()) name = 'settings';
   if (name === 'settings') {
     if (state.currentUser?.role === 'admin' && state.settingsTab === 'general') state.settingsTab = 'api';
@@ -717,6 +855,7 @@ function setPage(name) {
   const nextPage = $(`#page-${name}`);
   if (!nextPage || (name === currentPage && nextPage.classList.contains('active'))) return;
   currentPage = name;
+  $('#appShell')?.classList.toggle('mobile-stats-mode', name === 'mobile-stats');
   if (name !== 'review') {
     clearTimeout(reviewRefreshTimer);
     reviewRefreshTimer = null;
@@ -737,6 +876,7 @@ function setPage(name) {
     if (name === 'titles') loadTitlePage();
     if (name === 'taobao-publish') loadTaobaoPublishPage();
     if (name === 'global-stats') loadGlobalStats();
+    if (name === 'mobile-stats') loadMobileStats();
     if (name === 'prompts' && canViewPrompts() && !state.promptSettings) loadPromptSettings();
     if (name === 'assets') loadAssetLibraryPreview(state.assetPreviewKey, { preserveSelection: true });
     if (name === 'settings' && isTeamAdmin() && !state.modelPackageSettings) loadModelPackageSettings();
@@ -5056,6 +5196,7 @@ function bindEvents() {
   $$('.nav-item').forEach(button => button.onclick = () => setPage(button.dataset.page));
   $$('[data-page-link]').forEach(button => button.onclick = () => setPage(button.dataset.pageLink));
   $('#refreshGlobalStatsButton')?.addEventListener('click', () => loadGlobalStats());
+  $('#refreshMobileStatsButton')?.addEventListener('click', () => loadMobileStats());
   $('.global-stats-range')?.addEventListener('click', event => {
     const button = event.target.closest('[data-global-stats-range]');
     if (!button) return;
@@ -5567,11 +5708,13 @@ async function start() {
     return;
   }
   ensureGlobalStatsPage();
+  ensureMobileStatsPage();
   applyCurrentUser(authStatus.user);
   applySidebarCollapsed(loadSidebarCollapsed());
   setTaskSourceTab(state.taskSourceTab);
   window.addEventListener('caishen:billing-changed', loadBillingSummary);
   bindEvents();
+  if (shouldOpenMobileStats()) setPage('mobile-stats');
   bindImageHoverPreview();
   updateGenerationModeUi();
   renderQueue();
