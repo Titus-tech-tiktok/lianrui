@@ -214,12 +214,20 @@ function createBillingService(dataRoot) {
     const now = new Date();
     const chinaOffsetMs = 8 * 60 * 60 * 1000;
     const chinaNow = new Date(now.getTime() + chinaOffsetMs);
-    const dayStartUtc = Date.UTC(chinaNow.getUTCFullYear(), chinaNow.getUTCMonth(), chinaNow.getUTCDate()) - chinaOffsetMs;
+    const year = chinaNow.getUTCFullYear();
+    const month = chinaNow.getUTCMonth();
+    const date = chinaNow.getUTCDate();
+    const dayStartUtc = Date.UTC(year, month, date) - chinaOffsetMs;
+    const monthStartUtc = Date.UTC(year, month, 1) - chinaOffsetMs;
+    const nextMonthStartUtc = Date.UTC(year, month + 1, 1) - chinaOffsetMs;
+    const lastMonthStartUtc = Date.UTC(year, month - 1, 1) - chinaOffsetMs;
     if (range === 'yesterday') {
       return { range, start: dayStartUtc - 24 * 60 * 60 * 1000, end: dayStartUtc };
     }
     if (range === '7d') return { range, start: now.getTime() - 7 * 24 * 60 * 60 * 1000, end: now.getTime() };
     if (range === '30d') return { range, start: now.getTime() - 30 * 24 * 60 * 60 * 1000, end: now.getTime() };
+    if (range === 'month' || range === 'this-month') return { range: 'month', start: monthStartUtc, end: now.getTime() };
+    if (range === 'last-month' || range === 'previous-month') return { range: 'last-month', start: lastMonthStartUtc, end: monthStartUtc };
     return { range: 'today', start: dayStartUtc, end: now.getTime() };
   }
 

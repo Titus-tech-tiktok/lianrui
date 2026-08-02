@@ -6744,8 +6744,7 @@ label input, label textarea {
 
 .mobile-stats-hero-card,
 .mobile-stats-panel,
-.mobile-stats-range-card,
-.mobile-stats-summary-strip {
+.mobile-stats-range-card {
   border: 1px solid rgba(203, 211, 205, .9);
   background: rgba(255, 255, 255, .92);
   box-shadow: 0 16px 42px rgba(16, 27, 43, .08);
@@ -6762,8 +6761,7 @@ label input, label textarea {
 
 .mobile-stats-hero-card span,
 .mobile-stats-card-top span,
-.mobile-stats-panel-head span,
-.mobile-stats-summary-strip span {
+.mobile-stats-panel-head span {
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;
@@ -7014,26 +7012,6 @@ label input, label textarea {
   color: var(--muted);
 }
 
-.mobile-stats-summary-strip {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1px;
-  overflow: hidden;
-  border-radius: 18px;
-}
-
-.mobile-stats-summary-strip div {
-  padding: 14px 10px;
-  background: rgba(255,255,255,.65);
-  display: grid;
-  gap: 5px;
-}
-
-.mobile-stats-summary-strip b {
-  color: var(--navy);
-  font-size: 16px;
-}
-
 .mobile-stats-page {
   background:
     radial-gradient(circle at 50% -12%, rgba(47, 124, 116, .2), transparent 34%),
@@ -7092,8 +7070,7 @@ label input, label textarea {
 
 .mobile-stats-hero-card,
 .mobile-stats-panel,
-.mobile-stats-range-card,
-.mobile-stats-summary-strip {
+.mobile-stats-range-card {
   border-color: rgba(213, 221, 216, .88);
   background: rgba(255, 255, 255, .94);
   box-shadow: 0 18px 38px rgba(23, 40, 55, .08);
@@ -7111,8 +7088,7 @@ label input, label textarea {
 
 .mobile-stats-hero-card span,
 .mobile-stats-card-top span,
-.mobile-stats-panel-head span,
-.mobile-stats-summary-strip span {
+.mobile-stats-panel-head span {
   color: #64717f;
   font-size: 12px;
 }
@@ -7318,29 +7294,6 @@ label input, label textarea {
   text-align: right;
 }
 
-.mobile-stats-summary-strip {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  overflow: visible;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-.mobile-stats-summary-strip div {
-  min-height: 78px;
-  padding: 13px;
-  border: 1px solid rgba(213, 221, 216, .88);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, .9);
-  box-shadow: 0 12px 26px rgba(23, 40, 55, .06);
-}
-
-.mobile-stats-summary-strip b {
-  font-size: 18px;
-  font-weight: 950;
-}
-
 /* Mobile stats dashboard visual refresh. Data scope stays server-side. */
 .app-shell.mobile-stats-mode {
   background: #050a14;
@@ -7435,8 +7388,7 @@ label input, label textarea {
 
 .mobile-stats-hero-main span,
 .mobile-stats-card-top span,
-.mobile-stats-panel-head span,
-.mobile-stats-summary-strip span {
+.mobile-stats-panel-head span {
   color: #8393a6;
   font-size: 12px;
 }
@@ -7517,6 +7469,13 @@ label input, label textarea {
   font-weight: 950;
 }
 
+.mobile-stats-cny {
+  margin-top: 2px;
+  color: #8393a6;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .mobile-stats-progress {
   height: 8px;
   background: rgba(255, 255, 255, .08);
@@ -7541,8 +7500,44 @@ label input, label textarea {
   font-size: 18px;
 }
 
+.mobile-stats-month-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.mobile-stats-month-grid div {
+  display: grid;
+  gap: 5px;
+  min-height: 86px;
+  padding: 13px;
+  border: 1px solid rgba(122, 151, 177, .14);
+  border-radius: 16px;
+  background: rgba(7, 17, 31, .54);
+}
+
+.mobile-stats-month-grid span {
+  color: #8393a6;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.mobile-stats-month-grid b {
+  color: #f5fbff;
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.mobile-stats-month-grid em {
+  color: #26d0b7;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 900;
+}
+
 .mobile-stats-account-head {
-  grid-template-columns: minmax(0, 1fr) 90px 64px;
+  grid-template-columns: minmax(0, 1fr) 128px 54px;
   color: #7f91a6;
 }
 
@@ -7551,7 +7546,7 @@ label input, label textarea {
 }
 
 .mobile-stats-account-row {
-  grid-template-columns: 28px minmax(0, 1fr) 90px 64px;
+  grid-template-columns: 28px minmax(0, 1fr) 128px 54px;
   border-top: 1px solid rgba(122, 151, 177, .12);
 }
 
@@ -7596,27 +7591,6 @@ label input, label textarea {
 
 .mobile-stats-balance-row {
   border-top: 1px solid rgba(122, 151, 177, .12);
-}
-
-.mobile-stats-summary-strip {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  overflow: visible;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-.mobile-stats-summary-strip div {
-  min-height: 78px;
-  border: 1px solid rgba(122, 151, 177, .16);
-  border-radius: 18px;
-  background: linear-gradient(180deg, rgba(22, 36, 56, .92), rgba(13, 24, 40, .92));
-  box-shadow: 0 14px 30px rgba(0, 0, 0, .22);
-}
-
-.mobile-stats-summary-strip b {
-  color: #f5fbff;
 }
 
 @media (max-width: 1240px) {
