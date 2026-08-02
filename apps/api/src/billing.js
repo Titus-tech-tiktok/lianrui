@@ -270,6 +270,7 @@ function createBillingService(dataRoot) {
       try {
         const entry = JSON.parse(line);
         if (!BILLING_TYPES.has(String(entry.kind || ''))) continue;
+        if (userLookup.get(entry.workspaceId)?.role === 'superadmin') continue;
         const created = new Date(entry.createdAt).getTime();
         if (!Number.isFinite(created) || created < windowRange.start || created >= windowRange.end) continue;
         const sourceScale = entry?.amountScale === BILLING_SCALE ? BILLING_SCALE : 100;
