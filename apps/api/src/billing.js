@@ -244,7 +244,49 @@ function createBillingService(dataRoot) {
     return `${date.toISOString().slice(0, 10)} ${String(date.getUTCHours()).padStart(2, '0')}:00`;
   }
 
+  async function buildBalanceSummary(userLookup = new Map()) {
+    const [rules, state] = await Promise.all([readRules(), readAccounts()]);
+    const totals = { count: 0, balanceMinor: 0, availableMinor: 0, reservedMinor: 0 };
+    const byRole = new Map();
+    const byAccount = [];
+    for (const [lookupWorkspaceId, user] of userLookup.entries()) {
+      const workspaceId = String(user?.workspaceId || lookupWorkspaceId || '').trim();
+      if (!workspaceId || user?.role === 'superadmin') continue;
+      const account = normalizeAccount(state.accounts[workspaceId], rules.defaultBalanceMinor);
+      const publicValue = publicAccount(workspaceId, account);
+      const role = String(user.role || 'member');
+      const roleSummary = byRole.get(role) || { role, count: 0, balanceMinor: 0, availableMinor: 0, reservedMinor: 0 };
+      roleSummary.count += 1;
+      roleSummary.balanceMinor += publicValue.balanceMinor;
+      roleSummary.availableMinor += publicValue.availableMinor;
+      roleSummary.reservedMinor += publicValue.reservedMinor;
+      byRole.set(role, roleSummary);
+      totals.count += 1;
+      totals.balanceMinor += publicValue.balanceMinor;
+      totals.availableMinor += publicValue.availableMinor;
+      totals.reservedMinor += publicValue.reservedMinor;
+      byAccount.push({
+        workspaceId,
+        username: user.username || '',
+        displayName: user.displayName || '',
+        role,
+        active: user.active !== false,
+        balanceMinor: publicValue.balanceMinor,
+        availableMinor: publicValue.availableMinor,
+        reservedMinor: publicValue.reservedMinor,
+        updatedAt: publicValue.updatedAt
+      });
+    }
+    byAccount.sort((a, b) => b.balanceMinor - a.balanceMinor);
+    return {
+      totals,
+      byRole: [...byRole.values()].sort((a, b) => b.balanceMinor - a.balanceMinor),
+      byAccount
+    };
+  }
+
   async function getGlobalStats(rangeValue = 'today', userLookup = new Map()) {
+    const balanceSummary = await buildBalanceSummary(userLookup);
     const windowRange = statsWindowRange(rangeValue);
     const totals = {
       totalCostMinor: 0,
@@ -342,6 +384,7 @@ function createBillingService(dataRoot) {
       currency: BILLING_CURRENCY,
       amountScale: BILLING_SCALE,
       totals,
+      balanceSummary,
       byAccount,
       byOperation: [...operations.values()].sort((a, b) => b.costMinor - a.costMinor),
       trend: [...trends.values()].sort((a, b) => a.key.localeCompare(b.key))

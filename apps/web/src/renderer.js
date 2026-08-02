@@ -460,6 +460,8 @@ function renderGlobalStats() {
     return;
   }
   const totals = data.totals || {};
+  const balanceSummary = data.balanceSummary || {};
+  const balanceTotals = balanceSummary.totals || {};
   const totalGeneratedImages = mobileStatsTotalImages(totals);
   const effectiveImageRuns = (totals.imageGenerated || 0) + (totals.imageRegenerated || 0);
   const accountImageCount = item => mobileStatsTotalImages(item || {});
@@ -469,15 +471,23 @@ function renderGlobalStats() {
     ['生图总数', formatInteger(totalGeneratedImages), '计入所有计费生成结果'],
     ['成功率', formatPercent(totals.successRate), `有效生图 ${formatInteger(effectiveImageRuns)} 次`],
     ['套图分析', formatInteger(totals.templateAnalysisFolders), `文字调用 ${formatInteger(totals.analysisCalls)}`],
-    ['活跃账号', formatInteger(totals.activeWorkspaces), '参与消耗的账号']
+    ['活跃账号', formatInteger(totals.activeWorkspaces), '参与消耗的账号'],
+    ['当前总余额', formatMoney(balanceTotals.balanceMinor), `${formatInteger(balanceTotals.count)} 个非超级管理员账号`],
+    ['当前可用余额', formatMoney(balanceTotals.availableMinor), `预占 ${formatMoney(balanceTotals.reservedMinor)}`]
   ];
   const operations = data.byOperation || [];
   const accounts = data.byAccount || [];
+  const balanceByRole = balanceSummary.byRole || [];
+  const balanceByAccount = balanceSummary.byAccount || [];
   target.innerHTML = `
     <div class="global-stats-grid">${cards.map(([label, value, detail]) => `<article class="global-stat-card"><span>${escapeHtml(label)}</span><b>${escapeHtml(value)}</b><small>${escapeHtml(detail)}</small></article>`).join('')}</div>
     <div class="global-stats-panels">
       <section class="global-stats-panel"><h2>消耗结构</h2>${operations.length ? operations.map(item => `<div class="global-stats-row"><span>${escapeHtml(globalStatsOperationLabel(item.key))}</span><b>${formatInteger(item.count)}</b><em>${formatMoney(item.costMinor)}</em></div>`).join('') : '<div class="empty-inline">暂无流水</div>'}</section>
       <section class="global-stats-panel"><h2>账号排行</h2>${accounts.length ? accounts.slice(0, 12).map(item => `<div class="global-stats-row"><span>${escapeHtml(item.displayName || item.username || item.workspaceId)}</span><b>${formatMoney(item.totalCostMinor)}</b><em>${formatInteger(accountImageCount(item))} 张</em></div>`).join('') : '<div class="empty-inline">暂无账号消耗</div>'}</section>
+    </div>
+    <div class="global-stats-panels">
+      <section class="global-stats-panel"><h2>余额按角色</h2>${balanceByRole.length ? balanceByRole.map(item => `<div class="global-stats-row"><span>${escapeHtml(roleLabel(item.role))}</span><b>${formatMoney(item.balanceMinor)}</b><em>${formatInteger(item.count)} 个账号 · 可用 ${formatMoney(item.availableMinor)}</em></div>`).join('') : '<div class="empty-inline">暂无余额数据</div>'}</section>
+      <section class="global-stats-panel"><h2>账户余额</h2>${balanceByAccount.length ? balanceByAccount.slice(0, 12).map(item => `<div class="global-stats-row"><span>${escapeHtml(item.displayName || item.username || item.workspaceId)} · ${escapeHtml(roleLabel(item.role))}</span><b>${formatMoney(item.balanceMinor)}</b><em>可用 ${formatMoney(item.availableMinor)}</em></div>`).join('') : '<div class="empty-inline">暂无账户余额</div>'}</section>
     </div>`;
 }
 
@@ -595,6 +605,8 @@ function renderMobileStats() {
     { label: '近30天', data: stats.d30 }
   ];
   const d30Totals = stats.d30?.totals || {};
+  const d30Balance = stats.d30?.balanceSummary || {};
+  const d30BalanceTotals = d30Balance.totals || {};
   const maxCostMinor = Math.max(1, ...ranges.map(item => Number(item.data?.totals?.totalCostMinor) || 0));
   const todayTotals = stats.today?.totals || {};
   const accountRows = (stats.d30?.byAccount || []).slice(0, 6);
@@ -610,6 +622,12 @@ function renderMobileStats() {
         <em>${formatInteger(accountImages)}张</em>
       </div>`;
   }).join('') : '<div class="mobile-stats-empty">近30天暂无账号消耗</div>';
+  const balanceRoleHtml = (d30Balance.byRole || []).length ? (d30Balance.byRole || []).map(item => `
+    <div class="mobile-stats-balance-row">
+      <span>${escapeHtml(roleLabel(item.role))}</span>
+      <b>${formatMobileMoney(item.balanceMinor)}</b>
+      <em>${formatInteger(item.count)} 个账号</em>
+    </div>`).join('') : '<div class="mobile-stats-empty">暂无余额数据</div>';
   const totalImages = mobileStatsTotalImages(d30Totals);
   const updated = state.mobileStatsUpdatedAt ? `更新 ${formatLocalDateTime(state.mobileStatsUpdatedAt)}` : '已读取最新数据';
   const updatedNode = $('#mobileStatsUpdatedAt');
@@ -638,8 +656,13 @@ function renderMobileStats() {
     </section>
     <section class="mobile-stats-panel">
       <div class="mobile-stats-panel-head"><h2>账号排行</h2><span>近30天 · ${formatInteger((stats.d30?.byAccount || []).length)} 个账号</span></div>
-      <div class="mobile-stats-account-head"><span>账号</span><span>消耗金额</span><span>成功张数</span></div>
+      <div class="mobile-stats-account-head"><span>账号</span><span>消耗金额</span><span>总张数</span></div>
       <div class="mobile-stats-account-list">${accountHtml}</div>
+    </section>
+    <section class="mobile-stats-panel">
+      <div class="mobile-stats-panel-head"><h2>当前余额</h2><span>不含超级管理员</span></div>
+      <div class="mobile-stats-balance-total"><span>总余额</span><b>${formatMobileMoney(d30BalanceTotals.balanceMinor)}</b><em>可用 ${formatMobileMoney(d30BalanceTotals.availableMinor)}</em></div>
+      <div class="mobile-stats-balance-list">${balanceRoleHtml}</div>
     </section>
     <section class="mobile-stats-summary-strip">
       <div><span>30天消耗</span><b>${formatMobileMoney(d30Totals.totalCostMinor)}</b></div>

@@ -203,3 +203,27 @@ test('global stats use total generated count and actual retry success rate', asy
   assert.equal(stats.totals.averageCostMinor, 100);
   assert.equal(stats.byAccount[0].averageCostMinor, 100);
 });
+
+test('global stats include current non-superadmin balances by role', async t => {
+  const { root, billing } = await fixture();
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  await billing.saveRules({ enabled: true, imageFeeMinor: 100, llmFeeMinor: 20, defaultBalanceMinor: 0 });
+  await billing.adjustBalance('super-workspace', 999, { operatorUserId: 'root' });
+  await billing.adjustBalance('admin-workspace', 300, { operatorUserId: 'root' });
+  await billing.adjustBalance('member-workspace', 200, { operatorUserId: 'root' });
+
+  const stats = await billing.getGlobalStats('today', new Map([
+    ['super-workspace', { role: 'superadmin', username: 'root' }],
+    ['admin-workspace', { role: 'admin', username: 'manager' }],
+    ['member-workspace', { role: 'member', username: 'seller' }]
+  ]));
+
+  assert.equal(stats.balanceSummary.totals.count, 2);
+  assert.equal(stats.balanceSummary.totals.balanceMinor, 500);
+  assert.equal(stats.balanceSummary.totals.availableMinor, 500);
+  assert.deepEqual(stats.balanceSummary.byRole.map(item => [item.role, item.count, item.balanceMinor]), [
+    ['admin', 1, 300],
+    ['member', 1, 200]
+  ]);
+  assert.deepEqual(stats.balanceSummary.byAccount.map(item => item.workspaceId), ['admin-workspace', 'member-workspace']);
+});

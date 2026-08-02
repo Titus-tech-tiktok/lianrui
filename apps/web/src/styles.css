@@ -7320,6 +7320,65 @@ label input, label textarea {
   font-size: 12px;
 }
 
+.mobile-stats-balance-total {
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid rgba(47, 124, 116, .16);
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(47, 124, 116, .1), rgba(255, 255, 255, .9));
+  display: grid;
+  gap: 4px;
+}
+
+.mobile-stats-balance-total span,
+.mobile-stats-balance-total em {
+  color: #64717f;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.mobile-stats-balance-total b {
+  color: var(--navy);
+  font-size: 28px;
+  line-height: 1.1;
+}
+
+.mobile-stats-balance-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.mobile-stats-balance-row {
+  min-height: 44px;
+  padding: 10px 0;
+  border-top: 1px solid rgba(213, 221, 216, .72);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 92px 70px;
+  align-items: center;
+  gap: 10px;
+}
+
+.mobile-stats-balance-row span {
+  color: var(--navy);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.mobile-stats-balance-row b {
+  color: var(--teal);
+  font-size: 14px;
+  text-align: right;
+}
+
+.mobile-stats-balance-row em {
+  color: #64717f;
+  font-size: 11px;
+  font-style: normal;
+  text-align: right;
+}
+
 .mobile-stats-summary-strip {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
