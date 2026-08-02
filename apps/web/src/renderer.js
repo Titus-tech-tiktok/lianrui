@@ -571,25 +571,6 @@ function mobileStatsRangeCard(item, maxCostMinor) {
     </article>`;
 }
 
-function mobileStatsComparisonChart(ranges) {
-  const values = ranges.map(item => mobileStatsTotalImages(item.data?.totals || {}));
-  const max = Math.max(1, ...values);
-  const bars = ranges.map((item, index) => {
-    const value = values[index];
-    const height = value > 0 ? Math.max(10, Math.round((value / max) * 100)) : 0;
-    return `
-      <div class="mobile-stats-compare-item${value <= 0 ? ' is-empty' : ''}">
-        <div class="mobile-stats-compare-bar"><i style="height:${height}%"></i></div>
-        <b>${escapeHtml(item.label)}</b>
-        <em>${formatInteger(value)}</em>
-      </div>`;
-  }).join('');
-  return `
-    <div class="mobile-stats-compare-chart" role="img" aria-label="生图总数区间对比">
-      ${bars}
-    </div>`;
-}
-
 function renderMobileStats() {
   const container = $('#mobileStatsContent');
   if (!container) return;
@@ -649,10 +630,6 @@ function renderMobileStats() {
       </div>
     </section>
     <section class="mobile-stats-range-grid">${ranges.map(item => mobileStatsRangeCard(item, maxCostMinor)).join('')}</section>
-    <section class="mobile-stats-panel">
-      <div class="mobile-stats-panel-head"><h2>区间对比</h2><span>按生图总数对比</span></div>
-      ${mobileStatsComparisonChart(ranges)}
-    </section>
     <section class="mobile-stats-panel">
       <div class="mobile-stats-panel-head"><h2>账号排行</h2><span>近30天 · ${formatInteger((stats.d30?.byAccount || []).length)} 个账号</span></div>
       <div class="mobile-stats-account-head"><span>账号</span><span>消耗金额</span><span>总张数</span></div>
