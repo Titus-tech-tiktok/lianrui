@@ -629,24 +629,23 @@ function renderMobileStats() {
       <em>${formatInteger(item.count)} 个账号</em>
     </div>`).join('') : '<div class="mobile-stats-empty">暂无余额数据</div>';
   const totalImages = mobileStatsTotalImages(d30Totals);
+  const todayImages = mobileStatsDailyTotal(todayTotals);
+  const todayAverage = Number(todayTotals.averageCostMinor) || 0;
   const updated = state.mobileStatsUpdatedAt ? `更新 ${formatLocalDateTime(state.mobileStatsUpdatedAt)}` : '已读取最新数据';
   const updatedNode = $('#mobileStatsUpdatedAt');
   if (updatedNode) updatedNode.textContent = updated;
   renderMobileStatsRateHeader();
   container.innerHTML = `
     <section class="mobile-stats-hero-card">
-      <div>
+      <div class="mobile-stats-hero-main">
         <span>今日消耗</span>
         <strong>${formatMobileMoney(todayTotals.totalCostMinor)}</strong>
         <p>${formatMobileCny(todayTotals.totalCostMinor)} · 汇率 ${mobileStatsRateText()}</p>
-        <div class="mobile-stats-hero-metrics">
-          <em>总数 ${formatInteger(mobileStatsDailyTotal(todayTotals))} 张</em>
-          <em>成功率 ${formatPercent(todayTotals.successRate)}</em>
-        </div>
       </div>
-      <div class="mobile-stats-donut" style="--rate:${Math.round((Number(d30Totals.successRate) || 0) * 360)}deg">
-        <b>${formatPercent(d30Totals.successRate)}</b>
-        <small>30天成功</small>
+      <div class="mobile-stats-hero-stack">
+        <div><span>总数</span><b>${formatInteger(todayImages)} 张</b></div>
+        <div><span>成功率</span><b>${formatPercent(todayTotals.successRate)}</b></div>
+        <div><span>均价</span><b>${formatMobileMoney(todayAverage, 4)}</b></div>
       </div>
     </section>
     <section class="mobile-stats-range-grid">${ranges.map(item => mobileStatsRangeCard(item, maxCostMinor)).join('')}</section>
@@ -660,7 +659,7 @@ function renderMobileStats() {
       <div class="mobile-stats-account-list">${accountHtml}</div>
     </section>
     <section class="mobile-stats-panel">
-      <div class="mobile-stats-panel-head"><h2>当前余额</h2><span>不含超级管理员</span></div>
+      <div class="mobile-stats-panel-head"><h2>当前余额</h2><span>角色汇总</span></div>
       <div class="mobile-stats-balance-total"><span>总余额</span><b>${formatMobileMoney(d30BalanceTotals.balanceMinor)}</b><em>可用 ${formatMobileMoney(d30BalanceTotals.availableMinor)}</em></div>
       <div class="mobile-stats-balance-list">${balanceRoleHtml}</div>
     </section>
