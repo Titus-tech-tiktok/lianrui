@@ -400,8 +400,8 @@ function globalStatsRangeLabel(range = 'today') {
 
 function globalStatsOperationLabel(key = '') {
   return {
-    generation: '首次生图',
-    regeneration: '重新生成',
+    generation: '生图',
+    regeneration: '修正生图',
     master: '母版图',
     free: '自由生图',
     analysis: '套图分析',
@@ -433,7 +433,7 @@ function ensureGlobalStatsPage() {
   section.innerHTML = `
     <div class="global-stats-shell">
       <header class="global-stats-head">
-        <div><span class="eyebrow">SUPER ADMIN</span><h1>全局统计</h1><p>查看所有账号的算力消耗、生成数量、分析次数和一次成功率。</p></div>
+        <div><span class="eyebrow">SUPER ADMIN</span><h1>全局统计</h1><p>查看所有账号的算力消耗、生成数量、分析次数和真实成功率。</p></div>
         <div class="global-stats-actions">
           <div class="segmented global-stats-range" role="tablist">
             <button class="active" type="button" data-global-stats-range="today">今日</button>
@@ -460,11 +460,14 @@ function renderGlobalStats() {
     return;
   }
   const totals = data.totals || {};
+  const totalGeneratedImages = mobileStatsTotalImages(totals);
+  const effectiveImageRuns = (totals.imageGenerated || 0) + (totals.imageRegenerated || 0);
+  const accountImageCount = item => mobileStatsTotalImages(item || {});
   const cards = [
     ['总消耗', formatMoney(totals.totalCostMinor), globalStatsRangeLabel(data.range)],
-    ['平均每张成本', formatMoney(totals.averageCostMinor), '按成功生成图片均摊'],
-    ['首次生图', formatInteger(totals.imageGenerated), `重新生成 ${formatInteger(totals.imageRegenerated)}`],
-    ['一次成功率', formatPercent(totals.successRate), `一次成功 ${formatInteger(totals.firstPassImages)}`],
+    ['平均每张成本', formatMoney(totals.averageCostMinor), '按全部生成结果均摊'],
+    ['生图总数', formatInteger(totalGeneratedImages), '计入所有计费生成结果'],
+    ['成功率', formatPercent(totals.successRate), `有效生图 ${formatInteger(effectiveImageRuns)} 次`],
     ['套图分析', formatInteger(totals.templateAnalysisFolders), `文字调用 ${formatInteger(totals.analysisCalls)}`],
     ['活跃账号', formatInteger(totals.activeWorkspaces), '参与消耗的账号']
   ];
@@ -474,7 +477,7 @@ function renderGlobalStats() {
     <div class="global-stats-grid">${cards.map(([label, value, detail]) => `<article class="global-stat-card"><span>${escapeHtml(label)}</span><b>${escapeHtml(value)}</b><small>${escapeHtml(detail)}</small></article>`).join('')}</div>
     <div class="global-stats-panels">
       <section class="global-stats-panel"><h2>消耗结构</h2>${operations.length ? operations.map(item => `<div class="global-stats-row"><span>${escapeHtml(globalStatsOperationLabel(item.key))}</span><b>${formatInteger(item.count)}</b><em>${formatMoney(item.costMinor)}</em></div>`).join('') : '<div class="empty-inline">暂无流水</div>'}</section>
-      <section class="global-stats-panel"><h2>账号排行</h2>${accounts.length ? accounts.slice(0, 12).map(item => `<div class="global-stats-row"><span>${escapeHtml(item.displayName || item.username || item.workspaceId)}</span><b>${formatMoney(item.totalCostMinor)}</b><em>${formatInteger(item.imageGenerated)} 张</em></div>`).join('') : '<div class="empty-inline">暂无账号消耗</div>'}</section>
+      <section class="global-stats-panel"><h2>账号排行</h2>${accounts.length ? accounts.slice(0, 12).map(item => `<div class="global-stats-row"><span>${escapeHtml(item.displayName || item.username || item.workspaceId)}</span><b>${formatMoney(item.totalCostMinor)}</b><em>${formatInteger(accountImageCount(item))} 张</em></div>`).join('') : '<div class="empty-inline">暂无账号消耗</div>'}</section>
     </div>`;
 }
 
@@ -524,7 +527,7 @@ function mobileStatsTotalImages(totals = {}) {
 }
 
 function mobileStatsDailyTotal(totals = {}) {
-  return (totals.imageGenerated || 0) + (totals.imageRegenerated || 0);
+  return mobileStatsTotalImages(totals);
 }
 
 function mobileStatsRateText() {
@@ -548,17 +551,18 @@ function renderMobileStatsRateHeader() {
 function mobileStatsRangeCard(item, maxCostMinor) {
   const totals = item.data?.totals || {};
   const percent = maxCostMinor > 0 ? Math.min(100, Math.round(((Number(totals.totalCostMinor) || 0) / maxCostMinor) * 100)) : 0;
+  const totalImages = mobileStatsTotalImages(totals);
   return `
     <article class="mobile-stats-range-card">
       <div class="mobile-stats-card-top"><span>${escapeHtml(item.label)}</span><em>${formatPercent(totals.successRate)}</em></div>
       <strong>${formatMobileMoney(totals.totalCostMinor)}</strong>
-      <div class="mobile-stats-card-meta"><b>${formatInteger(totals.imageGenerated || 0)}</b><span>首次</span><b>${formatInteger(totals.imageRegenerated || 0)}</b><span>重生</span></div>
+      <div class="mobile-stats-card-meta"><b>${formatInteger(totalImages)}</b><span>总数</span><b>${formatMobileMoney(totals.averageCostMinor, 4)}</b><span>均价</span></div>
       <div class="mobile-stats-progress"><i style="width:${percent}%"></i></div>
     </article>`;
 }
 
 function mobileStatsTrendChart(ranges) {
-  const values = ranges.map(item => Number(item.data?.totals?.imageGenerated) || 0);
+  const values = ranges.map(item => mobileStatsTotalImages(item.data?.totals || {}));
   const max = Math.max(1, ...values);
   const points = values.map((value, index) => {
     const x = 18 + index * 94;
@@ -571,7 +575,7 @@ function mobileStatsTrendChart(ranges) {
   const labels = points.map(point => `<span><b>${escapeHtml(point.label)}</b><em>${formatInteger(point.value)}</em></span>`).join('');
   return `
     <div class="mobile-stats-line-chart">
-      <svg viewBox="0 0 320 128" role="img" aria-label="首次生图趋势">
+      <svg viewBox="0 0 320 128" role="img" aria-label="生图总数趋势">
         <path class="mobile-stats-chart-area" d="M ${area} Z"></path>
         <polyline class="mobile-stats-chart-line" points="${line}"></polyline>
         ${dots}
@@ -601,12 +605,13 @@ function renderMobileStats() {
   const maxAccountCost = Math.max(1, ...accountRows.map(item => Number(item.totalCostMinor) || 0));
   const accountHtml = accountRows.length ? accountRows.map((item, index) => {
     const width = Math.max(6, Math.round(((Number(item.totalCostMinor) || 0) / maxAccountCost) * 100));
+    const accountImages = mobileStatsTotalImages(item || {});
     return `
       <div class="mobile-stats-account-row">
         <span class="mobile-stats-rank">${index + 1}</span>
         <div class="mobile-stats-account-name"><b>${escapeHtml(item.displayName || item.username || '未命名账号')}</b><i style="width:${width}%"></i></div>
         <strong>${formatMobileMoney(item.totalCostMinor)}</strong>
-        <em>${formatInteger(item.imageGenerated || 0)}张</em>
+        <em>${formatInteger(accountImages)}张</em>
       </div>`;
   }).join('') : '<div class="mobile-stats-empty">近30天暂无账号消耗</div>';
   const totalImages = mobileStatsTotalImages(d30Totals);
@@ -621,7 +626,7 @@ function renderMobileStats() {
         <strong>${formatMobileMoney(todayTotals.totalCostMinor)}</strong>
         <p>${formatMobileCny(todayTotals.totalCostMinor)} · 汇率 ${mobileStatsRateText()}</p>
         <div class="mobile-stats-hero-metrics">
-          <em>生图 ${formatInteger(mobileStatsDailyTotal(todayTotals))} 张</em>
+          <em>总数 ${formatInteger(mobileStatsDailyTotal(todayTotals))} 张</em>
           <em>成功率 ${formatPercent(todayTotals.successRate)}</em>
         </div>
       </div>
@@ -632,7 +637,7 @@ function renderMobileStats() {
     </section>
     <section class="mobile-stats-range-grid">${ranges.map(item => mobileStatsRangeCard(item, maxCostMinor)).join('')}</section>
     <section class="mobile-stats-panel">
-      <div class="mobile-stats-panel-head"><h2>生成趋势</h2><span>按首次生图对比</span></div>
+      <div class="mobile-stats-panel-head"><h2>生成趋势</h2><span>按生图总数对比</span></div>
       ${mobileStatsTrendChart(ranges)}
     </section>
     <section class="mobile-stats-panel">

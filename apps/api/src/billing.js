@@ -294,12 +294,16 @@ function createBillingService(dataRoot) {
           totalCostMinor: 0,
           imageGenerated: 0,
           imageRegenerated: 0,
+          masterGenerated: 0,
+          freeGenerated: 0,
           analysisCalls: 0,
           averageCostMinor: 0
         };
         account.totalCostMinor += costMinor;
         if (bucket === 'generation') account.imageGenerated += 1;
         if (bucket === 'regeneration') account.imageRegenerated += 1;
+        if (bucket === 'master') account.masterGenerated += 1;
+        if (bucket === 'free') account.freeGenerated += 1;
         if (entry.kind === 'llm') account.analysisCalls += 1;
         accounts.set(entry.workspaceId, account);
 
@@ -318,16 +322,18 @@ function createBillingService(dataRoot) {
       } catch {}
     }
     totals.failedOrRetry = totals.imageRegenerated;
-    totals.firstPassImages = Math.max(0, totals.imageGenerated - totals.imageRegenerated);
+    totals.firstPassImages = totals.imageGenerated;
     const successBase = totals.imageGenerated + totals.imageRegenerated;
-    totals.successRate = successBase > 0 ? totals.firstPassImages / successBase : 0;
-    const deliveredImages = totals.imageGenerated + totals.masterGenerated + totals.freeGenerated;
+    totals.successRate = successBase > 0 ? totals.imageGenerated / successBase : 0;
+    const deliveredImages = totals.imageGenerated + totals.imageRegenerated + totals.masterGenerated + totals.freeGenerated;
     totals.averageCostMinor = deliveredImages > 0 ? Math.round(totals.totalCostMinor / deliveredImages) : 0;
     totals.templateAnalysisFolders = totals.templateAnalysisCalls;
     totals.activeWorkspaces = accounts.size;
     const byAccount = [...accounts.values()].map(account => ({
       ...account,
-      averageCostMinor: account.imageGenerated > 0 ? Math.round(account.totalCostMinor / account.imageGenerated) : 0
+      averageCostMinor: (account.imageGenerated + account.imageRegenerated + account.masterGenerated + account.freeGenerated) > 0
+        ? Math.round(account.totalCostMinor / (account.imageGenerated + account.imageRegenerated + account.masterGenerated + account.freeGenerated))
+        : 0
     })).sort((a, b) => b.totalCostMinor - a.totalCostMinor);
     return {
       range: windowRange.range,

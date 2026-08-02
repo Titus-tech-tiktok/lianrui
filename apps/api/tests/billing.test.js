@@ -181,3 +181,25 @@ test('global stats exclude superadmin account usage', async t => {
   assert.equal(stats.totals.activeWorkspaces, 1);
   assert.deepEqual(stats.byAccount.map(account => account.workspaceId), ['member-workspace']);
 });
+
+test('global stats use total generated count and actual retry success rate', async t => {
+  const { root, billing } = await fixture();
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  await billing.saveRules({ enabled: true, imageFeeMinor: 100, llmFeeMinor: 20, defaultBalanceMinor: 1000 });
+  await billing.commit(await billing.reserve('member-workspace', 'image', { description: '套图换印花生图' }));
+  await billing.commit(await billing.reserve('member-workspace', 'image', { description: '套图图片重新生成' }));
+  await billing.commit(await billing.reserve('member-workspace', 'image', { description: '母版图生成' }));
+
+  const stats = await billing.getGlobalStats('today', new Map([
+    ['member-workspace', { role: 'member', username: 'seller' }]
+  ]));
+
+  assert.equal(stats.totals.totalCostMinor, 300);
+  assert.equal(stats.totals.imageGenerated, 1);
+  assert.equal(stats.totals.imageRegenerated, 1);
+  assert.equal(stats.totals.masterGenerated, 1);
+  assert.equal(stats.totals.firstPassImages, 1);
+  assert.equal(stats.totals.successRate, 0.5);
+  assert.equal(stats.totals.averageCostMinor, 100);
+  assert.equal(stats.byAccount[0].averageCostMinor, 100);
+});
