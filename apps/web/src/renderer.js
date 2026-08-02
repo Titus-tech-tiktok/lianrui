@@ -115,6 +115,8 @@ const state = {
   globalStatsRange: 'today',
   mobileStats: null,
   mobileStatsUpdatedAt: '',
+  mobileStatsExchangeRate: null,
+  mobileStatsExchangeRateError: '',
   config: null,
   products: [],
   prints: [],
@@ -361,6 +363,12 @@ function formatMobileMoney(minor = 0, digits = 2) {
   return `$${amount.toFixed(digits)}`;
 }
 
+function formatMobileCny(minor = 0) {
+  const rate = Number(state.mobileStatsExchangeRate?.rate) || 0;
+  const amount = Math.max(0, Number(minor) || 0) / BILLING_AMOUNT_SCALE;
+  return rate > 0 ? `¥${(amount * rate).toFixed(2)}` : '¥--';
+}
+
 function formatDurationMs(ms = 0) {
   const totalSeconds = Math.max(0, Math.floor(Number(ms) / 1000));
   const hours = Math.floor(totalSeconds / 3600);
@@ -497,9 +505,9 @@ function ensureMobileStatsPage() {
   section.innerHTML = `
     <div class="mobile-stats-shell">
       <header class="mobile-stats-header">
-        <div>
-          <span>SUPER ADMIN</span>
-          <h1>永沙全局统计</h1>
+        <div id="mobileStatsRateHeader" class="mobile-stats-rate-header">
+          <span>USD / CNY</span>
+          <strong>读取中</strong>
           <p id="mobileStatsUpdatedAt">正在读取最新数据</p>
         </div>
         <button class="mobile-stats-icon-button" id="refreshMobileStatsButton" type="button" aria-label="刷新">刷新</button>
@@ -515,6 +523,28 @@ function mobileStatsTotalImages(totals = {}) {
   return (totals.imageGenerated || 0) + (totals.imageRegenerated || 0) + (totals.masterGenerated || 0) + (totals.freeGenerated || 0);
 }
 
+function mobileStatsDailyTotal(totals = {}) {
+  return (totals.imageGenerated || 0) + (totals.imageRegenerated || 0);
+}
+
+function mobileStatsRateText() {
+  const rate = Number(state.mobileStatsExchangeRate?.rate) || 0;
+  return rate > 0 ? rate.toFixed(4) : '--';
+}
+
+function renderMobileStatsRateHeader() {
+  const header = $('#mobileStatsRateHeader');
+  if (!header) return;
+  const rate = state.mobileStatsExchangeRate;
+  const source = rate?.cached ? '缓存汇率' : 'Frankfurter';
+  const date = rate?.date ? ` · ${rate.date}` : '';
+  const error = state.mobileStatsExchangeRateError ? ` · ${state.mobileStatsExchangeRateError}` : '';
+  header.innerHTML = `
+    <span>USD / CNY</span>
+    <strong>${mobileStatsRateText()}</strong>
+    <p>${source}${date}${error}</p>`;
+}
+
 function mobileStatsRangeCard(item, maxCostMinor) {
   const totals = item.data?.totals || {};
   const percent = maxCostMinor > 0 ? Math.min(100, Math.round(((Number(totals.totalCostMinor) || 0) / maxCostMinor) * 100)) : 0;
@@ -525,6 +555,29 @@ function mobileStatsRangeCard(item, maxCostMinor) {
       <div class="mobile-stats-card-meta"><b>${formatInteger(totals.imageGenerated || 0)}</b><span>首次</span><b>${formatInteger(totals.imageRegenerated || 0)}</b><span>重生</span></div>
       <div class="mobile-stats-progress"><i style="width:${percent}%"></i></div>
     </article>`;
+}
+
+function mobileStatsTrendChart(ranges) {
+  const values = ranges.map(item => Number(item.data?.totals?.imageGenerated) || 0);
+  const max = Math.max(1, ...values);
+  const points = values.map((value, index) => {
+    const x = 18 + index * 94;
+    const y = 110 - ((value / max) * 76);
+    return { x, y, value, label: ranges[index].label };
+  });
+  const line = points.map(point => `${point.x},${point.y}`).join(' ');
+  const area = `18,118 ${line} ${points[points.length - 1].x},118`;
+  const dots = points.map(point => `<circle cx="${point.x}" cy="${point.y}" r="4"></circle>`).join('');
+  const labels = points.map(point => `<span><b>${escapeHtml(point.label)}</b><em>${formatInteger(point.value)}</em></span>`).join('');
+  return `
+    <div class="mobile-stats-line-chart">
+      <svg viewBox="0 0 320 128" role="img" aria-label="首次生图趋势">
+        <path class="mobile-stats-chart-area" d="M ${area} Z"></path>
+        <polyline class="mobile-stats-chart-line" points="${line}"></polyline>
+        ${dots}
+      </svg>
+      <div class="mobile-stats-chart-labels">${labels}</div>
+    </div>`;
 }
 
 function renderMobileStats() {
@@ -543,12 +596,7 @@ function renderMobileStats() {
   ];
   const d30Totals = stats.d30?.totals || {};
   const maxCostMinor = Math.max(1, ...ranges.map(item => Number(item.data?.totals?.totalCostMinor) || 0));
-  const maxGenerated = Math.max(1, ...ranges.map(item => Number(item.data?.totals?.imageGenerated) || 0));
-  const chartHtml = ranges.map(item => {
-    const totals = item.data?.totals || {};
-    const height = Math.max(12, Math.round(((Number(totals.imageGenerated) || 0) / maxGenerated) * 100));
-    return `<div class="mobile-stats-chart-bar"><i style="height:${height}%"></i><span>${escapeHtml(item.label)}</span></div>`;
-  }).join('');
+  const todayTotals = stats.today?.totals || {};
   const accountRows = (stats.d30?.byAccount || []).slice(0, 6);
   const maxAccountCost = Math.max(1, ...accountRows.map(item => Number(item.totalCostMinor) || 0));
   const accountHtml = accountRows.length ? accountRows.map((item, index) => {
@@ -565,22 +613,27 @@ function renderMobileStats() {
   const updated = state.mobileStatsUpdatedAt ? `更新 ${formatLocalDateTime(state.mobileStatsUpdatedAt)}` : '已读取最新数据';
   const updatedNode = $('#mobileStatsUpdatedAt');
   if (updatedNode) updatedNode.textContent = updated;
+  renderMobileStatsRateHeader();
   container.innerHTML = `
     <section class="mobile-stats-hero-card">
       <div>
-        <span>近30天总消耗</span>
-        <strong>${formatMobileMoney(d30Totals.totalCostMinor)}</strong>
-        <p>首次生图 ${formatInteger(d30Totals.imageGenerated || 0)} 张 · 重生成 ${formatInteger(d30Totals.imageRegenerated || 0)} 张</p>
+        <span>今日消耗</span>
+        <strong>${formatMobileMoney(todayTotals.totalCostMinor)}</strong>
+        <p>${formatMobileCny(todayTotals.totalCostMinor)} · 汇率 ${mobileStatsRateText()}</p>
+        <div class="mobile-stats-hero-metrics">
+          <em>生图 ${formatInteger(mobileStatsDailyTotal(todayTotals))} 张</em>
+          <em>成功率 ${formatPercent(todayTotals.successRate)}</em>
+        </div>
       </div>
       <div class="mobile-stats-donut" style="--rate:${Math.round((Number(d30Totals.successRate) || 0) * 360)}deg">
         <b>${formatPercent(d30Totals.successRate)}</b>
-        <small>一次成功</small>
+        <small>30天成功</small>
       </div>
     </section>
     <section class="mobile-stats-range-grid">${ranges.map(item => mobileStatsRangeCard(item, maxCostMinor)).join('')}</section>
     <section class="mobile-stats-panel">
       <div class="mobile-stats-panel-head"><h2>生成趋势</h2><span>按首次生图对比</span></div>
-      <div class="mobile-stats-chart">${chartHtml}</div>
+      ${mobileStatsTrendChart(ranges)}
     </section>
     <section class="mobile-stats-panel">
       <div class="mobile-stats-panel-head"><h2>账号排行</h2><span>近30天 · ${formatInteger((stats.d30?.byAccount || []).length)} 个账号</span></div>
@@ -588,10 +641,44 @@ function renderMobileStats() {
       <div class="mobile-stats-account-list">${accountHtml}</div>
     </section>
     <section class="mobile-stats-summary-strip">
+      <div><span>30天消耗</span><b>${formatMobileMoney(d30Totals.totalCostMinor)}</b></div>
+      <div><span>人民币</span><b>${formatMobileCny(d30Totals.totalCostMinor)}</b></div>
       <div><span>平均成本</span><b>${formatMobileMoney(d30Totals.averageCostMinor, 4)}</b></div>
       <div><span>总张数</span><b>${formatInteger(totalImages)}</b></div>
       <div><span>套图分析</span><b>${formatInteger(d30Totals.templateAnalysisFolders || 0)}</b></div>
     </section>`;
+}
+
+async function loadMobileExchangeRate() {
+  const cacheKey = 'caishen.mobileStats.usdCnyRate';
+  const applyCachedRate = () => {
+    try {
+      const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
+      if (cached?.rate) {
+        state.mobileStatsExchangeRate = { ...cached, cached: true };
+        return true;
+      }
+    } catch {}
+    return false;
+  };
+  try {
+    state.mobileStatsExchangeRateError = '';
+    const response = await fetch('https://api.frankfurter.dev/v2/rate/USD/CNY', { cache: 'no-store' });
+    if (!response.ok) throw new Error(`汇率读取失败 ${response.status}`);
+    const payload = await response.json();
+    const rate = Number(payload?.rate);
+    if (!Number.isFinite(rate) || rate <= 0) throw new Error('汇率数据无效');
+    state.mobileStatsExchangeRate = {
+      rate,
+      date: payload.date || '',
+      fetchedAt: new Date().toISOString(),
+      cached: false
+    };
+    localStorage.setItem(cacheKey, JSON.stringify(state.mobileStatsExchangeRate));
+  } catch (error) {
+    if (!applyCachedRate()) state.mobileStatsExchangeRate = null;
+    state.mobileStatsExchangeRateError = state.mobileStatsExchangeRate ? '接口失败，使用缓存' : '汇率暂不可用';
+  }
 }
 
 async function loadMobileStats() {
@@ -603,7 +690,8 @@ async function loadMobileStats() {
       window.caishen.getGlobalStats('today'),
       window.caishen.getGlobalStats('yesterday'),
       window.caishen.getGlobalStats('7d'),
-      window.caishen.getGlobalStats('30d')
+      window.caishen.getGlobalStats('30d'),
+      loadMobileExchangeRate()
     ]);
     state.mobileStats = { today, yesterday, d7, d30 };
     state.mobileStatsUpdatedAt = new Date().toISOString();

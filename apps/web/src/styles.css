@@ -7034,6 +7034,306 @@ label input, label textarea {
   font-size: 16px;
 }
 
+.mobile-stats-page {
+  background:
+    radial-gradient(circle at 50% -12%, rgba(47, 124, 116, .2), transparent 34%),
+    linear-gradient(180deg, #f6fbfa 0%, #edf4f3 48%, #e7efee 100%);
+}
+
+.mobile-stats-shell {
+  width: min(100%, 430px);
+  gap: 12px;
+  padding: max(16px, env(safe-area-inset-top)) 14px max(22px, env(safe-area-inset-bottom));
+}
+
+.mobile-stats-header {
+  align-items: center;
+  padding: 4px 0 0;
+}
+
+.mobile-stats-rate-header {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.mobile-stats-rate-header span {
+  color: #b79453;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .18em;
+}
+
+.mobile-stats-rate-header strong {
+  color: var(--navy);
+  font-size: 34px;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.mobile-stats-rate-header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.mobile-stats-icon-button {
+  min-height: 34px;
+  padding: 0 12px;
+  border-color: rgba(47, 124, 116, .24);
+  box-shadow: none;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.mobile-stats-content {
+  gap: 12px;
+}
+
+.mobile-stats-hero-card,
+.mobile-stats-panel,
+.mobile-stats-range-card,
+.mobile-stats-summary-strip {
+  border-color: rgba(213, 221, 216, .88);
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 18px 38px rgba(23, 40, 55, .08);
+}
+
+.mobile-stats-hero-card {
+  grid-template-columns: minmax(0, 1fr) 104px;
+  min-height: 164px;
+  padding: 18px;
+  border-radius: 26px;
+  background:
+    linear-gradient(135deg, rgba(47, 124, 116, .08), rgba(255, 255, 255, .96) 45%),
+    #fff;
+}
+
+.mobile-stats-hero-card span,
+.mobile-stats-card-top span,
+.mobile-stats-panel-head span,
+.mobile-stats-summary-strip span {
+  color: #64717f;
+  font-size: 12px;
+}
+
+.mobile-stats-hero-card strong {
+  margin-top: 8px;
+  color: var(--teal);
+  font-size: clamp(38px, 11vw, 48px);
+  font-weight: 950;
+}
+
+.mobile-stats-hero-card p {
+  margin-top: 8px;
+  color: var(--navy);
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.mobile-stats-hero-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.mobile-stats-hero-metrics em {
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: #edf5f3;
+  color: #2f7c74;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.mobile-stats-donut {
+  width: 96px;
+  box-shadow: 0 12px 30px rgba(47, 124, 116, .14);
+}
+
+.mobile-stats-donut::before {
+  inset: 11px;
+}
+
+.mobile-stats-donut b {
+  font-size: 20px;
+}
+
+.mobile-stats-donut small {
+  margin-top: -20px;
+}
+
+.mobile-stats-range-grid {
+  gap: 10px;
+}
+
+.mobile-stats-range-card {
+  min-height: 132px;
+  padding: 14px;
+  border-radius: 22px;
+}
+
+.mobile-stats-range-card strong {
+  color: var(--navy);
+  font-size: clamp(24px, 7vw, 32px);
+  font-weight: 950;
+}
+
+.mobile-stats-card-meta {
+  min-height: 18px;
+  gap: 5px;
+}
+
+.mobile-stats-card-meta b {
+  font-weight: 950;
+}
+
+.mobile-stats-progress {
+  height: 8px;
+  background: #edf2f1;
+}
+
+.mobile-stats-progress i {
+  background: linear-gradient(90deg, #2f7c74, #55b6a9);
+}
+
+.mobile-stats-panel {
+  padding: 15px;
+  border-radius: 24px;
+}
+
+.mobile-stats-panel-head h2 {
+  font-size: 17px;
+}
+
+.mobile-stats-line-chart {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.mobile-stats-line-chart svg {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.mobile-stats-chart-area {
+  fill: rgba(47, 124, 116, .13);
+}
+
+.mobile-stats-chart-line {
+  fill: none;
+  stroke: #2f7c74;
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.mobile-stats-line-chart circle {
+  fill: #fff;
+  stroke: #2f7c74;
+  stroke-width: 4;
+}
+
+.mobile-stats-chart-labels {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mobile-stats-chart-labels span {
+  display: grid;
+  gap: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+.mobile-stats-chart-labels b {
+  color: var(--navy);
+  font-size: 12px;
+}
+
+.mobile-stats-chart-labels em {
+  color: var(--teal);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.mobile-stats-account-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 84px 58px;
+  margin-top: 12px;
+  padding: 0 0 7px 34px;
+  gap: 10px;
+}
+
+.mobile-stats-account-head span {
+  color: #7a8693;
+  font-size: 11px;
+}
+
+.mobile-stats-account-head span:not(:first-child) {
+  text-align: right;
+}
+
+.mobile-stats-account-list {
+  gap: 0;
+}
+
+.mobile-stats-account-row {
+  grid-template-columns: 26px minmax(0, 1fr) 84px 58px;
+  gap: 8px;
+  padding: 12px 0;
+}
+
+.mobile-stats-account-name b {
+  font-size: 14px;
+}
+
+.mobile-stats-account-name i {
+  height: 6px;
+  background: linear-gradient(90deg, #2f7c74, #55b6a9);
+}
+
+.mobile-stats-account-row strong {
+  color: var(--navy);
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.mobile-stats-account-row em {
+  color: #64717f;
+  font-size: 12px;
+}
+
+.mobile-stats-summary-strip {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.mobile-stats-summary-strip div {
+  min-height: 78px;
+  padding: 13px;
+  border: 1px solid rgba(213, 221, 216, .88);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, .9);
+  box-shadow: 0 12px 26px rgba(23, 40, 55, .06);
+}
+
+.mobile-stats-summary-strip b {
+  font-size: 18px;
+  font-weight: 950;
+}
+
 @media (max-width: 1240px) {
   .global-stats-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
