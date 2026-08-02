@@ -553,7 +553,7 @@ function mobileStatsRangeCard(item, maxCostMinor) {
   const percent = maxCostMinor > 0 ? Math.min(100, Math.round(((Number(totals.totalCostMinor) || 0) / maxCostMinor) * 100)) : 0;
   const totalImages = mobileStatsTotalImages(totals);
   return `
-    <article class="mobile-stats-range-card">
+    <article class="mobile-stats-range-card${percent <= 0 ? ' is-empty' : ''}">
       <div class="mobile-stats-card-top"><span>${escapeHtml(item.label)}</span><em>${formatPercent(totals.successRate)}</em></div>
       <strong>${formatMobileMoney(totals.totalCostMinor)}</strong>
       <div class="mobile-stats-card-meta"><b>${formatInteger(totalImages)}</b><span>总数</span><b>${formatMobileMoney(totals.averageCostMinor, 4)}</b><span>均价</span></div>
@@ -561,26 +561,22 @@ function mobileStatsRangeCard(item, maxCostMinor) {
     </article>`;
 }
 
-function mobileStatsTrendChart(ranges) {
+function mobileStatsComparisonChart(ranges) {
   const values = ranges.map(item => mobileStatsTotalImages(item.data?.totals || {}));
   const max = Math.max(1, ...values);
-  const points = values.map((value, index) => {
-    const x = 18 + index * 94;
-    const y = 110 - ((value / max) * 76);
-    return { x, y, value, label: ranges[index].label };
-  });
-  const line = points.map(point => `${point.x},${point.y}`).join(' ');
-  const area = `18,118 ${line} ${points[points.length - 1].x},118`;
-  const dots = points.map(point => `<circle cx="${point.x}" cy="${point.y}" r="4"></circle>`).join('');
-  const labels = points.map(point => `<span><b>${escapeHtml(point.label)}</b><em>${formatInteger(point.value)}</em></span>`).join('');
+  const bars = ranges.map((item, index) => {
+    const value = values[index];
+    const height = value > 0 ? Math.max(10, Math.round((value / max) * 100)) : 0;
+    return `
+      <div class="mobile-stats-compare-item${value <= 0 ? ' is-empty' : ''}">
+        <div class="mobile-stats-compare-bar"><i style="height:${height}%"></i></div>
+        <b>${escapeHtml(item.label)}</b>
+        <em>${formatInteger(value)}</em>
+      </div>`;
+  }).join('');
   return `
-    <div class="mobile-stats-line-chart">
-      <svg viewBox="0 0 320 128" role="img" aria-label="生图总数趋势">
-        <path class="mobile-stats-chart-area" d="M ${area} Z"></path>
-        <polyline class="mobile-stats-chart-line" points="${line}"></polyline>
-        ${dots}
-      </svg>
-      <div class="mobile-stats-chart-labels">${labels}</div>
+    <div class="mobile-stats-compare-chart" role="img" aria-label="生图总数区间对比">
+      ${bars}
     </div>`;
 }
 
@@ -637,8 +633,8 @@ function renderMobileStats() {
     </section>
     <section class="mobile-stats-range-grid">${ranges.map(item => mobileStatsRangeCard(item, maxCostMinor)).join('')}</section>
     <section class="mobile-stats-panel">
-      <div class="mobile-stats-panel-head"><h2>生成趋势</h2><span>按生图总数对比</span></div>
-      ${mobileStatsTrendChart(ranges)}
+      <div class="mobile-stats-panel-head"><h2>区间对比</h2><span>按生图总数对比</span></div>
+      ${mobileStatsComparisonChart(ranges)}
     </section>
     <section class="mobile-stats-panel">
       <div class="mobile-stats-panel-head"><h2>账号排行</h2><span>近30天 · ${formatInteger((stats.d30?.byAccount || []).length)} 个账号</span></div>

@@ -7199,6 +7199,10 @@ label input, label textarea {
   background: linear-gradient(90deg, #2f7c74, #55b6a9);
 }
 
+.mobile-stats-range-card.is-empty .mobile-stats-progress i {
+  display: none;
+}
+
 .mobile-stats-panel {
   padding: 15px;
   border-radius: 24px;
@@ -7208,56 +7212,61 @@ label input, label textarea {
   font-size: 17px;
 }
 
-.mobile-stats-line-chart {
-  display: grid;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.mobile-stats-line-chart svg {
-  width: 100%;
-  height: auto;
-  overflow: visible;
-}
-
-.mobile-stats-chart-area {
-  fill: rgba(47, 124, 116, .13);
-}
-
-.mobile-stats-chart-line {
-  fill: none;
-  stroke: #2f7c74;
-  stroke-width: 5;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.mobile-stats-line-chart circle {
-  fill: #fff;
-  stroke: #2f7c74;
-  stroke-width: 4;
-}
-
-.mobile-stats-chart-labels {
+.mobile-stats-compare-chart {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  align-items: end;
+  gap: 12px;
+  min-height: 172px;
+  margin-top: 14px;
+  padding: 12px 6px 2px;
+  border-radius: 20px;
+  background:
+    linear-gradient(to top, rgba(47, 124, 116, .08), transparent 1px) 0 0 / 100% 34px,
+    linear-gradient(180deg, rgba(255, 255, 255, .88), rgba(245, 250, 248, .76));
 }
 
-.mobile-stats-chart-labels span {
+.mobile-stats-compare-item {
   display: grid;
-  gap: 2px;
-  color: var(--muted);
-  font-size: 11px;
+  grid-template-rows: 104px auto auto;
+  align-items: end;
+  gap: 6px;
   text-align: center;
 }
 
-.mobile-stats-chart-labels b {
+.mobile-stats-compare-bar {
+  display: flex;
+  align-items: end;
+  justify-content: center;
+  height: 104px;
+}
+
+.mobile-stats-compare-bar i {
+  width: min(42px, 76%);
+  min-height: 0;
+  border-radius: 16px 16px 6px 6px;
+  background: linear-gradient(180deg, #55b6a9, #2f7c74);
+  box-shadow: 0 12px 24px rgba(47, 124, 116, .2);
+}
+
+.mobile-stats-compare-item.is-empty .mobile-stats-compare-bar i {
+  display: none;
+}
+
+.mobile-stats-compare-item.is-empty .mobile-stats-compare-bar::after {
+  width: min(42px, 76%);
+  height: 8px;
+  border-radius: 999px;
+  background: #dfe8e5;
+  content: "";
+}
+
+.mobile-stats-compare-item b {
   color: var(--navy);
   font-size: 12px;
 }
 
-.mobile-stats-chart-labels em {
+.mobile-stats-compare-item em {
   color: var(--teal);
   font-size: 12px;
   font-style: normal;
