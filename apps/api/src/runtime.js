@@ -907,6 +907,10 @@ function detailSliceLayoutProtectionPrompt() {
   return [
     'DETAIL_SLICE_LAYOUT_PROTECTION_MODE',
     'This template may be a sliced ecommerce detail page, a multi-grid detail card, or a cropped partial product close-up from a long page. Treat the first input image as a locked layout canvas.',
+    'ORDERED_DETAIL_SLICE_CONTINUITY_MODE',
+    'This output is one ordered detail-page slice, not a complete long detail page. Keep the original slice width, height, crop window, page background and layout exactly aligned to the first input image so adjacent slices can be uploaded to Taobao in order and visually reconnect.',
+    'Keep the top edge and bottom edge bands stable: do not change, enlarge, remove or invent objects, text, backgrounds, borders, panel lines, shadows or product surfaces that touch a slice boundary.',
+    'Do not generate the full detail page, do not merge neighboring slices, do not create a new poster, and do not invent content above or below the current canvas.',
     'Do not enlarge, crop, move or restyle Chinese text, titles, subtitles, page numbers, badges, icons, separators, paper texture, rounded cards, background bands, margins or decorative borders from the first input image.',
     'Only migrate the master product appearance onto visible cabinet, drawer-front, door-front or exterior panel surfaces that are already present in the first input image.',
     'A cropped drawer front or partial cabinet surface is still a valid target when it visibly belongs to the exterior product surface. Process only the visible part inside the current canvas; never invent the missing off-canvas continuation.',
@@ -2091,6 +2095,134 @@ function resolveInside(root, relativePath) {
   return resolved;
 }
 
+const STRUCTURED_TEMPLATE_SECTIONS = Object.freeze({
+  main: new Set(['主图']),
+  ratio: new Set(['3-4主图', '3:4主图', '3_4主图', '3/4主图']),
+  detail: new Set(['详情页'])
+});
+const DETAIL_FULL_FILE_NAMES = new Set(['detail-full', 'detail_full', '完整详情页', '详情页']);
+const DETAIL_FULL_SLICE_HEIGHT = Math.max(800, Number(process.env.CAISHEN_DETAIL_FULL_SLICE_HEIGHT || 1600));
+const TEMPLATE_INTERNAL_DIRS = new Set(['.caishen-template-cache', '.caishen-meta']);
+
+function normalizeTemplateRelativePath(value) {
+  return String(value || '').replaceAll('\\', '/');
+}
+
+function templateSectionName(relativePath) {
+  const normalized = normalizeTemplateRelativePath(relativePath);
+  const [section = ''] = normalized.split('/');
+  return section || path.basename(path.dirname(relativePath));
+}
+
+function templateRelativePathParts(templateRoot, filePath) {
+  return normalizeTemplateRelativePath(path.relative(templateRoot, filePath)).split('/').filter(Boolean);
+}
+
+function isStructuredTemplateFolder(templateRoot, imagePaths) {
+  let hasMainOrRatio = false;
+  let hasDetail = false;
+  for (const file of imagePaths) {
+    const [section] = templateRelativePathParts(templateRoot, file);
+    if (STRUCTURED_TEMPLATE_SECTIONS.main.has(section) || STRUCTURED_TEMPLATE_SECTIONS.ratio.has(section)) hasMainOrRatio = true;
+    if (STRUCTURED_TEMPLATE_SECTIONS.detail.has(section)) hasDetail = true;
+    if (hasMainOrRatio && hasDetail) return true;
+  }
+  return false;
+}
+
+function detailFullRelativePath(relativePath) {
+  const parts = normalizeTemplateRelativePath(relativePath).split('/').filter(Boolean);
+  if (parts.length < 2 || !STRUCTURED_TEMPLATE_SECTIONS.detail.has(parts[0])) return false;
+  return DETAIL_FULL_FILE_NAMES.has(path.basename(parts.at(-1), path.extname(parts.at(-1))).toLocaleLowerCase('zh-CN'));
+}
+
+function detailSliceRelativePath(index) {
+  return `详情页/${String(index + 1).padStart(2, '0')}.jpg`;
+}
+
+async function ensureDetailFullSliceSpecs(templateRoot, fullPath) {
+  const sourceRelativePath = normalizeTemplateRelativePath(path.relative(templateRoot, fullPath));
+  const sourceStat = await fsp.stat(fullPath);
+  const metadata = await sharp(fullPath).metadata();
+  const width = Math.max(1, Number(metadata.width) || 1);
+  const height = Math.max(1, Number(metadata.height) || 1);
+  const sliceCount = Math.max(1, Math.ceil(height / DETAIL_FULL_SLICE_HEIGHT));
+  const cacheKey = crypto.createHash('sha1').update(sourceRelativePath).digest('hex').slice(0, 16);
+  const sliceRoot = path.join(templateRoot, '.caishen-meta', 'detail-full-slices', cacheKey);
+  const manifestFile = path.join(sliceRoot, 'manifest.json');
+  const manifest = {
+    sourceRelativePath,
+    size: sourceStat.size,
+    mtimeMs: Math.trunc(sourceStat.mtimeMs),
+    width,
+    height,
+    sliceHeight: DETAIL_FULL_SLICE_HEIGHT,
+    sliceCount
+  };
+  const existing = await readJsonFile(manifestFile, null);
+  const sliceFiles = Array.from({ length: sliceCount }, (_, index) => path.join(sliceRoot, `${String(index + 1).padStart(2, '0')}.jpg`));
+  const filesReady = await Promise.all(sliceFiles.map(file => fsp.stat(file).then(stat => stat.isFile(), () => false)));
+  const cacheValid = existing && JSON.stringify(existing) === JSON.stringify(manifest) && filesReady.every(Boolean);
+  if (!cacheValid) {
+    await fsp.rm(sliceRoot, { recursive: true, force: true });
+    await fsp.mkdir(sliceRoot, { recursive: true });
+    for (let index = 0; index < sliceCount; index += 1) {
+      const top = index * DETAIL_FULL_SLICE_HEIGHT;
+      const sliceHeight = Math.min(DETAIL_FULL_SLICE_HEIGHT, height - top);
+      await sharp(fullPath)
+        .extract({ left: 0, top, width, height: sliceHeight })
+        .jpeg({ quality: 95 })
+        .toFile(sliceFiles[index]);
+    }
+    await writeJsonFile(manifestFile, manifest);
+  }
+  const specs = sliceFiles.map((templatePath, index) => ({
+    templatePath,
+    relativePath: detailSliceRelativePath(index),
+    sourceRelativePath,
+    sectionName: '详情页'
+  }));
+  for (let index = 0; index < specs.length; index += 1) {
+    specs[index].neighborImages = [
+      index > 0 ? { label: 'previous slice', relativePath: specs[index - 1].relativePath, templatePath: specs[index - 1].templatePath } : null,
+      index < specs.length - 1 ? { label: 'next slice', relativePath: specs[index + 1].relativePath, templatePath: specs[index + 1].templatePath } : null
+    ].filter(Boolean);
+  }
+  return specs;
+}
+
+async function buildStructuredTemplateJobSpecs(templateRoot, imagePaths) {
+  const mainSpecs = [];
+  const ratioSpecs = [];
+  const detailSpecs = [];
+  const detailFullImages = [];
+  for (const templatePath of imagePaths) {
+    const relativePath = normalizeTemplateRelativePath(path.relative(templateRoot, templatePath));
+    const sectionName = templateSectionName(relativePath);
+    if (STRUCTURED_TEMPLATE_SECTIONS.main.has(sectionName)) {
+      mainSpecs.push({ templatePath, relativePath, sectionName });
+      continue;
+    }
+    if (STRUCTURED_TEMPLATE_SECTIONS.ratio.has(sectionName)) {
+      ratioSpecs.push({ templatePath, relativePath, sectionName });
+      continue;
+    }
+    if (STRUCTURED_TEMPLATE_SECTIONS.detail.has(sectionName)) {
+      if (detailFullRelativePath(relativePath)) detailFullImages.push(templatePath);
+      else detailSpecs.push({ templatePath, relativePath, sectionName });
+    }
+  }
+  detailFullImages.sort((left, right) => normalizeTemplateRelativePath(path.relative(templateRoot, left)).localeCompare(
+    normalizeTemplateRelativePath(path.relative(templateRoot, right)),
+    'zh-CN',
+    { numeric: true }
+  ));
+  for (const detailFullPath of detailFullImages) {
+    detailSpecs.push(...await ensureDetailFullSliceSpecs(templateRoot, detailFullPath));
+  }
+  return [...mainSpecs, ...ratioSpecs, ...detailSpecs];
+}
+
 async function listTemplateImagePaths(templateRoot) {
   const rootStat = await fsp.stat(templateRoot).catch(() => null);
   if (!rootStat?.isDirectory()) throw new Error('套图文件夹不存在');
@@ -2099,7 +2231,7 @@ async function listTemplateImagePaths(templateRoot) {
     const entries = await fsp.readdir(directory, { withFileTypes: true }).catch(() => []);
     entries.sort((left, right) => left.name.localeCompare(right.name, 'zh-CN', { numeric: true }));
     for (const entry of entries) {
-      if (entry.name === '.caishen-template-cache' || entry.name === '.caishen-meta') continue;
+      if (entry.name.startsWith('.') || TEMPLATE_INTERNAL_DIRS.has(entry.name)) continue;
       const fullPath = path.join(directory, entry.name);
       if (entry.isDirectory()) await walk(fullPath);
       else if (entry.isFile() && isImagePath(fullPath)) files.push(fullPath);
@@ -2110,20 +2242,31 @@ async function listTemplateImagePaths(templateRoot) {
 }
 
 async function buildTemplateJobs(templateRoot, outputRoot = templateRoot) {
-  return (await listTemplateImagePaths(templateRoot)).map(templatePath => {
-    const relativePath = path.relative(templateRoot, templatePath);
+  const imagePaths = await listTemplateImagePaths(templateRoot);
+  const specs = isStructuredTemplateFolder(templateRoot, imagePaths)
+    ? await buildStructuredTemplateJobSpecs(templateRoot, imagePaths)
+    : imagePaths.map(templatePath => ({
+      templatePath,
+      relativePath: normalizeTemplateRelativePath(path.relative(templateRoot, templatePath)),
+      sectionName: templateSectionName(path.relative(templateRoot, templatePath))
+    }));
+  return specs.map(spec => {
+    const relativePath = normalizeTemplateRelativePath(spec.relativePath);
     return {
       templateRoot,
-      templatePath,
+      templatePath: spec.templatePath,
       relativePath,
       outputRoot,
       outputPath: path.join(outputRoot, relativePath),
-      sectionName: path.basename(path.dirname(relativePath))
+      sourceRelativePath: spec.sourceRelativePath || relativePath,
+      neighborImages: spec.neighborImages || null,
+      sectionName: spec.sectionName || templateSectionName(relativePath)
     };
   });
 }
 
 async function detailSliceNeighborImages(job) {
+  if (Array.isArray(job.neighborImages)) return job.neighborImages;
   if (!isDetailSliceTemplate(job, '')) return [];
   const currentPath = path.resolve(job.templatePath);
   const currentDirectory = path.dirname(currentPath);
@@ -2239,12 +2382,13 @@ async function collectTemplateItems(templateRoot) {
       : recordedStatus.status === 'failed' || recordedStatus.status === 'running'
         ? recordedStatus.status
         : 'idle';
+    const displayFolder = path.dirname(normalizeTemplateRelativePath(job.relativePath));
     items.push({
       relativePath: job.relativePath,
       templatePath: job.templatePath,
       path: job.templatePath,
-      name: path.basename(job.templatePath),
-      folder: path.relative(templateRoot, path.dirname(job.templatePath)) || '根目录',
+      name: path.basename(job.relativePath),
+      folder: displayFolder && displayFolder !== '.' ? displayFolder : '根目录',
       templateUrl: `${imageUrl(job.templatePath)}?v=${version}`,
       url: `${imageUrl(job.templatePath)}?v=${version}`,
       thumbnailUrl: thumbnailUrl(job.templatePath, 480, version),
