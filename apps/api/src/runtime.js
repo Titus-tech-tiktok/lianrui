@@ -903,6 +903,45 @@ function flagshipComplexTemplatePrintPrompt() {
   ].join('\n');
 }
 
+function detailSliceLayoutProtectionPrompt() {
+  return [
+    'DETAIL_SLICE_LAYOUT_PROTECTION_MODE',
+    'This template may be a sliced ecommerce detail page, a multi-grid detail card, or a cropped partial product close-up from a long page. Treat the first input image as a locked layout canvas.',
+    'Do not enlarge, crop, move or restyle Chinese text, titles, subtitles, page numbers, badges, icons, separators, paper texture, rounded cards, background bands, margins or decorative borders from the first input image.',
+    'Only migrate the master product appearance onto visible cabinet, drawer-front, door-front or exterior panel surfaces that are already present in the first input image.',
+    'A cropped drawer front or partial cabinet surface is still a valid target when it visibly belongs to the exterior product surface. Process only the visible part inside the current canvas; never invent the missing off-canvas continuation.',
+    'For multi-grid pages, each small panel keeps its original crop, camera angle, text area and card frame. Do not merge panels, swap panel order, resize panels or turn the page into a new poster.',
+    'Keep all non-product details from the first input image unchanged: hands, people, snacks, books, lamps, plants, labels, measurement text, icons, copywriting blocks, shadows, walls, floors and existing empty space.',
+    'If a product surface is ambiguous, preserve that local area rather than expanding the print into text or background.'
+  ].join('\n');
+}
+
+function isDetailSliceTemplate(job = {}, analysis = '') {
+  const text = `${String(job?.relativePath || '')}\n${String(job?.sectionName || '')}\n${String(analysis || '')}`.toLowerCase();
+  const signals = [
+    '详情',
+    'detail',
+    '细节',
+    '材质',
+    'sku',
+    '参数',
+    '图鉴',
+    '多宫格',
+    '多图',
+    '拼图',
+    '切片',
+    '裁切',
+    '局部',
+    '抽屉',
+    'drawer',
+    'multi-grid',
+    'multi panel',
+    'multi-panel',
+    'sliced ecommerce detail page'
+  ];
+  return signals.some(signal => text.includes(signal));
+}
+
 function applyPackagePrompt(prompt, api, kind) {
   const pack = api?.activeModelPackage;
   const packagePrompt = packagePromptFor(api, kind);
@@ -2084,6 +2123,34 @@ async function buildTemplateJobs(templateRoot, outputRoot = templateRoot) {
   });
 }
 
+async function detailSliceNeighborImages(job) {
+  if (!isDetailSliceTemplate(job, '')) return [];
+  const currentPath = path.resolve(job.templatePath);
+  const currentDirectory = path.dirname(currentPath);
+  const images = (await listTemplateImagePaths(job.templateRoot).catch(() => []))
+    .filter(file => path.dirname(path.resolve(file)) === currentDirectory);
+  const currentIndex = images.findIndex(file => path.resolve(file) === currentPath);
+  if (currentIndex < 0) return [];
+  const neighbors = [];
+  if (currentIndex > 0) {
+    const previous = images[currentIndex - 1];
+    neighbors.push({
+      label: 'previous slice',
+      relativePath: path.relative(job.templateRoot, previous),
+      templatePath: previous
+    });
+  }
+  if (currentIndex < images.length - 1) {
+    const next = images[currentIndex + 1];
+    neighbors.push({
+      label: 'next slice',
+      relativePath: path.relative(job.templateRoot, next),
+      templatePath: next
+    });
+  }
+  return neighbors;
+}
+
 async function templateAnalysisForJob(job) {
   const cache = templateCachePaths(job.templateRoot, job.relativePath);
   const analysis = await readValidTemplateAnalysisCache({ cacheFile: cache.analysisFile, templateImagePath: job.templatePath });
@@ -2404,6 +2471,33 @@ async function analyzeTemplateJob(job, options = {}) {
     });
     messageContent.push({ type: 'image_url', image_url: { url: options.referenceImageDataUrl || await imageAsAnalysisDataUrl(options.referenceJob.templatePath) } });
     messageContent.push({ type: 'text', text: `Target image to analyze independently: ${job.relativePath}` });
+  }
+  const neighborImages = options.neighborImages || await detailSliceNeighborImages(job);
+  if (neighborImages.length) {
+    messageContent.push({
+      type: 'text',
+      text: [
+        'Detail page slice context:',
+        `Current target slice: ${job.relativePath}`,
+        'The following neighbor slices are context only. They help identify cabinets, drawer fronts, door fronts or product surfaces that may be cut by the current image edge.',
+        'Do not copy their text, layout, crop, product geometry, scene elements or off-canvas content into the target analysis.',
+        'Analyze and output JSON only for the current target slice.'
+      ].join('\n')
+    });
+    for (const neighbor of neighborImages) {
+      messageContent.push({ type: 'text', text: `${neighbor.label}: ${neighbor.relativePath}` });
+      messageContent.push({
+        type: 'image_url',
+        image_url: { url: neighbor.imageDataUrl || await imageAsAnalysisDataUrl(neighbor.templatePath) }
+      });
+    }
+    messageContent.push({
+      type: 'text',
+      text: [
+        `Target current slice: ${job.relativePath}`,
+        'Neighbor slices are context only. Judge cropped drawer fronts, half cabinet doors and partial exterior cabinet surfaces in this current image as valid replace_print targets when visible.'
+      ].join('\n')
+    });
   }
   messageContent.push({ type: 'image_url', image_url: { url: options.imageDataUrl || await imageAsAnalysisDataUrl(job.templatePath) } });
   const body = await analysisApiJson(api, {
@@ -2856,6 +2950,9 @@ async function generateTemplateJob(job, source, config, options = {}) {
     if (isComplexTemplatePrintAnalysis(analysis, job)) {
       prompt += `\n\n${flagshipComplexTemplatePrintPrompt()}`;
     }
+    if (isDetailSliceTemplate(job, analysis)) {
+      prompt += `\n\n${detailSliceLayoutProtectionPrompt()}`;
+    }
     if (options.referenceResultPath && fs.existsSync(options.referenceResultPath)) {
       prompt += '\n\n第四张输入图是运营选定的合格参考结果图。只参考它如何保留黑色边框、黑色侧板、台面、柜脚、门缝以及印花在柜门面板内的落位方式；不要复制它的构图、视角、家具尺寸、场景元素或具体像素。当前第一张套图模板仍然是最终构图标准。';
     }
@@ -2879,6 +2976,9 @@ async function generateTemplateJob(job, source, config, options = {}) {
     prompt += '\n\n硬性质量要求：保留当前模板图的中文标题、卖点标签、SKU 标签、尺寸标注、图标、页面编号、背景、道具、人物、光影和排版层级；商品本体必须来自母版产品图。印花只能落在柜门或抽屉的正面可替换面板内部，必须完整保留家具边框、门缝/抽屉缝、侧板、台面、底边、柜脚、把手、阴影和所有场景物品。不得让印花覆盖文字、标签、边框、把手、柜脚、地面、墙面、人物或道具。';
     if (isComplexTemplatePrintAnalysis(analysis, job)) {
       prompt += `\n\n${flagshipComplexTemplatePrintPrompt()}`;
+    }
+    if (isDetailSliceTemplate(job, analysis)) {
+      prompt += `\n\n${detailSliceLayoutProtectionPrompt()}`;
     }
     imagePaths = [job.templatePath, masterImage, source.printPath];
   }

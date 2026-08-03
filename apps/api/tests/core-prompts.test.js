@@ -70,6 +70,8 @@ test('模板分析提示词使用生产导向 V10 契约并限制人工确认兜
   assert.equal(TEMPLATE_ANALYSIS_PROMPT.includes('只要画面主体需要替换为母版商品，就判定为 replace_print'), true);
   assert.equal(TEMPLATE_ANALYSIS_PROMPT.includes('如果仍需要展示母版商品的外观效果，判定为 replace_print'), true);
   assert.equal(TEMPLATE_ANALYSIS_PROMPT.includes('只要画面同时出现可见白色/浅色柜门正面或门板外表面，就必须 replace_print'), true);
+  assert.equal(TEMPLATE_ANALYSIS_PROMPT.includes('如果图片看起来是完整详情页被上下切开的局部切片'), true);
+  assert.equal(TEMPLATE_ANALYSIS_PROMPT.includes('被边缘裁掉的半个抽屉、半扇柜门或局部柜体也必须继续视为需要母版商品迁移'), true);
   assert.equal(TEMPLATE_ANALYSIS_PROMPT.includes('confidence 只表示判断把握，不作为自动降级人工确认的硬门槛'), true);
   assert.equal(TEMPLATE_ANALYSIS_PROMPT.endsWith('只有图像损坏、主体完全不可判断时，才使用 manual_check。'), true);
 });

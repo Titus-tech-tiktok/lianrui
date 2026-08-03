@@ -132,6 +132,9 @@ test('flagship template-print adds complex preservation instructions', { concurr
   const events = await fs.readFile(path.join(result.folder, '.caishen-meta', 'image-api-events.jsonl'), 'utf8');
   assert.match(events, /"maxConcurrency":14/);
   assert.match(captured.imageBodies[0], /preserve every Chinese title/);
+  assert.match(captured.imageBodies[0], /DETAIL_SLICE_LAYOUT_PROTECTION_MODE/);
+  assert.match(captured.imageBodies[0], /Do not enlarge, crop, move or restyle Chinese text/);
+  assert.match(captured.imageBodies[0], /cropped drawer front or partial cabinet surface is still a valid target/);
   assert.equal((captured.imageBodies[0].match(/name="image"/g) || []).length, 2);
   assert.match(captured.imageBodies[0], /filename="01-complex/);
   assert.match(captured.imageBodies[0], /filename="pattern/);

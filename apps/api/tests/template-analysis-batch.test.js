@@ -335,3 +335,65 @@ test('referenced template analysis sends target and reference images without cop
   assert.match(text, /reference/i);
   assert.match(text, /Do not copy/i);
 });
+
+test('detail slice template analysis includes neighbor slices as context only', async (t) => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'caishen-template-neighbor-analysis-'));
+  let capturedPayload = null;
+  const server = http.createServer((req, res) => {
+    if (req.url !== '/v1/chat/completions') return res.writeHead(404).end();
+    const chunks = [];
+    req.on('data', chunk => chunks.push(chunk));
+    req.on('end', () => {
+      capturedPayload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      res.setHeader('Content-Type', 'application/json');
+      return res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({
+        version: TEMPLATE_CACHE_VERSION,
+        imageRole: 'detail slice',
+        processingMode: 'replace_print',
+        confidence: 0.94,
+        imageUnderstanding: 'middle sliced detail page with cropped drawer front still requiring print migration',
+        printableArea: 'visible cropped drawer front and cabinet exterior only',
+        printableSurfaces: [],
+        preserveAreas: 'all Chinese text, layout cards, background paper texture, separators and non-cabinet images'
+      }) } }] }));
+    });
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(async () => {
+    server.closeAllConnections?.();
+    await new Promise(resolve => server.close(resolve));
+    await fs.rm(temp, { recursive: true, force: true });
+  });
+
+  process.env.CAISHEN_DATA_DIR = temp;
+  process.env.CAISHEN_WORKSPACE_ID = 'template-neighbor-analysis';
+  process.env.CAISHEN_API_BASE_URL = `http://127.0.0.1:${server.address().port}/v1`;
+  process.env.CAISHEN_API_KEY = 'test-key';
+  process.env.CAISHEN_ANALYSIS_API_KEY = 'test-key';
+  process.env.CAISHEN_ANALYSIS_WIRE_API = 'chat_completions';
+  const runtimePath = require.resolve('../src/runtime');
+  delete require.cache[runtimePath];
+  const runtime = require('../src/runtime');
+  const folder = path.join(runtime.WORKSPACE_ROOT, 'assets', 'template', 'set');
+  const detailFolder = path.join(folder, '详情页');
+  await fs.mkdir(detailFolder, { recursive: true });
+  await Promise.all(['01.png', '02.png', '03.png'].map((name, index) => sharp({
+    create: { width: 160, height: 220, channels: 3, background: index === 1 ? '#f4ead8' : '#dedede' }
+  }).png().toFile(path.join(detailFolder, name))));
+
+  const result = await runtime.analyzeTemplateItems({ folder, relativePaths: [path.join('详情页', '02.png')] });
+  const target = result.items.find(item => templateRelativeKeyForTest(item.relativePath) === templateRelativeKeyForTest(path.join('详情页', '02.png')));
+  assert.equal(target.action, 'replace_print');
+  const content = capturedPayload.messages[0].content;
+  assert.equal(content.filter(item => item.type === 'image_url').length, 3);
+  const text = content.filter(item => item.type === 'text').map(item => item.text).join('\n');
+  assert.match(text, /Detail page slice context/i);
+  assert.match(text, /previous slice/i);
+  assert.match(text, /next slice/i);
+  assert.match(text, /Neighbor slices are context only/i);
+  assert.match(text, /Target current slice/i);
+});
+
+function templateRelativeKeyForTest(value) {
+  return String(value || '').replaceAll('\\', '/').toLocaleLowerCase('zh-CN');
+}
