@@ -336,6 +336,66 @@ test('referenced template analysis sends target and reference images without cop
   assert.match(text, /Do not copy/i);
 });
 
+test('forced template analysis tells the model to replace visible exterior panels', async (t) => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'caishen-template-force-replace-'));
+  let capturedPayload = null;
+  const server = http.createServer((req, res) => {
+    if (req.url !== '/v1/chat/completions') return res.writeHead(404).end();
+    const chunks = [];
+    req.on('data', chunk => chunks.push(chunk));
+    req.on('end', () => {
+      capturedPayload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      res.setHeader('Content-Type', 'application/json');
+      return res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({
+        version: TEMPLATE_CACHE_VERSION,
+        imageRole: 'open drawer detail',
+        processingMode: 'replace_print',
+        confidence: 0.96,
+        imageUnderstanding: 'open drawers show interior storage but visible drawer exterior fronts still need print migration',
+        printableArea: 'visible drawer exterior fronts and cabinet exterior panels',
+        printableSurfaces: [{
+          id: 'drawer-front',
+          label: 'visible drawer exterior front',
+          polygon: [[0.2, 0.25], [0.8, 0.25], [0.8, 0.6], [0.2, 0.6]]
+        }],
+        preserveAreas: 'drawer interiors, stored items, rails, handles, text, background'
+      }) } }] }));
+    });
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(async () => {
+    server.closeAllConnections?.();
+    await new Promise(resolve => server.close(resolve));
+    await fs.rm(temp, { recursive: true, force: true });
+  });
+
+  process.env.CAISHEN_DATA_DIR = temp;
+  process.env.CAISHEN_WORKSPACE_ID = 'template-force-replace';
+  process.env.CAISHEN_API_BASE_URL = `http://127.0.0.1:${server.address().port}/v1`;
+  process.env.CAISHEN_API_KEY = 'test-key';
+  process.env.CAISHEN_ANALYSIS_API_KEY = 'test-key';
+  process.env.CAISHEN_ANALYSIS_WIRE_API = 'chat_completions';
+  process.env.CAISHEN_ANALYSIS_RETRY_BASE_MS = '1';
+  const runtimePath = require.resolve('../src/runtime');
+  delete require.cache[runtimePath];
+  const runtime = require('../src/runtime');
+  const folder = path.join(runtime.WORKSPACE_ROOT, 'assets', 'template', 'set');
+  await fs.mkdir(folder, { recursive: true });
+  await sharp({ create: { width: 160, height: 240, channels: 3, background: '#dcdcdc' } }).png().toFile(path.join(folder, 'open-drawer.png'));
+
+  await runtime.analyzeTemplateItemWithReference({
+    folder,
+    relativePath: 'open-drawer.png',
+    forceReplacePrint: true
+  });
+
+  const content = capturedPayload.messages[0].content;
+  const text = content.filter(item => item.type === 'text').map(item => item.text).join('\n');
+  assert.match(text, /Force replace print/i);
+  assert.match(text, /visible drawer exterior/i);
+  assert.match(text, /drawer interiors/i);
+});
+
 test('detail slice template analysis includes neighbor slices as context only', async (t) => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'caishen-template-neighbor-analysis-'));
   let capturedPayload = null;

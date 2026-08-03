@@ -30,3 +30,13 @@ test('review activity panel only renders after an explicit task card click', asy
   assert.match(renderReviewStageBlock, /!state\.reviewTaskActivated/);
   assert.match(clickBlock, /state\.reviewTaskActivated = true/);
 });
+
+test('template reference panel supports broad candidates and force replace analysis', async () => {
+  const renderer = await fs.readFile(path.join(__dirname, '../../web/src/renderer.js'), 'utf8');
+  const candidatesBlock = renderer.match(/function templateReferenceCandidates\(item\) \{[\s\S]*?\n\}/)?.[0] || '';
+
+  assert.match(candidatesBlock, /templateDirectoryKey\(candidate\) === activeFolder/);
+  assert.doesNotMatch(candidatesBlock, /normalizeTemplateUiAction\(candidate\.action\) === 'replace_print'/);
+  assert.match(renderer, /data-force-replace-analysis/);
+  assert.match(renderer, /forceReplacePrint:\s*true/);
+});

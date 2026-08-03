@@ -4079,27 +4079,30 @@ function templateReferenceCandidates(item) {
   const activeFolder = templateDirectoryKey(item);
   const activeTokens = templateNameTokens(item.relativePath);
   return state.templateItems
-    .filter(candidate => candidate.path !== item.path && normalizeTemplateUiAction(candidate.action) === 'replace_print')
+    .filter(candidate => candidate.path !== item.path && templateDirectoryKey(candidate) === activeFolder && candidate.analysisStatus !== 'failed')
     .map(candidate => {
       const candidateTokens = templateNameTokens(candidate.relativePath);
       let tokenMatches = 0;
       for (const token of activeTokens) if (candidateTokens.has(token)) tokenMatches += 1;
       const sameFolder = templateDirectoryKey(candidate) === activeFolder ? 1 : 0;
+      const action = normalizeTemplateUiAction(candidate.action);
+      const actionScore = action === 'replace_print' ? 30 : action === 'copy_original' ? 12 : 0;
       const confidence = Number(candidate.confidence || 0);
-      return { candidate, score: sameFolder * 100 + tokenMatches * 8 + confidence };
+      return { candidate, score: sameFolder * 100 + actionScore + tokenMatches * 8 + confidence };
     })
     .sort((left, right) => right.score - left.score || String(left.candidate.relativePath).localeCompare(String(right.candidate.relativePath), 'zh-CN', { numeric: true }))
-    .slice(0, 8)
+    .slice(0, 20)
     .map(entry => entry.candidate);
 }
 
 function renderTemplateReferencePanel(item) {
   const candidates = templateReferenceCandidates(item);
+  const forceButton = `<button class="secondary" type="button" data-force-replace-analysis="${escapeHtml(item.path)}">强制换印花重析</button>`;
   if (!candidates.length) {
-    return `<aside class="template-reference-panel"><div class="template-reference-head"><b>参考重析</b><span>暂无可参考的换印花图片。</span></div></aside>`;
+    return `<aside class="template-reference-panel"><div class="template-reference-head"><b>参考重析</b><span>暂无同文件夹参考图，可直接强制重析。</span>${forceButton}</div></aside>`;
   }
   return `<aside class="template-reference-panel">
-    <div class="template-reference-head"><b>参考重析</b><span>参考图只帮助 AI 判断动作，不复制区域。</span></div>
+    <div class="template-reference-head"><b>参考重析</b><span>参考图只帮助 AI 判断动作，不复制区域。</span>${forceButton}</div>
     <div class="template-reference-list">
       ${candidates.map(candidate => `<article class="template-reference-card">
         <img src="${escapeHtml(candidate.thumbnailUrl || candidate.previewUrl || candidate.templateUrl)}" alt="${escapeHtml(candidate.relativePath)}">
@@ -4185,7 +4188,6 @@ async function analyzeActiveTemplateWithReference(referencePath) {
   const item = activeTemplateItem();
   const reference = state.templateItems.find(candidate => candidate.path === referencePath);
   if (!item || !reference) return toast('请先选择参考图片。', true);
-  if (normalizeTemplateUiAction(reference.action) !== 'replace_print') return toast('参考图必须已经识别为换印花。', true);
   const folder = templateFolderPathForItem(item);
   $('#templateConfigStatus').textContent = `正在参考“${reference.name}”重新分析`;
   state.assetAnalysisProgress.set(item.path, { status: 'running', attempt: 1 });
@@ -4209,6 +4211,41 @@ async function analyzeActiveTemplateWithReference(referencePath) {
     if (folder === state.config.detailSetsPath) await loadTemplatePreparation();
     $('#templateConfigStatus').textContent = '参考重析已完成';
     toast('参考重析已完成');
+  } catch (error) {
+    toast(errorText(error), true);
+  } finally {
+    state.assetAnalysisProgress.delete(item.path);
+    renderAssetManagementGrid();
+    renderAssetSelectionState();
+  }
+}
+
+async function analyzeActiveTemplateWithForcedReplace() {
+  const item = activeTemplateItem();
+  if (!item) return toast('请先选择需要重析的图片。', true);
+  const folder = templateFolderPathForItem(item);
+  $('#templateConfigStatus').textContent = '正在强制按换印花重新分析';
+  state.assetAnalysisProgress.set(item.path, { status: 'running', attempt: 1 });
+  renderAssetManagementGrid();
+  try {
+    await window.caishen.analyzeTemplateItemWithReference({
+      folder,
+      relativePath: item.relativePath,
+      forceReplacePrint: true
+    }, progress => {
+      const attempt = Number(progress.attempt || 0);
+      $('#templateConfigStatus').textContent = attempt
+        ? `正在强制按换印花重新分析 · 第 ${attempt} 次`
+        : '正在强制按换印花重新分析';
+    });
+    state.assetPreviewCache.delete('detailSetsPath');
+    await loadAssetLibraryPreview('detailSetsPath', { preserveSelection: true, force: true });
+    const refreshed = state.templateItems.find(candidate => candidate.relativePath === item.relativePath && templateFolderPathForItem(candidate) === folder);
+    if (refreshed) state.activeTemplatePath = refreshed.path;
+    renderTemplateAnalysisResult();
+    if (folder === state.config.detailSetsPath) await loadTemplatePreparation();
+    $('#templateConfigStatus').textContent = '强制换印花重析已完成';
+    toast('强制换印花重析已完成');
   } catch (error) {
     toast(errorText(error), true);
   } finally {
@@ -5714,6 +5751,8 @@ function bindEvents() {
   $('#templateAnalysisResult').oninput = handleTemplateAnalysisFieldChange;
   $('#templateAnalysisResult').onchange = handleTemplateAnalysisFieldChange;
   $('#templateAnalysisResult').onclick = event => {
+    const forceButton = event.target.closest('[data-force-replace-analysis]');
+    if (forceButton) return analyzeActiveTemplateWithForcedReplace();
     const referenceButton = event.target.closest('[data-reference-analysis]');
     if (referenceButton) return analyzeActiveTemplateWithReference(referenceButton.dataset.referenceAnalysis);
   };

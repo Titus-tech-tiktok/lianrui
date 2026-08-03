@@ -2608,7 +2608,7 @@ async function analyzeTemplateJob(job, options = {}) {
         'Reference analysis guidance:',
         `Reference relative path: ${options.referenceJob.relativePath}`,
         `Reference analysis JSON: ${String(options.referenceAnalysis || '').slice(0, 12000)}`,
-        'Use the reference only to understand why a similar ecommerce cabinet image should be classified as replace_print.',
+        'Use the reference only to understand how a similar ecommerce cabinet image was interpreted.',
         'Do not copy reference coordinates, panel count, door count, proportions, or replace areas.',
         'Analyze the target image independently and only decide whether it should use the master product generation flow.'
       ].join('\n')
@@ -2640,6 +2640,18 @@ async function analyzeTemplateJob(job, options = {}) {
       text: [
         `Target current slice: ${job.relativePath}`,
         'Neighbor slices are context only. Judge cropped drawer fronts, half cabinet doors and partial exterior cabinet surfaces in this current image as valid replace_print targets when visible.'
+      ].join('\n')
+    });
+  }
+  if (options.forceReplacePrint) {
+    messageContent.push({
+      type: 'text',
+      text: [
+        'Force replace print guidance:',
+        'Treat visible cabinet exterior surfaces as replace_print targets when they are drawer fronts, cabinet doors, side exterior panels, or cropped exterior product panels.',
+        'For open drawers or storage-detail images, replace only visible drawer exterior/front panels and cabinet exterior surfaces.',
+        'Preserve drawer interiors, stored items, rails, handles, seams, text, background, wall, floor, props, people, packaging, and all non-printable internal structure.',
+        'If a cabinet exterior panel is visible even partially, output processingMode/action replace_print and describe the visible exterior printable area.'
       ].join('\n')
     });
   }
@@ -2732,23 +2744,23 @@ async function analyzeTemplateItemWithReference(payload = {}, options = {}) {
   if (!folder || !fs.existsSync(folder)) throw new Error('套图文件夹不存在。');
   const relativePath = String(payload.relativePath || '');
   const referenceRelativePath = String(payload.referenceRelativePath || '');
-  if (!relativePath || !referenceRelativePath) throw new Error('缺少目标图或参考图。');
+  const forceReplacePrint = payload.forceReplacePrint === true;
+  if (!relativePath || (!referenceRelativePath && !forceReplacePrint)) throw new Error('缺少目标图或参考图。');
   const byKey = new Map((await buildTemplateJobs(folder)).map(job => [templateRelativeKey(job.relativePath), job]));
   const job = byKey.get(templateRelativeKey(relativePath));
-  const referenceJob = byKey.get(templateRelativeKey(referenceRelativePath));
+  const referenceJob = referenceRelativePath ? byKey.get(templateRelativeKey(referenceRelativePath)) : null;
   if (!job) throw new Error('没有找到目标套图图片。');
-  if (!referenceJob) throw new Error('没有找到参考套图图片。');
-  const referenceDetails = await templateAnalysisForJob(referenceJob);
-  const referenceAction = normalizeTemplateProcessingMode(referenceDetails.summary.action);
-  if (referenceAction !== 'replace_print') throw new Error('参考图必须已经识别为换印花。');
+  if (referenceRelativePath && !referenceJob) throw new Error('没有找到参考套图图片。');
+  const referenceDetails = referenceJob ? await templateAnalysisForJob(referenceJob) : null;
   const report = typeof options.reportProgress === 'function' ? options.reportProgress : async () => {};
   await report({ phase: 'queued', current: 0, total: 1, failed: 0, concurrency: 1, message: '参考重析已排队' });
   const result = await analyzeTemplateJobWithRetry(job, 3, async progress => {
-    await report({ ...progress, current: 0, total: 1, failed: 0, concurrency: 1, referenceRelativePath: referenceJob.relativePath });
+    await report({ ...progress, current: 0, total: 1, failed: 0, concurrency: 1, referenceRelativePath: referenceJob?.relativePath || '' });
   }, {
     referenceJob,
-    referenceAnalysis: referenceDetails.analysis,
-    referenceImageDataUrl: await imageAsAnalysisDataUrl(referenceJob.templatePath)
+    referenceAnalysis: referenceDetails?.analysis || '',
+    referenceImageDataUrl: referenceJob ? await imageAsAnalysisDataUrl(referenceJob.templatePath) : '',
+    forceReplacePrint
   });
   await report({
     phase: 'completed',
@@ -2758,14 +2770,14 @@ async function analyzeTemplateItemWithReference(payload = {}, options = {}) {
     concurrency: 1,
     completedRelativePath: job.relativePath,
     completedStatus: result.ok ? 'success' : 'failed',
-    referenceRelativePath: referenceJob.relativePath,
+    referenceRelativePath: referenceJob?.relativePath || '',
     message: result.ok ? '参考重析已完成' : `参考重析失败：${result.error}`
   });
   return {
     total: 1,
     completed: 1,
     failed: result.ok ? 0 : 1,
-    referenceRelativePath: referenceJob.relativePath,
+    referenceRelativePath: referenceJob?.relativePath || '',
     failures: result.ok ? [] : [{ relativePath: result.relativePath, error: result.error, attempts: result.attempts }],
     items: await listTemplates(folder)
   };
