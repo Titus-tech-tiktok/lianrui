@@ -2096,7 +2096,7 @@ function resolveInside(root, relativePath) {
 }
 
 const STRUCTURED_TEMPLATE_SECTIONS = Object.freeze({
-  main: new Set(['主图']),
+  main: new Set(['主图', '1-1主图', '1:1主图', '1_1主图', '1/1主图']),
   ratio: new Set(['3-4主图', '3:4主图', '3_4主图', '3/4主图']),
   detail: new Set(['详情页'])
 });
@@ -3687,14 +3687,28 @@ function titleLibraryRecordCount(library) {
 }
 
 async function readFirstTitleFromWorkbook(file) {
-  if (!fs.existsSync(file)) return '';
+  const workbook = await readTitleWorkbook(file);
+  return workbook.title;
+}
+
+async function readTitleWorkbook(file) {
+  const empty = { category: '', title: '' };
+  if (!fs.existsSync(file)) return empty;
   try {
     const workbook = XLSX.readFile(file);
     const worksheet = workbook.Sheets[workbook.SheetNames[0]];
     const rows = worksheet ? XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false, defval: '' }) : [];
-    return String(rows?.[1]?.[2] || '').trim();
+    const header = Array.isArray(rows?.[0]) ? rows[0].map(value => String(value || '').trim()) : [];
+    const categoryIndex = header.findIndex(value => value === '品类' || value.toLocaleLowerCase('en-US') === 'category');
+    const titleIndex = header.findIndex(value => value === '标题' || value.toLocaleLowerCase('en-US') === 'title');
+    const firstDataRow = rows.find((row, index) => index > 0 && Array.isArray(row) && row.some(value => String(value || '').trim()));
+    if (!firstDataRow) return empty;
+    return {
+      category: String(firstDataRow[categoryIndex >= 0 ? categoryIndex : 1] || '').trim(),
+      title: String(firstDataRow[titleIndex >= 0 ? titleIndex : 2] || '').trim()
+    };
   } catch {
-    return '';
+    return empty;
   }
 }
 
@@ -3715,16 +3729,18 @@ async function listReadyTitleTasks() {
   const knownCategories = TAOBAO_CATEGORY_TEMPLATES.flatMap(item => [item.product, item.name]);
   const tasks = [];
   for (const item of ready) {
-    const category = getTitleCategoryForReviewFolder({
+    const titleFile = path.join(item.folder, '标题.xlsx');
+    const hasTitle = fs.existsSync(titleFile);
+    const workbookTitle = hasTitle ? await readTitleWorkbook(titleFile) : { category: '', title: '' };
+    const derivedCategory = getTitleCategoryForReviewFolder({
       folder: item.folder,
       templateFolderPath: item.source?.templateFolderPath,
       detailSetsPath: config.detailSetsPath,
       knownCategories,
       directoryExists: candidate => fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()
     });
+    const category = workbookTitle.category || derivedCategory;
     const library = await loadCategoryTitleLibrary(category);
-    const titleFile = path.join(item.folder, '标题.xlsx');
-    const hasTitle = fs.existsSync(titleFile);
     tasks.push({
       folder: item.folder,
       name: item.name,
@@ -3734,7 +3750,7 @@ async function listReadyTitleTasks() {
       libraryRecordCount: titleLibraryRecordCount(library),
       hasTitle,
       titleFile,
-      firstTitle: hasTitle ? await readFirstTitleFromWorkbook(titleFile) : '',
+      firstTitle: workbookTitle.title,
       modifiedAt: item.modifiedAt
     });
   }
