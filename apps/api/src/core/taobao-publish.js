@@ -1,26 +1,30 @@
 const path = require('node:path');
 
 const TAOBAO_CATEGORY_TEMPLATES = [
-  ['sideboard', '餐边柜（储物柜）', '餐边柜'],
-  ['corner-cabinet', '边角柜', '边角柜'],
-  ['tv-cabinet', '电视柜', '电视柜'],
-  ['nightstand', '床头柜', '床头柜'],
-  ['wardrobe', '衣柜', '衣柜'],
-  ['shoe-cabinet', '鞋柜', '鞋柜'],
-  ['screen-cabinet', '屏风柜', '屏风柜'],
-  ['drawer-cabinet', '斗柜', '斗柜'],
-  ['coffee-table', '茶几', '茶几'],
-  ['dressing-table', '梳妆台', '梳妆台'],
-  ['coat-rack', '衣帽架', '衣帽架'],
-  ['bookcase', '书柜', '书柜'],
-  ['irregular', '异形产品', '异形产品'],
-  ['dopamine-bauhaus', '多巴胺 包豪斯', '多巴胺 包豪斯']
-].map(([id, name, product]) => ({
+  ['sideboard', '餐边柜（储物柜）', '餐边柜', ['住宅家具', '柜类', '餐边柜']],
+  ['corner-cabinet', '边角柜', '边角柜', ['住宅家具', '柜类', '角柜']],
+  ['tv-cabinet', '电视柜', '电视柜', ['住宅家具', '柜类', '电视柜']],
+  ['nightstand', '床头柜', '床头柜', ['住宅家具', '柜类', '床头柜']],
+  ['wardrobe', '衣柜', '衣柜', ['住宅家具', '柜类', '衣柜']],
+  ['shoe-cabinet', '鞋柜', '鞋柜', ['住宅家具', '柜类', '鞋柜']],
+  ['screen-cabinet', '屏风柜', '屏风柜', ['住宅家具', '柜类', '屏风柜']],
+  ['drawer-cabinet', '斗柜', '斗柜', ['住宅家具', '柜类', '斗柜']],
+  ['coffee-table', '茶几', '茶几', ['住宅家具', '桌类', '茶几']],
+  ['dressing-table', '梳妆台', '梳妆台', ['住宅家具', '桌类', '梳妆台']],
+  ['coat-rack', '衣帽架', '衣帽架', ['住宅家具', '架类', '衣帽架']],
+  ['bookcase', '书柜', '书柜', ['住宅家具', '柜类', '书柜']],
+  ['irregular', '异形产品', '异形产品', ['住宅家具', '柜类']],
+  ['dopamine-bauhaus', '多巴胺 包豪斯', '多巴胺 包豪斯', ['住宅家具', '柜类']]
+].map(([id, name, product, categoryPath]) => ({
   id,
   name,
   product,
   defaults: {
     publishUrl: '',
+    categoryKeyword: product,
+    categoryPath,
+    brandName: '其他家',
+    modelName: '其他',
     price: '',
     stock: '999',
     shipFrom: '',

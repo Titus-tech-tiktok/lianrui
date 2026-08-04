@@ -6,7 +6,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="永沙统计">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://api.frankfurter.dev; img-src 'self' data: caishen:; style-src 'self'; script-src 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: caishen:; style-src 'self'; script-src 'self'">
   <title>庞大科技</title>
   <link rel="icon" href="/caishen-logo.png" type="image/png">
   <link rel="stylesheet" href="/src/styles.css">
@@ -155,6 +155,7 @@
               <code id="taobaoPublishToken">读取中...</code>
               <button class="secondary" id="copyTaobaoPublishTokenButton" type="button">复制令牌</button>
             </div>
+            <div class="taobao-publisher-devices" id="taobaoPublisherDeviceList"><div class="empty-inline">正在读取本地发布器设备...</div></div>
             <div class="taobao-category-list" id="taobaoCategoryList"><div class="empty-inline">正在读取类目模板...</div></div>
             <div class="taobao-category-editor" id="taobaoCategoryEditor"><div class="empty-inline">选择类目后配置发布模板。</div></div>
           </aside>

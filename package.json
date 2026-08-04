@@ -2,11 +2,13 @@
   "name": "caishen-web-saas",
   "version": "8.0.0",
   "private": true,
-  "workspaces": ["apps/*"],
+  "workspaces": [
+    "apps/*"
+  ],
   "scripts": {
     "dev": "concurrently -k -n API,WEB -c green,cyan \"npm run dev -w @caishen/api\" \"npm run dev -w @caishen/web\"",
     "dev:api-local": "node scripts/start-local-api.js",
-    "build": "npm run build -w @caishen/web && npm run build -w @caishen/api && npm run build -w @caishen/taobao-extension",
+    "build": "npm run build -w @caishen/web && npm run build -w @caishen/api && npm run build -w @caishen/taobao-extension && npm run build -w @caishen/taobao-publisher",
     "start": "npm run start -w @caishen/api",
     "test": "npm run test -w @caishen/api && npm run test -w @caishen/taobao-extension",
     "check": "npm run build && npm test"

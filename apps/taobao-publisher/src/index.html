@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>淘宝发布器</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <h1>淘宝发布器</h1>
+    <button data-tab="home" class="active">首页</button>
+    <button data-tab="stores">淘宝店铺管理</button>
+    <button data-tab="tasks">任务队列</button>
+    <button data-tab="templates">模板配置</button>
+    <button data-tab="logs">运行日志</button>
+  </aside>
+  <main>
+    <section class="topbar">
+      <div>
+        <span>当前账号</span>
+        <strong id="currentUser">未登录</strong>
+      </div>
+      <div>
+        <span>当前店铺</span>
+        <strong id="currentStore">未选择</strong>
+      </div>
+      <div>
+        <span>当前 Web 地址</span>
+        <strong id="currentApiBaseUrl">未连接</strong>
+      </div>
+      <button id="logoutButton" class="danger account-action" type="button" title="退出当前 Web 账号并停止自动发布">退出账号</button>
+      <label class="switch dry-run-switch"><input id="dryRunToggle" type="checkbox"> 试运行</label>
+      <label class="switch"><input id="autoPublishToggle" type="checkbox" checked> 自动发布</label>
+    </section>
+    <div id="publisherNotice" class="status-notice">请先登录 Web 账号</div>
+
+    <section id="loginPanel" class="panel">
+      <h2>登录 Web 账号</h2>
+      <form id="loginForm" class="login-form">
+        <label>Web 地址<input name="baseUrl" value="http://66.42.101.154:8788"></label>
+        <label>账号<input name="username" autocomplete="username"></label>
+        <label>密码<input name="password" type="password" autocomplete="current-password"></label>
+        <button type="submit">登录</button>
+      </form>
+    </section>
+
+    <section id="home" class="view active">
+      <div class="metric-grid">
+        <article><span>设备 ID</span><strong id="deviceId">生成中</strong></article>
+        <article><span>发布器版本</span><strong id="appVersion">读取中</strong></article>
+        <article id="syncStatusCard" class="sync-status-card"><span>同步状态</span><strong id="syncStatusLabel">未同步</strong><small id="syncLastSuccessAt">等待登录后同步</small><small id="syncLastError"></small></article>
+        <article><span>待发布</span><strong id="pendingCount">0</strong></article>
+        <article><span>执行中</span><strong id="runningCount">0</strong></article>
+        <article><span>发布成功</span><strong id="successCount">0</strong></article>
+        <article><span>发布失败</span><strong id="failedCount">0</strong></article>
+      </div>
+      <section class="readiness-panel">
+        <div class="section-head"><h2>发布前检查</h2></div>
+        <div id="readinessList" class="readiness-list"></div>
+      </section>
+      <section class="template-calibration-panel">
+        <div class="section-head"><h2>模板控件校准</h2></div>
+        <div id="templateCalibrationList" class="template-calibration-list"></div>
+      </section>
+      <section class="operator-guide">
+        <div class="section-head"><h2>运营下一步</h2></div>
+        <div id="operatorGuideList" class="operator-guide-list"></div>
+      </section>
+    </section>
+
+    <section id="stores" class="view">
+      <div class="section-head"><h2>淘宝店铺管理</h2><button id="addStoreButton">添加淘宝店铺</button></div>
+      <div id="storeList" class="list"></div>
+    </section>
+
+    <section id="tasks" class="view">
+      <div class="section-head"><h2>任务队列</h2><button id="refreshTasksButton">立即刷新</button></div>
+      <div id="taskFilterBar" class="task-filter-bar">
+        <button type="button" class="task-filter-button active" data-task-filter="all">全部</button>
+        <button type="button" class="task-filter-button" data-task-filter="waiting">待发布</button>
+        <button type="button" class="task-filter-button" data-task-filter="running">执行中</button>
+        <button type="button" class="task-filter-button" data-task-filter="failed">失败</button>
+        <button type="button" class="task-filter-button" data-task-filter="success">成功</button>
+        <button type="button" class="task-filter-button" data-task-filter="skipped">已跳过</button>
+      </div>
+      <div class="task-workspace">
+        <div id="taskList" class="list"></div>
+        <aside id="taskDetailPanel" class="task-detail-panel"></aside>
+      </div>
+    </section>
+
+    <section id="templates" class="view">
+      <div class="section-head"><h2>模板配置</h2><div class="row-actions"><button id="captureTemplateDiagnosticsButton" class="secondary">采集当前淘宝页面</button><button id="applyTemplateDiagnosticsButton" class="secondary">套用当前诊断</button><button id="saveTemplatesButton">保存模板</button></div></div>
+      <div id="templateList" class="template-grid"></div>
+    </section>
+
+    <section id="logs" class="view">
+      <div class="section-head"><h2>运行日志</h2><div class="row-actions"><button id="exportDiagnosticsButton" class="secondary">导出诊断包</button><button id="exportLogsButton" class="secondary">打开日志文件</button><button id="clearLogsButton">清空</button></div></div>
+      <pre id="logOutput"></pre>
+    </section>
+  </main>
+  <script type="module" src="./renderer.js"></script>
+</body>
+</html>

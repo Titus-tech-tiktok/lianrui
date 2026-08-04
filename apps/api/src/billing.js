@@ -210,192 +210,146 @@ function createBillingService(dataRoot) {
   }
 
   function statsWindowRange(rangeValue = 'today') {
-    const range = String(rangeValue || 'today').toLowerCase();
-    const now = new Date();
+    const nowMs = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
     const chinaOffsetMs = 8 * 60 * 60 * 1000;
-    const chinaNow = new Date(now.getTime() + chinaOffsetMs);
-    const year = chinaNow.getUTCFullYear();
-    const month = chinaNow.getUTCMonth();
-    const date = chinaNow.getUTCDate();
-    const dayStartUtc = Date.UTC(year, month, date) - chinaOffsetMs;
-    const monthStartUtc = Date.UTC(year, month, 1) - chinaOffsetMs;
-    const nextMonthStartUtc = Date.UTC(year, month + 1, 1) - chinaOffsetMs;
-    const lastMonthStartUtc = Date.UTC(year, month - 1, 1) - chinaOffsetMs;
+    const todayStartMs = Math.floor((nowMs + chinaOffsetMs) / dayMs) * dayMs - chinaOffsetMs;
+    const range = String(rangeValue || 'today');
     if (range === 'yesterday') {
-      return { range, start: dayStartUtc - 24 * 60 * 60 * 1000, end: dayStartUtc };
+      return { range, startMs: todayStartMs - dayMs, endMs: todayStartMs };
     }
-    if (range === '7d') return { range, start: now.getTime() - 7 * 24 * 60 * 60 * 1000, end: now.getTime() };
-    if (range === '30d') return { range, start: now.getTime() - 30 * 24 * 60 * 60 * 1000, end: now.getTime() };
-    if (range === 'month' || range === 'this-month') return { range: 'month', start: monthStartUtc, end: now.getTime() };
-    if (range === 'last-month' || range === 'previous-month') return { range: 'last-month', start: lastMonthStartUtc, end: monthStartUtc };
-    return { range: 'today', start: dayStartUtc, end: now.getTime() };
+    if (range === '7d' || range === '30d') {
+      const days = range === '7d' ? 7 : 30;
+      return { range, startMs: nowMs - days * dayMs, endMs: nowMs };
+    }
+    return { range: 'today', startMs: todayStartMs, endMs: nowMs };
   }
 
   function operationBucket(entry) {
-    const kind = String(entry.kind || '');
-    const description = String(entry.description || '');
-    if (kind === 'image') {
-      if (description.includes('重新生成')) return 'regeneration';
-      if (description.includes('母版')) return 'master';
-      if (description.includes('自由')) return 'free';
+    const text = `${entry.description || ''} ${entry.reference || ''}`;
+    if (entry.kind === 'image') {
+      if (text.includes('重新生成')) return 'regeneration';
+      if (text.includes('母版')) return 'master';
+      if (text.includes('自由')) return 'free';
       return 'generation';
     }
-    if (kind === 'llm') {
-      if (description.includes('套图模板') || description.includes('模板') || description.includes('分析')) return 'analysis';
+    if (entry.kind === 'llm') {
+      if (text.includes('套图模板') || text.includes('模板') || text.includes('分析')) return 'analysis';
       return 'llm';
     }
-    return kind || 'other';
+    return String(entry.kind || 'other');
   }
 
   function dayHourKey(ms) {
-    const date = new Date(ms + 8 * 60 * 60 * 1000);
-    return `${date.toISOString().slice(0, 10)} ${String(date.getUTCHours()).padStart(2, '0')}:00`;
-  }
-
-  async function buildBalanceSummary(userLookup = new Map()) {
-    const [rules, state] = await Promise.all([readRules(), readAccounts()]);
-    const totals = { count: 0, balanceMinor: 0, availableMinor: 0, reservedMinor: 0 };
-    const byRole = new Map();
-    const byAccount = [];
-    for (const [lookupWorkspaceId, user] of userLookup.entries()) {
-      const workspaceId = String(user?.workspaceId || lookupWorkspaceId || '').trim();
-      if (!workspaceId || user?.role === 'superadmin') continue;
-      const account = normalizeAccount(state.accounts[workspaceId], rules.defaultBalanceMinor);
-      const publicValue = publicAccount(workspaceId, account);
-      const role = String(user.role || 'member');
-      const roleSummary = byRole.get(role) || { role, count: 0, balanceMinor: 0, availableMinor: 0, reservedMinor: 0 };
-      roleSummary.count += 1;
-      roleSummary.balanceMinor += publicValue.balanceMinor;
-      roleSummary.availableMinor += publicValue.availableMinor;
-      roleSummary.reservedMinor += publicValue.reservedMinor;
-      byRole.set(role, roleSummary);
-      totals.count += 1;
-      totals.balanceMinor += publicValue.balanceMinor;
-      totals.availableMinor += publicValue.availableMinor;
-      totals.reservedMinor += publicValue.reservedMinor;
-      byAccount.push({
-        workspaceId,
-        username: user.username || '',
-        displayName: user.displayName || '',
-        role,
-        active: user.active !== false,
-        balanceMinor: publicValue.balanceMinor,
-        availableMinor: publicValue.availableMinor,
-        reservedMinor: publicValue.reservedMinor,
-        updatedAt: publicValue.updatedAt
-      });
-    }
-    byAccount.sort((a, b) => b.balanceMinor - a.balanceMinor);
-    return {
-      totals,
-      byRole: [...byRole.values()].sort((a, b) => b.balanceMinor - a.balanceMinor),
-      byAccount
-    };
+    const date = new Date(ms);
+    date.setMinutes(0, 0, 0);
+    return date.toISOString();
   }
 
   async function getGlobalStats(rangeValue = 'today', userLookup = new Map()) {
-    const balanceSummary = await buildBalanceSummary(userLookup);
     const windowRange = statsWindowRange(rangeValue);
+    let text = '';
+    try { text = await fs.readFile(ledgerFile, 'utf8'); } catch {
+      text = '';
+    }
     const totals = {
       totalCostMinor: 0,
-      averageCostMinor: 0,
       imageGenerated: 0,
       imageRegenerated: 0,
-      firstPassImages: 0,
-      successRate: 0,
       masterGenerated: 0,
       freeGenerated: 0,
       analysisCalls: 0,
       templateAnalysisCalls: 0,
-      templateAnalysisFolders: 0,
-      activeWorkspaces: 0,
+      activeWorkspaces: new Set(),
       failedOrRetry: 0
     };
-    const accounts = new Map();
-    const operations = new Map();
-    const trends = new Map();
-    let text = '';
-    try { text = await fs.readFile(ledgerFile, 'utf8'); } catch { text = ''; }
+    const byAccount = new Map();
+    const byOperation = new Map();
+    const trend = new Map();
+    const templateAnalysisGroups = new Set();
     for (const line of text.trim().split('\n').filter(Boolean)) {
-      try {
-        const entry = JSON.parse(line);
-        if (!BILLING_TYPES.has(String(entry.kind || ''))) continue;
-        if (userLookup.get(entry.workspaceId)?.role === 'superadmin') continue;
-        const created = new Date(entry.createdAt).getTime();
-        if (!Number.isFinite(created) || created < windowRange.start || created >= windowRange.end) continue;
-        const sourceScale = entry?.amountScale === BILLING_SCALE ? BILLING_SCALE : 100;
-        const amountMinor = sourceScale === BILLING_SCALE ? Math.trunc(Number(entry.amountMinor) || 0) : migrateMoney(entry.amountMinor, sourceScale);
-        const costMinor = Math.max(0, -amountMinor);
-        const bucket = operationBucket(entry);
-        totals.totalCostMinor += costMinor;
-        if (bucket === 'generation') totals.imageGenerated += 1;
-        else if (bucket === 'regeneration') totals.imageRegenerated += 1;
-        else if (bucket === 'master') totals.masterGenerated += 1;
-        else if (bucket === 'free') totals.freeGenerated += 1;
-        else if (bucket === 'analysis') {
-          totals.analysisCalls += 1;
-          totals.templateAnalysisCalls += 1;
-        } else if (entry.kind === 'llm') totals.analysisCalls += 1;
-
-        const account = accounts.get(entry.workspaceId) || {
-          workspaceId: entry.workspaceId,
-          username: userLookup.get(entry.workspaceId)?.username || '',
-          displayName: userLookup.get(entry.workspaceId)?.displayName || '',
-          totalCostMinor: 0,
-          imageGenerated: 0,
-          imageRegenerated: 0,
-          masterGenerated: 0,
-          freeGenerated: 0,
-          analysisCalls: 0,
-          averageCostMinor: 0
-        };
-        account.totalCostMinor += costMinor;
-        if (bucket === 'generation') account.imageGenerated += 1;
-        if (bucket === 'regeneration') account.imageRegenerated += 1;
-        if (bucket === 'master') account.masterGenerated += 1;
-        if (bucket === 'free') account.freeGenerated += 1;
-        if (entry.kind === 'llm') account.analysisCalls += 1;
-        accounts.set(entry.workspaceId, account);
-
-        const operation = operations.get(bucket) || { key: bucket, count: 0, costMinor: 0 };
-        operation.count += 1;
-        operation.costMinor += costMinor;
-        operations.set(bucket, operation);
-
-        const trendKey = dayHourKey(created);
-        const trend = trends.get(trendKey) || { key: trendKey, costMinor: 0, imageGenerated: 0, imageRegenerated: 0, analysisCalls: 0 };
-        trend.costMinor += costMinor;
-        if (bucket === 'generation') trend.imageGenerated += 1;
-        if (bucket === 'regeneration') trend.imageRegenerated += 1;
-        if (entry.kind === 'llm') trend.analysisCalls += 1;
-        trends.set(trendKey, trend);
-      } catch {}
+      let entry;
+      try { entry = JSON.parse(line); } catch { continue; }
+      const created = new Date(entry.createdAt).getTime();
+      if (!Number.isFinite(created) || created < windowRange.startMs || created >= windowRange.endMs) continue;
+      const sourceScale = entry?.amountScale === BILLING_SCALE ? BILLING_SCALE : 100;
+      const amountMinor = sourceScale === BILLING_SCALE ? Math.trunc(Number(entry.amountMinor) || 0) : migrateMoney(entry.amountMinor, sourceScale);
+      const spendMinor = amountMinor < 0 ? Math.abs(amountMinor) : 0;
+      const bucket = operationBucket(entry);
+      const workspaceId = String(entry.workspaceId || '');
+      if (spendMinor > 0) totals.totalCostMinor += spendMinor;
+      if (workspaceId) totals.activeWorkspaces.add(workspaceId);
+      if (bucket === 'generation') totals.imageGenerated += 1;
+      if (bucket === 'regeneration') totals.imageRegenerated += 1;
+      if (bucket === 'master') totals.masterGenerated += 1;
+      if (bucket === 'free') totals.freeGenerated += 1;
+      if (entry.kind === 'llm') totals.analysisCalls += 1;
+      if (bucket === 'analysis') {
+        totals.templateAnalysisCalls += 1;
+        const referenceRoot = String(entry.reference || '').split(/[\\/]/).filter(Boolean)[0] || '';
+        templateAnalysisGroups.add(`${workspaceId}|${new Date(created).toISOString().slice(0, 10)}|${referenceRoot || 'default'}`);
+      }
+      const user = userLookup.get(workspaceId) || {};
+      const account = byAccount.get(workspaceId) || {
+        workspaceId,
+        username: user.username || workspaceId || 'unknown',
+        displayName: user.displayName || user.username || workspaceId || 'unknown',
+        role: user.role || '',
+        totalCostMinor: 0,
+        imageGenerated: 0,
+        imageRegenerated: 0,
+        analysisCalls: 0
+      };
+      account.totalCostMinor += spendMinor;
+      if (bucket === 'generation') account.imageGenerated += 1;
+      if (bucket === 'regeneration') account.imageRegenerated += 1;
+      if (entry.kind === 'llm') account.analysisCalls += 1;
+      byAccount.set(workspaceId, account);
+      const operation = byOperation.get(bucket) || { key: bucket, count: 0, totalCostMinor: 0 };
+      operation.count += 1;
+      operation.totalCostMinor += spendMinor;
+      byOperation.set(bucket, operation);
+      const hour = dayHourKey(created);
+      const point = trend.get(hour) || { time: hour, generated: 0, costMinor: 0 };
+      if (entry.kind === 'image') point.generated += 1;
+      point.costMinor += spendMinor;
+      trend.set(hour, point);
     }
-    totals.failedOrRetry = totals.imageRegenerated;
-    totals.firstPassImages = totals.imageGenerated;
-    const successBase = totals.imageGenerated + totals.imageRegenerated;
-    totals.successRate = successBase > 0 ? totals.imageGenerated / successBase : 0;
-    const deliveredImages = totals.imageGenerated + totals.imageRegenerated + totals.masterGenerated + totals.freeGenerated;
-    totals.averageCostMinor = deliveredImages > 0 ? Math.round(totals.totalCostMinor / deliveredImages) : 0;
-    totals.templateAnalysisFolders = totals.templateAnalysisCalls;
-    totals.activeWorkspaces = accounts.size;
-    const byAccount = [...accounts.values()].map(account => ({
+    const deliveredImages = totals.imageGenerated + totals.masterGenerated + totals.freeGenerated;
+    const firstPassImages = Math.max(0, totals.imageGenerated - totals.imageRegenerated);
+    const successRate = totals.imageGenerated > 0 ? firstPassImages / totals.imageGenerated : 0;
+    const averageCostMinor = deliveredImages > 0 ? Math.round(totals.totalCostMinor / deliveredImages) : 0;
+    const decorateAccount = account => ({
       ...account,
-      averageCostMinor: (account.imageGenerated + account.imageRegenerated + account.masterGenerated + account.freeGenerated) > 0
-        ? Math.round(account.totalCostMinor / (account.imageGenerated + account.imageRegenerated + account.masterGenerated + account.freeGenerated))
+      successRate: account.imageGenerated > 0
+        ? Math.max(0, account.imageGenerated - account.imageRegenerated) / account.imageGenerated
+        : 0,
+      averageCostMinor: account.imageGenerated > 0
+        ? Math.round(account.totalCostMinor / account.imageGenerated)
         : 0
-    })).sort((a, b) => b.totalCostMinor - a.totalCostMinor);
+    });
     return {
       range: windowRange.range,
-      startAt: new Date(windowRange.start).toISOString(),
-      endAt: new Date(windowRange.end).toISOString(),
-      currency: BILLING_CURRENCY,
-      amountScale: BILLING_SCALE,
-      totals,
-      balanceSummary,
-      byAccount,
-      byOperation: [...operations.values()].sort((a, b) => b.costMinor - a.costMinor),
-      trend: [...trends.values()].sort((a, b) => a.key.localeCompare(b.key))
+      startedAt: new Date(windowRange.startMs).toISOString(),
+      endedAt: new Date(windowRange.endMs).toISOString(),
+      totals: {
+        totalCostMinor: totals.totalCostMinor,
+        averageCostMinor,
+        imageGenerated: totals.imageGenerated,
+        imageRegenerated: totals.imageRegenerated,
+        firstPassImages,
+        successRate,
+        masterGenerated: totals.masterGenerated,
+        freeGenerated: totals.freeGenerated,
+        analysisCalls: totals.analysisCalls,
+        templateAnalysisCalls: totals.templateAnalysisCalls,
+        templateAnalysisFolders: templateAnalysisGroups.size,
+        activeWorkspaces: totals.activeWorkspaces.size,
+        failedOrRetry: totals.failedOrRetry
+      },
+      byAccount: [...byAccount.values()].map(decorateAccount).sort((a, b) => b.totalCostMinor - a.totalCostMinor),
+      byOperation: [...byOperation.values()].sort((a, b) => b.totalCostMinor - a.totalCostMinor),
+      trend: [...trend.values()].sort((a, b) => a.time.localeCompare(b.time))
     };
   }
 
@@ -666,8 +620,8 @@ function createBillingService(dataRoot) {
     clearTransactions,
     commit,
     ensureAccount,
-    getRules: readRules,
     getGlobalStats,
+    getRules: readRules,
     getSummary,
     getSpendTotals,
     listAccounts,

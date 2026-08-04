@@ -177,7 +177,7 @@ const ENV_API = Object.freeze({
   imageKey: String(process.env.CAISHEN_IMAGE_API_KEY || process.env.CAISHEN_API_KEY || '').trim(),
   analysisKey: String(process.env.CAISHEN_ANALYSIS_API_KEY || '').trim(),
   imageModel: String(process.env.CAISHEN_IMAGE_MODEL || 'gpt-image-2').trim(),
-  analysisModel: String(process.env.CAISHEN_REVERSE_PROMPT_MODEL || 'gpt-5-3').trim(),
+  analysisModel: String(process.env.CAISHEN_REVERSE_PROMPT_MODEL || '').trim(),
   analysisWireApi: String(process.env.CAISHEN_ANALYSIS_WIRE_API || 'chat_completions').trim(),
   responseFormat: String(process.env.CAISHEN_IMAGE_RESPONSE_FORMAT || 'url').trim(),
   requestTimeoutSeconds: Number(process.env.CAISHEN_API_TIMEOUT_SECONDS || 300)
@@ -685,6 +685,7 @@ async function readPrivateApiSettings() {
     imageModel: normalizeModelName(saved.imageModel, ENV_API.imageModel),
     modelPackages: Array.isArray(saved.modelPackages) ? saved.modelPackages : []
   };
+  const configuredAnalysisModel = String(saved.analysisModel || '').trim();
   const next = {
     version: 2,
     serviceUrl: String(saved.serviceUrl || ENV_API.serviceUrl || '').trim(),
@@ -692,7 +693,7 @@ async function readPrivateApiSettings() {
     imageKey: String(saved.imageKey || legacyImageKey).trim(),
     analysisKey: String(saved.analysisKey || ENV_API.analysisKey || '').trim(),
     imageModel: modelPackageBase.imageModel,
-    analysisModel: normalizeModelName(saved.analysisModel, ENV_API.analysisModel),
+    analysisModel: configuredAnalysisModel ? normalizeModelName(configuredAnalysisModel, '') : '',
     analysisWireApi: normalizeAnalysisWireApi(saved.analysisWireApi, ENV_API.analysisWireApi),
     responseFormat: normalizeResponseFormat(saved.responseFormat, ENV_API.responseFormat),
     requestTimeoutSeconds: normalizeRequestTimeoutSeconds(saved.requestTimeoutSeconds, ENV_API.requestTimeoutSeconds),
@@ -817,9 +818,9 @@ async function activeApiConfig(channel = 'image') {
   if (channel === 'analysis') {
     const api = {
       ...settings,
-      baseUrl: pack.analysisApiBaseUrl || settings.baseUrl,
-      analysisKey: pack.analysisApiKey || settings.analysisKey || settings.imageKey,
-      analysisModel: pack.analysisModel || settings.analysisModel,
+      baseUrl: normalizeApiBaseUrl(pack.analysisApiBaseUrl || pack.apiBaseUrl || settings.baseUrl),
+      analysisKey: String(pack.analysisApiKey || settings.analysisKey || settings.imageKey || '').trim(),
+      analysisModel: String(pack.analysisModel || settings.analysisModel || pack.modelId || settings.imageModel || '').trim(),
       analysisWireApi: pack.analysisWireApi || settings.analysisWireApi,
       activeModelPackage: pack
     };
@@ -858,6 +859,10 @@ function packageIsFlagship(pack) {
 function packageUsesMasterReference(pack) {
   if (!packageIsFlagship(pack)) return true;
   return pack?.enableMasterReference === true;
+}
+
+function resolveAnalysisModel(api = {}) {
+  return String(api.analysisModel || api.imageModel || '').trim();
 }
 
 function isComplexTemplatePrintAnalysis(analysis, job = {}) {
@@ -1003,10 +1008,14 @@ async function testApiSettings(payload = {}) {
 
 async function testAnalysisApi(payload = {}) {
   const current = await readPrivateApiSettings();
+  const activePack = await activeModelPackage();
+  const fallbackBaseUrl = normalizeApiBaseUrl(
+    (activePack?.analysisApiBaseUrl || activePack?.apiBaseUrl || current.analysisApiBaseUrl || current.baseUrl)
+  );
   const draft = {
-    baseUrl: normalizeApiBaseUrl(payload.baseUrl || current.baseUrl),
-    key: String(payload.analysisApiKey || '').trim() || current.analysisKey,
-    analysisModel: normalizeModelName(payload.analysisModel, current.analysisModel),
+    baseUrl: normalizeApiBaseUrl(payload.baseUrl || fallbackBaseUrl),
+    key: String(payload.analysisApiKey || '').trim() || String(activePack?.analysisApiKey || current.analysisKey || current.imageKey || '').trim(),
+    analysisModel: normalizeModelName(payload.analysisModel || activePack?.analysisModel || activePack?.modelId || current.analysisModel, current.analysisModel),
     analysisWireApi: normalizeAnalysisWireApi(payload.analysisWireApi, current.analysisWireApi),
     requestTimeoutSeconds: normalizeRequestTimeoutSeconds(payload.requestTimeoutSeconds, current.requestTimeoutSeconds)
   };
@@ -1021,7 +1030,8 @@ async function testAnalysisApi(payload = {}) {
   });
   if (!modelResult.models.some(model => model.id === draft.analysisModel)) {
     const available = modelResult.models.map(model => model.id).join('、') || '无';
-    throw new Error(`文字分析密钥不支持模型 ${draft.analysisModel}；可用模型：${available}`);
+    draft.analysisModel = modelResult.models.length ? modelResult.models[0].id : '';
+    if (!draft.analysisModel) throw new Error(`文字分析密钥不支持模型 ${normalizeModelName(payload.analysisModel || current.analysisModel, '')}；可用模型：${available}`);
   }
   const startedAt = Date.now();
   const body = await analysisApiJson({
@@ -1787,6 +1797,10 @@ async function analysisApiJson(api, chatPayload, timeoutMs, metadata = null) {
     }
     : chatPayload;
   const payload = wireApi === 'responses' ? chatPayloadToResponses(sourcePayload) : sourcePayload;
+  const resolvedModel = String(payload?.model || '').trim();
+  if (!resolvedModel) {
+    throw new Error('分析模型未配置，请在模型套餐或模型设置里填写 analysisModel');
+  }
   const billingMetadata = metadata && api.activeModelPackage
     ? { ...packageBillingRange(api.activeModelPackage, 'analysis'), ...metadata }
     : metadata;
@@ -2657,7 +2671,7 @@ async function analyzeTemplateJob(job, options = {}) {
   }
   messageContent.push({ type: 'image_url', image_url: { url: options.imageDataUrl || await imageAsAnalysisDataUrl(job.templatePath) } });
   const body = await analysisApiJson(api, {
-    model: api.analysisModel,
+    model: resolveAnalysisModel(api),
     messages: [{
       role: 'user',
       content: messageContent
@@ -2856,7 +2870,7 @@ async function analyzeProductProfile(productPath) {
   if (!productPath || !fs.existsSync(productPath)) return normalizeProductProfile({});
   const api = await activeApiConfig('analysis');
   const response = await analysisApiJson(api, buildProductProfileAnalysisRequest({
-    model: api.analysisModel,
+    model: resolveAnalysisModel(api),
     imageDataUrl: await imageAsDataUrl(productPath),
     prompt: await getPromptValue('productProfileAnalysis')
   }), (api.requestTimeoutSeconds || 300) * 1000, {
@@ -3012,7 +3026,12 @@ async function auditGeneratedTemplate(masterImage, job, templateAnalysis) {
   let rawText = '';
   try {
     const response = await analysisApiJson(api,
-      buildTemplateAuditPayload({ ...common, model: api.analysisModel, promptTemplate: firstPromptTemplate }),
+      buildTemplateAuditPayload({
+        ...common,
+        model: resolveAnalysisModel(api),
+        fallbackModel: resolveAnalysisModel(api),
+        promptTemplate: firstPromptTemplate
+      }),
       (api.requestTimeoutSeconds || 300) * 1000,
       {
         description: '生成结果 AI 质检',
@@ -3030,7 +3049,13 @@ async function auditGeneratedTemplate(masterImage, job, templateAnalysis) {
   } else if (!first.passed) {
     try {
       const response = await analysisApiJson(api,
-        buildTemplateAuditRecheckPayload({ ...common, model: api.analysisModel, firstAudit: first, promptTemplate: recheckPromptTemplate }),
+        buildTemplateAuditRecheckPayload({
+          ...common,
+          model: resolveAnalysisModel(api),
+          fallbackModel: resolveAnalysisModel(api),
+          firstAudit: first,
+          promptTemplate: recheckPromptTemplate
+        }),
         (api.requestTimeoutSeconds || 300) * 1000,
         {
           description: '生成结果 AI 复核',

@@ -115,8 +115,6 @@ const state = {
   globalStatsRange: 'today',
   mobileStats: null,
   mobileStatsUpdatedAt: '',
-  mobileStatsExchangeRate: null,
-  mobileStatsExchangeRateError: '',
   config: null,
   products: [],
   prints: [],
@@ -165,6 +163,7 @@ const state = {
   taobaoPublishBlockedTasks: [],
   activeTaobaoPublishTaskId: '',
   activeTaobaoCategoryId: '',
+  activeTaobaoStoreId: '',
   promptSettings: null,
   activePromptId: '',
   freePromptDefaultApplied: false,
@@ -264,8 +263,8 @@ function applyCurrentUser(user) {
   state.assetPreviewSizes = loadStoredAssetPreviewSizes();
   $('#currentUserName').textContent = user.displayName || user.username;
   $('#currentUserName').title = `${user.username} · ${roleLabel(user.role)}`;
-  $('#globalStatsNav')?.toggleAttribute('hidden', !isSuperAdmin());
   $('#promptSettingsNav').hidden = !canViewPrompts();
+  if ($('#globalStatsNav')) $('#globalStatsNav').hidden = !isSuperAdmin();
   $('[data-settings-tab="general"]').hidden = user.role === 'admin';
   $('#apiSettingsTab').hidden = !isTeamAdmin();
   const apiTabStatus = $('#apiTabStatus');
@@ -358,22 +357,6 @@ function formatMoney(minor = 0) {
   return `$${formatUsdAmount(Math.max(0, Number(minor) || 0) / BILLING_AMOUNT_SCALE)}`;
 }
 
-function formatMobileMoney(minor = 0, digits = 2) {
-  const amount = Math.max(0, Number(minor) || 0) / BILLING_AMOUNT_SCALE;
-  return `$${amount.toFixed(digits)}`;
-}
-
-function formatMobileCny(minor = 0) {
-  const rate = Number(state.mobileStatsExchangeRate?.rate) || 0;
-  const amount = Math.max(0, Number(minor) || 0) / BILLING_AMOUNT_SCALE;
-  return rate > 0 ? `¥${(amount * rate).toFixed(2)}` : '¥--';
-}
-
-function formatMoneyPair(minor = 0, usdDigits = null) {
-  const usd = Number.isFinite(Number(usdDigits)) ? formatMobileMoney(minor, Number(usdDigits)) : formatMoney(minor);
-  return `${usd} / ${formatMobileCny(minor)}`;
-}
-
 function formatDurationMs(ms = 0) {
   const totalSeconds = Math.max(0, Math.floor(Number(ms) / 1000));
   const hours = Math.floor(totalSeconds / 3600);
@@ -396,144 +379,177 @@ function formatInteger(value = 0) {
 }
 
 function formatPercent(value = 0) {
-  return `${(Math.max(0, Math.min(1, Number(value) || 0)) * 100).toFixed(1)}%`;
-}
-
-function statsGrowthText(current = 0, previous = 0) {
-  const nowValue = Number(current) || 0;
-  const oldValue = Number(previous) || 0;
-  if (oldValue <= 0) return nowValue > 0 ? '新增' : '0.0%';
-  const value = ((nowValue - oldValue) / oldValue) * 100;
-  return `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
+  return `${(Math.max(0, Number(value) || 0) * 100).toFixed(1)}%`;
 }
 
 function globalStatsRangeLabel(range = 'today') {
-  return { today: '今日', yesterday: '昨日', '7d': '近 7 天', '30d': '近 30 天', month: '本月', 'last-month': '上月' }[range] || '今日';
+  return ({ today: '今天', yesterday: '昨天', '7d': '近7天', '30d': '近30天' })[range] || '今天';
 }
 
 function globalStatsOperationLabel(key = '') {
-  return {
-    generation: '生图',
-    regeneration: '修正生图',
-    master: '母版图',
+  return ({
+    generation: '首次生图',
+    regeneration: '重新生成',
+    master: '母版生成',
     free: '自由生图',
     analysis: '套图分析',
-    llm: '文字分析'
-  }[key] || key || '其他';
+    llm: '文字分析',
+    other: '其他'
+  })[key] || key || '其他';
 }
 
 function ensureGlobalStatsPage() {
-  if (!$('#globalStatsNav')) {
-    const nav = $('.sidebar .nav') || $('nav');
-    const settingsNav = $('#promptSettingsNav') || $('[data-page="settings"]');
+  const existingNav = $('#globalStatsNav');
+  if (!existingNav) {
+    const freeNav = $('.nav-item[data-page="free"]');
     const button = document.createElement('button');
     button.className = 'nav-item';
     button.id = 'globalStatsNav';
-    button.type = 'button';
     button.dataset.index = '06';
     button.dataset.icon = '统';
     button.dataset.page = 'global-stats';
     button.title = '全局统计';
     button.textContent = '全局统计';
-    button.hidden = true;
-    if (nav) nav.insertBefore(button, settingsNav || null);
+    if (freeNav) freeNav.before(button);
+    else $('.sidebar-nav')?.append(button);
   }
+  [
+    ['free', '07'],
+    ['prompts', '08'],
+    ['settings', '09']
+  ].forEach(([page, index]) => {
+    const nav = $(`.nav-item[data-page="${page}"]`);
+    if (nav) nav.dataset.index = index;
+  });
+
   if ($('#page-global-stats')) return;
-  const section = document.createElement('section');
-  section.className = 'page global-stats-page';
-  section.id = 'page-global-stats';
-  section.setAttribute('aria-label', '全局统计');
-  section.innerHTML = `
-    <div class="global-stats-shell">
-      <header class="global-stats-head">
-        <div><span class="eyebrow">SUPER ADMIN</span><h1>全局统计</h1><p>查看所有账号的算力消耗、生成数量、分析次数和真实成功率。</p></div>
-        <div class="global-stats-actions">
-          <div class="segmented global-stats-range" role="tablist">
-            <button class="active" type="button" data-global-stats-range="today">今日</button>
-            <button type="button" data-global-stats-range="yesterday">昨日</button>
-            <button type="button" data-global-stats-range="7d">近 7 天</button>
-            <button type="button" data-global-stats-range="30d">近 30 天</button>
-            <button type="button" data-global-stats-range="month">本月</button>
-            <button type="button" data-global-stats-range="last-month">上月</button>
-          </div>
-          <button class="secondary" id="refreshGlobalStatsButton" type="button">刷新</button>
+  const page = document.createElement('section');
+  page.className = 'page';
+  page.id = 'page-global-stats';
+  page.setAttribute('aria-label', '全局统计');
+  page.innerHTML = `
+    <div class="global-stats-page">
+      <div class="panel global-stats-hero">
+        <div>
+          <span class="eyebrow">SUPER ADMIN</span>
+          <h1>全局统计</h1>
+          <p>查看全站生成、重新生成、分析、成本和成功率。</p>
         </div>
-      </header>
-      <div id="globalStatsContent" class="global-stats-content"><div class="empty-state"><b>正在读取统计</b><span>请稍候。</span></div></div>
+        <div class="global-stats-toolbar">
+          <div class="global-stats-range" role="tablist" aria-label="统计范围">
+            <button type="button" data-global-stats-range="today">今天</button>
+            <button type="button" data-global-stats-range="yesterday">昨天</button>
+            <button type="button" data-global-stats-range="7d">近7天</button>
+            <button type="button" data-global-stats-range="30d">近30天</button>
+          </div>
+          <button class="secondary" type="button" id="refreshGlobalStatsButton">刷新</button>
+        </div>
+      </div>
+      <div id="globalStatsContent" class="global-stats-content">
+        <div class="empty-inline">正在读取统计数据...</div>
+      </div>
     </div>`;
-  $('main')?.appendChild(section);
+  const freePage = $('#page-free');
+  if (freePage) freePage.before(page);
+  else document.querySelector('main')?.append(page);
 }
 
 function renderGlobalStats() {
-  ensureGlobalStatsPage();
-  $$('.global-stats-range [data-global-stats-range]').forEach(button => button.classList.toggle('active', button.dataset.globalStatsRange === state.globalStatsRange));
-  const target = $('#globalStatsContent');
+  const container = $('#globalStatsContent');
+  if (!container) return;
+  $$('.global-stats-range [data-global-stats-range]').forEach(button => {
+    const active = button.dataset.globalStatsRange === state.globalStatsRange;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-selected', String(active));
+  });
   const data = state.globalStats;
-  if (!target) return;
   if (!data) {
-    target.innerHTML = '<div class="empty-state"><b>暂无统计数据</b><span>点击刷新重新读取。</span></div>';
+    container.innerHTML = '<div class="empty-inline">暂无统计数据</div>';
     return;
   }
   const totals = data.totals || {};
-  const balanceSummary = data.balanceSummary || {};
-  const balanceTotals = balanceSummary.totals || {};
-  const totalGeneratedImages = mobileStatsTotalImages(totals);
-  const effectiveImageRuns = (totals.imageGenerated || 0) + (totals.imageRegenerated || 0);
-  const accountImageCount = item => mobileStatsTotalImages(item || {});
-  const cards = [
-    ['总消耗', formatMoneyPair(totals.totalCostMinor), globalStatsRangeLabel(data.range)],
-    ['平均每张成本', formatMoneyPair(totals.averageCostMinor, 4), '按全部生成结果均摊'],
-    ['生图总数', formatInteger(totalGeneratedImages), '计入所有计费生成结果'],
-    ['成功率', formatPercent(totals.successRate), `有效生图 ${formatInteger(effectiveImageRuns)} 次`],
-    ['套图分析', formatInteger(totals.templateAnalysisFolders), `文字调用 ${formatInteger(totals.analysisCalls)}`],
-    ['活跃账号', formatInteger(totals.activeWorkspaces), '参与消耗的账号'],
-    ['当前总余额', formatMoneyPair(balanceTotals.balanceMinor), `${formatInteger(balanceTotals.count)} 个账号`],
-    ['当前可用余额', formatMoneyPair(balanceTotals.availableMinor), `预占 ${formatMoneyPair(balanceTotals.reservedMinor)}`]
-  ];
-  const operations = data.byOperation || [];
-  const accounts = data.byAccount || [];
-  const balanceByRole = balanceSummary.byRole || [];
-  const balanceByAccount = balanceSummary.byAccount || [];
-  const monthly = state.globalStatsMonthly || {};
-  const monthTotals = monthly.month?.totals || {};
-  const lastMonthTotals = monthly.lastMonth?.totals || {};
-  const monthImages = mobileStatsTotalImages(monthTotals);
-  const lastMonthImages = mobileStatsTotalImages(lastMonthTotals);
-  target.innerHTML = `
-    <div class="global-stats-grid">${cards.map(([label, value, detail]) => `<article class="global-stat-card"><span>${escapeHtml(label)}</span><b>${escapeHtml(value)}</b><small>${escapeHtml(detail)}</small></article>`).join('')}</div>
-    <section class="global-stats-panel">
-      <h2>月度统计</h2>
-      <div class="global-stats-row"><span>本月消耗</span><b>${formatMoneyPair(monthTotals.totalCostMinor)}</b><em>${formatInteger(monthImages)} 张</em></div>
-      <div class="global-stats-row"><span>上月消耗</span><b>${formatMoneyPair(lastMonthTotals.totalCostMinor)}</b><em>${formatInteger(lastMonthImages)} 张</em></div>
-      <div class="global-stats-row"><span>消耗增长</span><b>${escapeHtml(statsGrowthText(monthTotals.totalCostMinor, lastMonthTotals.totalCostMinor))}</b><em>张数 ${escapeHtml(statsGrowthText(monthImages, lastMonthImages))}</em></div>
-      <div class="global-stats-row"><span>成功率变化</span><b>${formatPercent(monthTotals.successRate)}</b><em>上月 ${formatPercent(lastMonthTotals.successRate)}</em></div>
-    </section>
-    <div class="global-stats-panels">
-      <section class="global-stats-panel"><h2>消耗结构</h2>${operations.length ? operations.map(item => `<div class="global-stats-row"><span>${escapeHtml(globalStatsOperationLabel(item.key))}</span><b>${formatInteger(item.count)}</b><em>${formatMoneyPair(item.costMinor)}</em></div>`).join('') : '<div class="empty-inline">暂无流水</div>'}</section>
-      <section class="global-stats-panel"><h2>账号排行</h2>${accounts.length ? accounts.slice(0, 12).map(item => `<div class="global-stats-row"><span>${escapeHtml(item.displayName || item.username || item.workspaceId)}</span><b>${formatMoneyPair(item.totalCostMinor)}</b><em>${formatInteger(accountImageCount(item))} 张</em></div>`).join('') : '<div class="empty-inline">暂无账号消耗</div>'}</section>
+  const operationRows = data.byOperation || [];
+  const accountRows = data.byAccount || [];
+  const trend = data.trend || [];
+  const maxTrend = Math.max(1, ...trend.map(item => Number(item.generated) || 0));
+  const maxOperationCost = Math.max(1, ...operationRows.map(item => Number(item.totalCostMinor) || 0));
+  const totalImages = (totals.imageGenerated || 0) + (totals.imageRegenerated || 0) + (totals.masterGenerated || 0) + (totals.freeGenerated || 0);
+  const rangeText = globalStatsRangeLabel(data.range || state.globalStatsRange);
+  const trendBars = trend.slice(-30).map(item => {
+    const height = Math.max(6, Math.round(((Number(item.generated) || 0) / maxTrend) * 100));
+    return `<span style="--h:${height}%" title="${escapeHtml(formatLocalDateTime(item.time))}：${formatInteger(item.generated)} 张"></span>`;
+  }).join('');
+  const operationsHtml = operationRows.map(item => {
+    const width = Math.max(3, Math.round(((Number(item.totalCostMinor) || 0) / maxOperationCost) * 100));
+    return `
+      <div class="global-stats-operation">
+        <div><b>${escapeHtml(globalStatsOperationLabel(item.key))}</b><span>${formatInteger(item.count)} 次</span></div>
+        <div class="global-stats-bar"><i style="width:${width}%"></i></div>
+        <strong>${formatMoney(item.totalCostMinor)}</strong>
+      </div>`;
+  }).join('') || '<div class="empty-inline">当前范围没有扣费流水</div>';
+  const accountsHtml = accountRows.slice(0, 10).map((item, index) => `
+    <tr>
+      <td>${String(index + 1).padStart(2, '0')}</td>
+      <td><b>${escapeHtml(item.displayName || item.username)}</b><span>${escapeHtml(roleLabel(item.role))}</span></td>
+      <td>${formatMoney(item.totalCostMinor)}</td>
+      <td>${formatInteger(item.imageGenerated)}</td>
+      <td>${formatInteger(item.imageRegenerated)}</td>
+      <td>${formatInteger(item.analysisCalls)}</td>
+      <td>${formatPercent(item.successRate)}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="7">当前范围没有账号消耗</td></tr>';
+
+  container.innerHTML = `
+    <div class="global-stats-kpis">
+      <article><span>${rangeText}总消耗</span><b>${formatMoney(totals.totalCostMinor)}</b><em>平均每张 ${formatMoney(totals.averageCostMinor)}</em></article>
+      <article><span>生成图片</span><b>${formatInteger(totalImages)}</b><em>首次 ${formatInteger(totals.imageGenerated)} / 重生成 ${formatInteger(totals.imageRegenerated)}</em></article>
+      <article><span>一次成功率</span><b>${formatPercent(totals.successRate)}</b><em>一次通过 ${formatInteger(totals.firstPassImages)} 张</em></article>
+      <article><span>分析套图</span><b>${formatInteger(totals.templateAnalysisFolders)}</b><em>分析调用 ${formatInteger(totals.analysisCalls)} 次</em></article>
     </div>
-    <div class="global-stats-panels">
-      <section class="global-stats-panel"><h2>余额按角色</h2>${balanceByRole.length ? balanceByRole.map(item => `<div class="global-stats-row"><span>${escapeHtml(roleLabel(item.role))}</span><b>${formatMoneyPair(item.balanceMinor)}</b><em>${formatInteger(item.count)} 个账号 · 可用 ${formatMoneyPair(item.availableMinor)}</em></div>`).join('') : '<div class="empty-inline">暂无余额数据</div>'}</section>
-      <section class="global-stats-panel"><h2>账户余额</h2>${balanceByAccount.length ? balanceByAccount.slice(0, 12).map(item => `<div class="global-stats-row"><span>${escapeHtml(item.displayName || item.username || item.workspaceId)} · ${escapeHtml(roleLabel(item.role))}</span><b>${formatMoneyPair(item.balanceMinor)}</b><em>可用 ${formatMoneyPair(item.availableMinor)}</em></div>`).join('') : '<div class="empty-inline">暂无账户余额</div>'}</section>
+    <div class="global-stats-layout">
+      <section class="panel global-stats-card">
+        <div class="section-head"><div><span class="eyebrow">TREND</span><h2>生成趋势</h2></div><small>${formatLocalDateTime(data.startedAt)} - ${formatLocalDateTime(data.endedAt)}</small></div>
+        <div class="global-stats-chart">${trendBars || '<span style="--h:6%"></span>'}</div>
+      </section>
+      <section class="panel global-stats-phone">
+        <span class="eyebrow">PHONE WIDGET</span>
+        <h2>手机桌面卡片</h2>
+        <div class="global-stats-widget">
+          <span>${rangeText}</span>
+          <b>${formatMoney(totals.totalCostMinor)}</b>
+          <div><strong>${formatInteger(totalImages)}</strong><small>张图</small><strong>${formatPercent(totals.successRate)}</strong><small>成功率</small></div>
+        </div>
+      </section>
+      <section class="panel global-stats-card">
+        <div class="section-head"><div><span class="eyebrow">COST</span><h2>消耗拆分</h2></div></div>
+        <div class="global-stats-operations">${operationsHtml}</div>
+      </section>
+      <section class="panel global-stats-card global-stats-table-card">
+        <div class="section-head"><div><span class="eyebrow">ACCOUNT</span><h2>账号排行</h2></div><small>${formatInteger(totals.activeWorkspaces)} 个账号有消耗</small></div>
+        <div class="global-stats-table-wrap">
+          <table class="global-stats-table">
+            <thead><tr><th>#</th><th>账号</th><th>消耗</th><th>生图</th><th>重生成</th><th>分析</th><th>成功率</th></tr></thead>
+            <tbody>${accountsHtml}</tbody>
+          </table>
+        </div>
+      </section>
     </div>`;
 }
 
 async function loadGlobalStats() {
   if (!isSuperAdmin()) return;
-  ensureGlobalStatsPage();
-  $('#globalStatsContent').innerHTML = '<div class="empty-state"><b>正在读取统计</b><span>请稍候。</span></div>';
+  const button = $('#refreshGlobalStatsButton');
+  if (button) button.disabled = true;
   try {
-    const [stats, month, lastMonth] = await Promise.all([
-      window.caishen.getGlobalStats(state.globalStatsRange),
-      window.caishen.getGlobalStats('month'),
-      window.caishen.getGlobalStats('last-month'),
-      loadMobileExchangeRate()
-    ]);
-    state.globalStats = stats;
-    state.globalStatsMonthly = { month, lastMonth };
+    state.globalStats = await window.caishen.getGlobalStats(state.globalStatsRange);
     renderGlobalStats();
   } catch (error) {
-    $('#globalStatsContent').innerHTML = `<div class="empty-state"><b>读取失败</b><span>${escapeHtml(errorText(error))}</span></div>`;
+    const container = $('#globalStatsContent');
+    if (container) container.innerHTML = `<div class="empty-inline">${escapeHtml(errorText(error))}</div>`;
+    toast(errorText(error), true);
+  } finally {
+    if (button) button.disabled = false;
   }
 }
 
@@ -545,16 +561,16 @@ function shouldOpenMobileStats() {
 
 function ensureMobileStatsPage() {
   if ($('#page-mobile-stats')) return;
-  const section = document.createElement('section');
-  section.className = 'page mobile-stats-page';
-  section.id = 'page-mobile-stats';
-  section.setAttribute('aria-label', '手机全局统计');
-  section.innerHTML = `
+  const page = document.createElement('section');
+  page.className = 'page mobile-stats-page';
+  page.id = 'page-mobile-stats';
+  page.setAttribute('aria-label', '手机全局统计');
+  page.innerHTML = `
     <div class="mobile-stats-shell">
       <header class="mobile-stats-header">
-        <div id="mobileStatsRateHeader" class="mobile-stats-rate-header">
-          <span>USD / CNY</span>
-          <strong>读取中</strong>
+        <div>
+          <span>SUPER ADMIN</span>
+          <h1>永沙全局统计</h1>
           <p id="mobileStatsUpdatedAt">正在读取最新数据</p>
         </div>
         <button class="mobile-stats-icon-button" id="refreshMobileStatsButton" type="button" aria-label="刷新">刷新</button>
@@ -563,45 +579,25 @@ function ensureMobileStatsPage() {
         <div class="mobile-stats-loading">正在读取统计数据...</div>
       </div>
     </div>`;
-  $('main')?.appendChild(section);
+  document.querySelector('main')?.append(page);
+}
+
+function mobileRangeLabel(range) {
+  return ({ today: '今日', yesterday: '昨日', '7d': '近7天', '30d': '近30天' })[range] || range;
 }
 
 function mobileStatsTotalImages(totals = {}) {
   return (totals.imageGenerated || 0) + (totals.imageRegenerated || 0) + (totals.masterGenerated || 0) + (totals.freeGenerated || 0);
 }
 
-function mobileStatsDailyTotal(totals = {}) {
-  return mobileStatsTotalImages(totals);
-}
-
-function mobileStatsRateText() {
-  const rate = Number(state.mobileStatsExchangeRate?.rate) || 0;
-  return rate > 0 ? rate.toFixed(4) : '--';
-}
-
-function renderMobileStatsRateHeader() {
-  const header = $('#mobileStatsRateHeader');
-  if (!header) return;
-  const rate = state.mobileStatsExchangeRate;
-  const source = rate?.cached ? '缓存汇率' : 'Frankfurter';
-  const date = rate?.date ? ` · ${rate.date}` : '';
-  const error = state.mobileStatsExchangeRateError ? ` · ${state.mobileStatsExchangeRateError}` : '';
-  header.innerHTML = `
-    <span>USD / CNY</span>
-    <strong>${mobileStatsRateText()}</strong>
-    <p>${source}${date}${error}</p>`;
-}
-
 function mobileStatsRangeCard(item, maxCostMinor) {
   const totals = item.data?.totals || {};
   const percent = maxCostMinor > 0 ? Math.min(100, Math.round(((Number(totals.totalCostMinor) || 0) / maxCostMinor) * 100)) : 0;
-  const totalImages = mobileStatsTotalImages(totals);
   return `
-    <article class="mobile-stats-range-card${percent <= 0 ? ' is-empty' : ''}">
+    <article class="mobile-stats-range-card">
       <div class="mobile-stats-card-top"><span>${escapeHtml(item.label)}</span><em>${formatPercent(totals.successRate)}</em></div>
-      <strong>${formatMobileMoney(totals.totalCostMinor)}</strong>
-      <p class="mobile-stats-cny">${formatMobileCny(totals.totalCostMinor)}</p>
-      <div class="mobile-stats-card-meta"><b>${formatInteger(totalImages)}</b><span>总数</span><b>${formatMoneyPair(totals.averageCostMinor, 4)}</b><span>均价</span></div>
+      <strong>${formatMoney(totals.totalCostMinor)}</strong>
+      <div class="mobile-stats-card-meta"><b>${formatInteger(totals.imageGenerated || 0)}</b><span>首次</span><b>${formatInteger(totals.imageRegenerated || 0)}</b><span>重生</span></div>
       <div class="mobile-stats-progress"><i style="width:${percent}%"></i></div>
     </article>`;
 }
@@ -615,108 +611,62 @@ function renderMobileStats() {
     return;
   }
   const ranges = [
-    { label: '今日', data: stats.today },
-    { label: '昨日', data: stats.yesterday },
-    { label: '近7天', data: stats.d7 },
-    { label: '近30天', data: stats.d30 }
+    { key: 'today', label: '今日', data: stats.today },
+    { key: 'yesterday', label: '昨日', data: stats.yesterday },
+    { key: '7d', label: '近7天', data: stats.d7 },
+    { key: '30d', label: '近30天', data: stats.d30 }
   ];
   const d30Totals = stats.d30?.totals || {};
-  const monthTotals = stats.month?.totals || {};
-  const lastMonthTotals = stats.lastMonth?.totals || {};
-  const d30Balance = stats.d30?.balanceSummary || {};
-  const d30BalanceTotals = d30Balance.totals || {};
   const maxCostMinor = Math.max(1, ...ranges.map(item => Number(item.data?.totals?.totalCostMinor) || 0));
-  const todayTotals = stats.today?.totals || {};
+  const maxGenerated = Math.max(1, ...ranges.map(item => Number(item.data?.totals?.imageGenerated) || 0));
+  const chartHtml = ranges.map(item => {
+    const totals = item.data?.totals || {};
+    const height = Math.max(12, Math.round(((Number(totals.imageGenerated) || 0) / maxGenerated) * 100));
+    return `<div class="mobile-stats-chart-bar"><i style="height:${height}%"></i><span>${escapeHtml(item.label)}</span></div>`;
+  }).join('');
   const accountRows = (stats.d30?.byAccount || []).slice(0, 6);
   const maxAccountCost = Math.max(1, ...accountRows.map(item => Number(item.totalCostMinor) || 0));
   const accountHtml = accountRows.length ? accountRows.map((item, index) => {
     const width = Math.max(6, Math.round(((Number(item.totalCostMinor) || 0) / maxAccountCost) * 100));
-    const accountImages = mobileStatsTotalImages(item || {});
     return `
       <div class="mobile-stats-account-row">
         <span class="mobile-stats-rank">${index + 1}</span>
         <div class="mobile-stats-account-name"><b>${escapeHtml(item.displayName || item.username || '未命名账号')}</b><i style="width:${width}%"></i></div>
-        <strong>${formatMoneyPair(item.totalCostMinor)}</strong>
-        <em>${formatInteger(accountImages)}张</em>
+        <strong>${formatMoney(item.totalCostMinor)}</strong>
+        <em>${formatInteger(item.imageGenerated || 0)}张</em>
       </div>`;
   }).join('') : '<div class="mobile-stats-empty">近30天暂无账号消耗</div>';
-  const balanceRoleHtml = (d30Balance.byRole || []).length ? (d30Balance.byRole || []).map(item => `
-    <div class="mobile-stats-balance-row">
-      <span>${escapeHtml(roleLabel(item.role))}</span>
-      <b>${formatMoneyPair(item.balanceMinor)}</b>
-      <em>${formatInteger(item.count)} 个账号</em>
-    </div>`).join('') : '<div class="mobile-stats-empty">暂无余额数据</div>';
-  const todayImages = mobileStatsDailyTotal(todayTotals);
-  const todayAverage = Number(todayTotals.averageCostMinor) || 0;
+  const totalImages = mobileStatsTotalImages(d30Totals);
   const updated = state.mobileStatsUpdatedAt ? `更新 ${formatLocalDateTime(state.mobileStatsUpdatedAt)}` : '已读取最新数据';
   const updatedNode = $('#mobileStatsUpdatedAt');
   if (updatedNode) updatedNode.textContent = updated;
-  renderMobileStatsRateHeader();
   container.innerHTML = `
     <section class="mobile-stats-hero-card">
-      <div class="mobile-stats-hero-main">
-        <span>今日消耗</span>
-        <strong>${formatMobileMoney(todayTotals.totalCostMinor)}</strong>
-        <p>${formatMobileCny(todayTotals.totalCostMinor)} · 汇率 ${mobileStatsRateText()}</p>
+      <div>
+        <span>近30天总消耗</span>
+        <strong>${formatMoney(d30Totals.totalCostMinor)}</strong>
+        <p>首次生图 ${formatInteger(d30Totals.imageGenerated || 0)} 张 · 重生成 ${formatInteger(d30Totals.imageRegenerated || 0)} 张</p>
       </div>
-      <div class="mobile-stats-hero-stack">
-        <div><span>总数</span><b>${formatInteger(todayImages)} 张</b></div>
-        <div><span>成功率</span><b>${formatPercent(todayTotals.successRate)}</b></div>
-        <div><span>均价</span><b>${formatMoneyPair(todayAverage, 4)}</b></div>
+      <div class="mobile-stats-donut" style="--rate:${Math.round((Number(d30Totals.successRate) || 0) * 360)}deg">
+        <b>${formatPercent(d30Totals.successRate)}</b>
+        <small>一次成功</small>
       </div>
     </section>
     <section class="mobile-stats-range-grid">${ranges.map(item => mobileStatsRangeCard(item, maxCostMinor)).join('')}</section>
-    <section class="mobile-stats-panel">
-      <div class="mobile-stats-panel-head"><h2>月度统计</h2><span>自然月</span></div>
-      <div class="mobile-stats-month-grid">
-        <div><span>本月消耗</span><b>${formatMoneyPair(monthTotals.totalCostMinor)}</b><em>${formatInteger(mobileStatsTotalImages(monthTotals))} 张</em></div>
-        <div><span>上月消耗</span><b>${formatMoneyPair(lastMonthTotals.totalCostMinor)}</b><em>${formatInteger(mobileStatsTotalImages(lastMonthTotals))} 张</em></div>
-        <div><span>消耗增长</span><b>${escapeHtml(statsGrowthText(monthTotals.totalCostMinor, lastMonthTotals.totalCostMinor))}</b><em>张数 ${escapeHtml(statsGrowthText(mobileStatsTotalImages(monthTotals), mobileStatsTotalImages(lastMonthTotals)))}</em></div>
-        <div><span>成功率</span><b>${formatPercent(monthTotals.successRate)}</b><em>上月 ${formatPercent(lastMonthTotals.successRate)}</em></div>
-      </div>
+    <section class="mobile-stats-panel mobile-stats-chart-panel">
+      <div class="mobile-stats-panel-head"><h2>生成趋势</h2><span>按首次生图对比</span></div>
+      <div class="mobile-stats-chart">${chartHtml}</div>
     </section>
     <section class="mobile-stats-panel">
       <div class="mobile-stats-panel-head"><h2>账号排行</h2><span>近30天 · ${formatInteger((stats.d30?.byAccount || []).length)} 个账号</span></div>
-      <div class="mobile-stats-account-head"><span>账号</span><span>消耗金额</span><span>总张数</span></div>
+      <div class="mobile-stats-account-head"><span>账号</span><span>消耗金额</span><span>成功张数</span></div>
       <div class="mobile-stats-account-list">${accountHtml}</div>
     </section>
-    <section class="mobile-stats-panel">
-      <div class="mobile-stats-panel-head"><h2>当前余额</h2><span>角色汇总</span></div>
-      <div class="mobile-stats-balance-total"><span>总余额</span><b>${formatMoneyPair(d30BalanceTotals.balanceMinor)}</b><em>可用 ${formatMoneyPair(d30BalanceTotals.availableMinor)}</em></div>
-      <div class="mobile-stats-balance-list">${balanceRoleHtml}</div>
+    <section class="mobile-stats-summary-strip">
+      <div><span>平均成本</span><b>${formatMoney(d30Totals.averageCostMinor)}</b></div>
+      <div><span>总张数</span><b>${formatInteger(totalImages)}</b></div>
+      <div><span>套图分析</span><b>${formatInteger(d30Totals.templateAnalysisFolders || 0)}</b></div>
     </section>`;
-}
-
-async function loadMobileExchangeRate() {
-  const cacheKey = 'caishen.mobileStats.usdCnyRate';
-  const applyCachedRate = () => {
-    try {
-      const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
-      if (cached?.rate) {
-        state.mobileStatsExchangeRate = { ...cached, cached: true };
-        return true;
-      }
-    } catch {}
-    return false;
-  };
-  try {
-    state.mobileStatsExchangeRateError = '';
-    const response = await fetch('https://api.frankfurter.dev/v2/rate/USD/CNY', { cache: 'no-store' });
-    if (!response.ok) throw new Error(`汇率读取失败 ${response.status}`);
-    const payload = await response.json();
-    const rate = Number(payload?.rate);
-    if (!Number.isFinite(rate) || rate <= 0) throw new Error('汇率数据无效');
-    state.mobileStatsExchangeRate = {
-      rate,
-      date: payload.date || '',
-      fetchedAt: new Date().toISOString(),
-      cached: false
-    };
-    localStorage.setItem(cacheKey, JSON.stringify(state.mobileStatsExchangeRate));
-  } catch (error) {
-    if (!applyCachedRate()) state.mobileStatsExchangeRate = null;
-    state.mobileStatsExchangeRateError = state.mobileStatsExchangeRate ? '接口失败，使用缓存' : '汇率暂不可用';
-  }
 }
 
 async function loadMobileStats() {
@@ -724,16 +674,13 @@ async function loadMobileStats() {
   const button = $('#refreshMobileStatsButton');
   if (button) button.disabled = true;
   try {
-    const [today, yesterday, d7, d30, month, lastMonth] = await Promise.all([
+    const [today, yesterday, d7, d30] = await Promise.all([
       window.caishen.getGlobalStats('today'),
       window.caishen.getGlobalStats('yesterday'),
       window.caishen.getGlobalStats('7d'),
-      window.caishen.getGlobalStats('30d'),
-      window.caishen.getGlobalStats('month'),
-      window.caishen.getGlobalStats('last-month'),
-      loadMobileExchangeRate()
+      window.caishen.getGlobalStats('30d')
     ]);
-    state.mobileStats = { today, yesterday, d7, d30, month, lastMonth };
+    state.mobileStats = { today, yesterday, d7, d30 };
     state.mobileStatsUpdatedAt = new Date().toISOString();
     renderMobileStats();
   } catch (error) {
@@ -976,9 +923,9 @@ function shortPath(value) {
 }
 
 function setPage(name) {
-  if (name === 'global-stats' && !isSuperAdmin()) name = 'settings';
-  if (name === 'mobile-stats' && !isSuperAdmin()) name = 'settings';
   if (name === 'prompts' && !canViewPrompts()) name = 'settings';
+  if (name === 'global-stats' && !isSuperAdmin()) name = 'tasks';
+  if (name === 'mobile-stats' && !isSuperAdmin()) name = 'tasks';
   if (name === 'settings') {
     if (state.currentUser?.role === 'admin' && state.settingsTab === 'general') state.settingsTab = 'api';
     else if (state.settingsTab === 'api' && !isTeamAdmin()) state.settingsTab = 'general';
@@ -1008,10 +955,10 @@ function setPage(name) {
     if (name === 'review') loadReviews({ silent: state.reviews.length > 0 });
     if (name === 'titles') loadTitlePage();
     if (name === 'taobao-publish') loadTaobaoPublishPage();
-    if (name === 'global-stats') loadGlobalStats();
-    if (name === 'mobile-stats') loadMobileStats();
     if (name === 'prompts' && canViewPrompts() && !state.promptSettings) loadPromptSettings();
     if (name === 'assets') loadAssetLibraryPreview(state.assetPreviewKey, { preserveSelection: true });
+    if (name === 'global-stats') loadGlobalStats();
+    if (name === 'mobile-stats') loadMobileStats();
     if (name === 'settings' && isTeamAdmin() && !state.modelPackageSettings) loadModelPackageSettings();
     if (name === 'settings' && isSuperAdmin() && !state.apiSettings) loadApiSettings();
   });
@@ -3670,9 +3617,62 @@ async function loadTaobaoPublishPage() {
 
 function taobaoStatusClass(status = '') {
   if (status === '已保存草稿') return 'complete';
-  if (status === '失败') return 'failed';
-  if (['等待插件接收', '插件已接收', '正在打开淘宝页面', '正在填写字段', '正在上传图片', '正在保存草稿'].includes(status)) return 'running';
+  if (['失败', '发布失败', '需要人工处理', '模板未配置'].includes(status)) return 'failed';
+  if ([
+    '等待插件接收',
+    '等待本地发布器领取',
+    '插件已接收',
+    '本地发布器已领取',
+    '正在打开淘宝页面',
+    '正在打开淘宝',
+    '正在填写字段',
+    '正在填写模板',
+    '正在上传图片',
+    '正在保存草稿'
+  ].includes(status)) return 'running';
   return 'idle';
+}
+
+function taobaoTaskMetaLine(task = {}) {
+  const stores = taobaoStoresForCurrentUser();
+  const devices = state.taobaoPublishSettings?.devices || [];
+  const store = stores.find(item => item.id === task.storeId);
+  const device = devices.find(item => item.id === task.deviceId);
+  const parts = [
+    `目标店铺：${task.storeName || store?.name || (task.storeId ? task.storeId : '未指定')}`,
+    task.deviceId ? `执行设备：${device?.name || task.deviceId}` : ''
+  ].filter(Boolean);
+  return parts.join(' · ');
+}
+
+function taobaoStoresForCurrentUser() {
+  const stores = state.taobaoPublishSettings?.stores || [];
+  if (!state.currentUser?.id) return [];
+  return stores.filter(store => !store.ownerUserId || store.ownerUserId === state.currentUser?.id);
+}
+
+function renderTaobaoPublisherDevices() {
+  const list = $('#taobaoPublisherDeviceList');
+  if (!list) return;
+  const stores = taobaoStoresForCurrentUser();
+  const devices = (state.taobaoPublishSettings?.devices || [])
+    .filter(device => !device.userId || device.userId === state.currentUser?.id);
+  if (!devices.length) {
+    list.innerHTML = '<div class="empty-inline">还没有本地发布器设备连接。打开 exe 并登录同一个 Web 账号后会显示在这里。</div>';
+    return;
+  }
+  list.innerHTML = `<div class="taobao-publisher-devices-head"><b>本地发布器设备</b><span>${devices.length} 台</span></div>
+    ${devices.map(device => {
+      const store = stores.find(item => item.id === device.activeStoreId);
+      return `<article class="taobao-publisher-device-card">
+        <div><b>${escapeHtml(device.name || device.id)}</b><span>${device.enabled === false ? '已停用' : '可领取任务'}</span></div>
+        <dl>
+          <div><dt>当前店铺</dt><dd>${escapeHtml(store?.name || device.activeStoreId || '未选择')}</dd></div>
+          <div><dt>发布器版本</dt><dd>${escapeHtml(device.appVersion || '未上报')}</dd></div>
+          <div><dt>最后在线</dt><dd>${escapeHtml(device.lastSeenAt ? formatLocalDateTime(device.lastSeenAt) : '未上报')}</dd></div>
+        </dl>
+      </article>`;
+    }).join('')}`;
 }
 
 function renderTaobaoCategoryList() {
@@ -3702,6 +3702,7 @@ const TAOBAO_SELECTOR_FIELDS = [
   ['shipFrom', '发货地输入框'],
   ['freightTemplate', '运费模板控件'],
   ['serviceTemplate', '服务模板控件'],
+  ['storeName', '当前店铺名文本'],
   ['uploadButton', '打开上传按钮'],
   ['allImages', '全部图片上传框'],
   ['mainImages', '主图上传框'],
@@ -3763,6 +3764,7 @@ function applyTaobaoDiagnosticsSelectors() {
     shipFrom: taobaoDiagnosticSelector(fields, ['发货地']),
     freightTemplate: taobaoDiagnosticSelector(fields, ['运费模板']),
     serviceTemplate: taobaoDiagnosticSelector(fields, ['服务模板']),
+    storeName: taobaoDiagnosticSelector(fields, ['当前店铺', '店铺名称', '店铺名', '卖家店铺']),
     uploadButton: taobaoDiagnosticSelector(buttons, ['上传图片', '上传', '选择图片', '添加图片', '图片空间']),
     allImages: files.length === 1 ? files[0].selector : '',
     mainImages: taobaoDiagnosticSelector(files, ['主图', '商品图片', '宝贝图片']),
@@ -3793,6 +3795,10 @@ function renderTaobaoCategoryEditor() {
   const selectors = defaults.selectors || {};
   editor.innerHTML = `<details class="taobao-template-details" open><summary>${escapeHtml(category.name)}模板配置</summary><form class="taobao-template-form" id="taobaoCategoryTemplateForm">
     <label>发布链接<input name="publishUrl" value="${escapeHtml(defaults.publishUrl || '')}" placeholder="淘宝后台发布页链接"></label>
+    <label>淘宝搜索关键词<input name="categoryKeyword" value="${escapeHtml(defaults.categoryKeyword || category.product || category.name || '')}" placeholder="用于搜索淘宝类目"></label>
+    <label>备用类目路径<textarea name="categoryPath" rows="3" placeholder="每行一级，例如：住宅家具&#10;柜类&#10;餐边柜">${escapeHtml((defaults.categoryPath || []).join('\n'))}</textarea></label>
+    <label>品牌候选<input name="brandName" value="${escapeHtml(defaults.brandName || '其他家')}" placeholder="其他家"></label>
+    <label>型号<input name="modelName" value="${escapeHtml(defaults.modelName || '其他')}" placeholder="其他"></label>
     <label>价格<input name="price" value="${escapeHtml(defaults.price || '')}" placeholder="发布价格"></label>
     <label>库存<input name="stock" value="${escapeHtml(defaults.stock || '')}" placeholder="999"></label>
     <label>发货地<input name="shipFrom" value="${escapeHtml(defaults.shipFrom || '')}" placeholder="发货地"></label>
@@ -3845,6 +3851,10 @@ async function saveActiveTaobaoCategoryTemplate(event) {
       defaults: {
         ...(item.defaults || {}),
         publishUrl: String(data.get('publishUrl') || '').trim(),
+        categoryKeyword: String(data.get('categoryKeyword') || '').trim(),
+        categoryPath: String(data.get('categoryPath') || '').split('\n').map(value => value.trim()).filter(Boolean),
+        brandName: String(data.get('brandName') || '').trim(),
+        modelName: String(data.get('modelName') || '').trim(),
         price: String(data.get('price') || '').trim(),
         stock: String(data.get('stock') || '').trim(),
         shipFrom: String(data.get('shipFrom') || '').trim(),
@@ -3883,6 +3893,8 @@ function renderTaobaoTaskList() {
       const statusClass = taobaoStatusClass(task.status);
       return `<article class="taobao-task-card${active ? ' active' : ''}" data-taobao-task="${escapeHtml(task.id || task.folder)}">
         <div><b>${escapeHtml(task.name)}</b><span>${escapeHtml(task.categoryName || '未选择类目')} · ${task.imageCount || 0} 张 · ${task.titleReady ? '标题已就绪' : '缺少标题'}</span></div>
+        <span>${escapeHtml(taobaoTaskMetaLine(task))}</span>
+        ${task.failureReason ? `<p class="taobao-failure">${escapeHtml(task.failureReason)}</p>` : ''}
         <em class="${statusClass}">${escapeHtml(task.status || '未配置')}</em>
       </article>`;
     }).join('');
@@ -3896,6 +3908,57 @@ function renderTaobaoTaskList() {
     return;
   }
   list.innerHTML = '<div class="title-empty-state"><span>淘</span><b>暂无可发布任务</b><p>人工筛图整套通过后会自动同步到这里。</p></div>';
+}
+
+function renderTaobaoExecutionSummary(task = {}) {
+  const taskDetail = task?.detail && typeof task.detail === 'object' ? task.detail : {};
+  const stores = taobaoStoresForCurrentUser();
+  const devices = state.taobaoPublishSettings?.devices || [];
+  const store = stores.find(item => item.id === task.storeId);
+  const device = devices.find(item => item.id === task.deviceId);
+  const rows = [
+    ['目标店铺', task.storeName || store?.name || task.storeId],
+    ['执行设备', device?.name || task.deviceId],
+    ['执行通道', task.extensionId],
+    ['尝试次数', String(Number(task.attempts || 0))],
+    ['更新时间', task.updatedAt ? formatLocalDateTime(task.updatedAt) : ''],
+    ['当前步骤', taskDetail.step],
+    ['截图路径', taskDetail.screenshotPath]
+  ].filter(([, value]) => value != null && String(value).trim());
+  const screenshotLink = taskDetail.diagnosticScreenshotUrl
+    ? `<a class="taobao-diagnostic-screenshot-link" href="${escapeHtml(taskDetail.diagnosticScreenshotUrl)}" target="_blank" rel="noopener">查看发布器截图</a>`
+    : '';
+  if (!rows.length && !screenshotLink) return '';
+  return `<section class="taobao-diagnostics taobao-execution-summary">
+    <div class="taobao-diagnostics-head"><b>本地发布器执行信息</b></div>
+    ${screenshotLink}
+    <dl>${rows.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join('')}</dl>
+  </section>`;
+}
+
+function renderTaobaoExecutionTimeline(task = {}) {
+  const timeline = Array.isArray(task.timeline) ? task.timeline : [];
+  const items = timeline.slice(-12).reverse();
+  if (!items.length) return '';
+  return `<section class="taobao-diagnostics taobao-execution-timeline">
+    <div class="taobao-diagnostics-head"><b>本地发布器执行时间线</b><span>${timeline.length} 条</span></div>
+    <ol>${items.map(item => {
+      const screenshotLink = item.diagnosticScreenshotUrl
+        ? `<a href="${escapeHtml(item.diagnosticScreenshotUrl)}" target="_blank" rel="noopener">截图</a>`
+        : '';
+      const meta = [
+        item.at ? formatLocalDateTime(item.at) : '',
+        item.step,
+        item.deviceId ? `设备：${item.deviceId}` : ''
+      ].filter(Boolean).join(' · ');
+      return `<li>
+        <b>${escapeHtml(item.status || '状态更新')}</b>
+        <span>${escapeHtml(meta)}</span>
+        ${item.failureReason ? `<p>${escapeHtml(item.failureReason)}</p>` : ''}
+        ${screenshotLink}
+      </li>`;
+    }).join('')}</ol>
+  </section>`;
 }
 
 function renderTaobaoPublishDiagnostics(task) {
@@ -3956,15 +4019,24 @@ function renderTaobaoPublishDetail() {
   const selectedCategoryId = state.activeTaobaoCategoryId || task.categoryId;
   const categories = state.taobaoPublishSettings?.categories || [];
   const selectedCategory = categories.find(category => category.id === selectedCategoryId) || categories[0] || null;
+  const stores = taobaoStoresForCurrentUser();
+  const candidateStoreIds = [state.activeTaobaoStoreId, task.storeId, state.taobaoPublishSettings?.localPublisher?.activeStoreId].filter(Boolean);
+  state.activeTaobaoStoreId = candidateStoreIds.find(storeId => stores.some(store => store.id === storeId)) || stores[0]?.id || '';
+  const storeOptions = stores.length
+    ? stores.map(store => `<option value="${escapeHtml(store.id)}"${store.id === state.activeTaobaoStoreId ? ' selected' : ''}>${escapeHtml(store.name)}</option>`).join('')
+    : '<option value="">请先在本地发布器添加淘宝店铺</option>';
   detail.innerHTML = `<div class="taobao-package-summary taobao-publish-steps">
     <section class="taobao-step"><span>01</span><div><b>确认发布类目</b><p>${escapeHtml(selectedCategory?.name || task.categoryName || '未选择类目')}</p></div></section>
-    <section class="taobao-step"><span>02</span><div><b>确认标题</b><p>${escapeHtml(task.title || '未生成标题')}</p></div></section>
-    <section class="taobao-step"><span>03</span><div><b>确认图片包</b><dl>
+    <section class="taobao-step"><span>02</span><div><b>目标淘宝店铺</b><label>目标淘宝店铺<select id="taobaoTaskStoreSelect">${storeOptions}</select></label></div></section>
+    <section class="taobao-step"><span>03</span><div><b>确认标题</b><p>${escapeHtml(task.title || '未生成标题')}</p></div></section>
+    <section class="taobao-step"><span>04</span><div><b>确认图片包</b><dl>
       <div><dt>主图</dt><dd>${task.mainImageCount || 0} 张</dd></div>
       <div><dt>3:4 主图</dt><dd>${task.ratioImageCount || 0} 张</dd></div>
       <div><dt>详情图</dt><dd>${task.detailImageCount || 0} 张</dd></div>
       <div><dt>状态</dt><dd>${escapeHtml(task.status || '未配置')}</dd></div>
     </dl></div></section>
+    ${renderTaobaoExecutionSummary(task)}
+    ${renderTaobaoExecutionTimeline(task)}
     ${renderTaobaoPublishDiagnostics(task)}
     <div class="taobao-publish-actions"><button class="primary" id="queueTaobaoPublishButton" type="button">发布到淘宝草稿</button><button class="secondary" id="openTaobaoTaskFolderButton" type="button">查看任务文件</button></div>
   </div>`;
@@ -3972,6 +4044,7 @@ function renderTaobaoPublishDetail() {
 
 function renderTaobaoPublishPage() {
   $('#taobaoPublishToken').textContent = state.taobaoPublishSettings?.token || '未生成';
+  renderTaobaoPublisherDevices();
   renderTaobaoCategoryList();
   renderTaobaoCategoryEditor();
   renderTaobaoTaskList();
@@ -4002,8 +4075,10 @@ async function queueActiveTaobaoPublishTask() {
   const task = state.taobaoPublishTasks.find(item => (item.id || item.folder) === state.activeTaobaoPublishTaskId);
   if (!task) return toast('请先选择任务', true);
   const categoryId = state.activeTaobaoCategoryId || task.categoryId;
+  const storeId = $('#taobaoTaskStoreSelect')?.value || state.activeTaobaoStoreId || '';
+  if (!storeId) return toast('请先在本地发布器添加并选择淘宝店铺', true);
   try {
-    await window.caishen.queueTaobaoPublishTask({ folder: task.folder, categoryId });
+    await window.caishen.queueTaobaoPublishTask({ folder: task.folder, categoryId, storeId });
     notifyTaobaoExtensionPoll();
     toast('已提交，等待浏览器插件接收');
     await loadTaobaoPublishPage();
@@ -4079,30 +4154,27 @@ function templateReferenceCandidates(item) {
   const activeFolder = templateDirectoryKey(item);
   const activeTokens = templateNameTokens(item.relativePath);
   return state.templateItems
-    .filter(candidate => candidate.path !== item.path && templateDirectoryKey(candidate) === activeFolder && candidate.analysisStatus !== 'failed')
+    .filter(candidate => candidate.path !== item.path && normalizeTemplateUiAction(candidate.action) === 'replace_print')
     .map(candidate => {
       const candidateTokens = templateNameTokens(candidate.relativePath);
       let tokenMatches = 0;
       for (const token of activeTokens) if (candidateTokens.has(token)) tokenMatches += 1;
       const sameFolder = templateDirectoryKey(candidate) === activeFolder ? 1 : 0;
-      const action = normalizeTemplateUiAction(candidate.action);
-      const actionScore = action === 'replace_print' ? 30 : action === 'copy_original' ? 12 : 0;
       const confidence = Number(candidate.confidence || 0);
-      return { candidate, score: sameFolder * 100 + actionScore + tokenMatches * 8 + confidence };
+      return { candidate, score: sameFolder * 100 + tokenMatches * 8 + confidence };
     })
     .sort((left, right) => right.score - left.score || String(left.candidate.relativePath).localeCompare(String(right.candidate.relativePath), 'zh-CN', { numeric: true }))
-    .slice(0, 20)
+    .slice(0, 8)
     .map(entry => entry.candidate);
 }
 
 function renderTemplateReferencePanel(item) {
   const candidates = templateReferenceCandidates(item);
-  const forceButton = `<button class="secondary" type="button" data-force-replace-analysis="${escapeHtml(item.path)}">强制换印花重析</button>`;
   if (!candidates.length) {
-    return `<aside class="template-reference-panel"><div class="template-reference-head"><b>参考重析</b><span>暂无同文件夹参考图，可直接强制重析。</span>${forceButton}</div></aside>`;
+    return `<aside class="template-reference-panel"><div class="template-reference-head"><b>参考重析</b><span>暂无可参考的换印花图片。</span></div></aside>`;
   }
   return `<aside class="template-reference-panel">
-    <div class="template-reference-head"><b>参考重析</b><span>参考图只帮助 AI 判断动作，不复制区域。</span>${forceButton}</div>
+    <div class="template-reference-head"><b>参考重析</b><span>参考图只帮助 AI 判断动作，不复制区域。</span></div>
     <div class="template-reference-list">
       ${candidates.map(candidate => `<article class="template-reference-card">
         <img src="${escapeHtml(candidate.thumbnailUrl || candidate.previewUrl || candidate.templateUrl)}" alt="${escapeHtml(candidate.relativePath)}">
@@ -4188,6 +4260,7 @@ async function analyzeActiveTemplateWithReference(referencePath) {
   const item = activeTemplateItem();
   const reference = state.templateItems.find(candidate => candidate.path === referencePath);
   if (!item || !reference) return toast('请先选择参考图片。', true);
+  if (normalizeTemplateUiAction(reference.action) !== 'replace_print') return toast('参考图必须已经识别为换印花。', true);
   const folder = templateFolderPathForItem(item);
   $('#templateConfigStatus').textContent = `正在参考“${reference.name}”重新分析`;
   state.assetAnalysisProgress.set(item.path, { status: 'running', attempt: 1 });
@@ -4211,41 +4284,6 @@ async function analyzeActiveTemplateWithReference(referencePath) {
     if (folder === state.config.detailSetsPath) await loadTemplatePreparation();
     $('#templateConfigStatus').textContent = '参考重析已完成';
     toast('参考重析已完成');
-  } catch (error) {
-    toast(errorText(error), true);
-  } finally {
-    state.assetAnalysisProgress.delete(item.path);
-    renderAssetManagementGrid();
-    renderAssetSelectionState();
-  }
-}
-
-async function analyzeActiveTemplateWithForcedReplace() {
-  const item = activeTemplateItem();
-  if (!item) return toast('请先选择需要重析的图片。', true);
-  const folder = templateFolderPathForItem(item);
-  $('#templateConfigStatus').textContent = '正在强制按换印花重新分析';
-  state.assetAnalysisProgress.set(item.path, { status: 'running', attempt: 1 });
-  renderAssetManagementGrid();
-  try {
-    await window.caishen.analyzeTemplateItemWithReference({
-      folder,
-      relativePath: item.relativePath,
-      forceReplacePrint: true
-    }, progress => {
-      const attempt = Number(progress.attempt || 0);
-      $('#templateConfigStatus').textContent = attempt
-        ? `正在强制按换印花重新分析 · 第 ${attempt} 次`
-        : '正在强制按换印花重新分析';
-    });
-    state.assetPreviewCache.delete('detailSetsPath');
-    await loadAssetLibraryPreview('detailSetsPath', { preserveSelection: true, force: true });
-    const refreshed = state.templateItems.find(candidate => candidate.relativePath === item.relativePath && templateFolderPathForItem(candidate) === folder);
-    if (refreshed) state.activeTemplatePath = refreshed.path;
-    renderTemplateAnalysisResult();
-    if (folder === state.config.detailSetsPath) await loadTemplatePreparation();
-    $('#templateConfigStatus').textContent = '强制换印花重析已完成';
-    toast('强制换印花重析已完成');
   } catch (error) {
     toast(errorText(error), true);
   } finally {
@@ -4823,13 +4861,20 @@ async function transferTeamBalance(button) {
 function defaultModelPackages() {
   const baseUrl = state.apiSettings?.baseUrl || '';
   const imageModel = state.apiSettings?.imageModel || 'gpt-image-2';
-  const analysisModel = state.apiSettings?.analysisModel || 'gpt-5-3';
+  const analysisModel = getConfiguredAnalysisModel(state.apiSettings?.analysisModel);
   const analysisWireApi = state.apiSettings?.analysisWireApi || 'chat_completions';
   return [
     { id: 'flagship', name: '旗舰版', description: '主推套餐，保持当前100%效率和质量', enabled: true, default: true, recommended: true, apiBaseUrl: baseUrl, modelId: imageModel, analysisApiBaseUrl: baseUrl, analysisModel, analysisWireApi, maxConcurrency: 30, startIntervalMs: 200, promptQuality: 'flagship', promptMode: 'full', userPromptPolicy: 'full', hiddenPrompt: '', analysisPrompt: '', imagePrompt: '', imagePriceMinMinor: 300000, imagePriceMaxMinor: 300000, analysisPriceMinMinor: 0, analysisPriceMaxMinor: 0, enableMasterReference: false, queuePriority: 10 },
     { id: 'fast', name: '快速版', description: '5分钱/张，低价留客，效果质量与标准版一致', enabled: true, default: false, recommended: false, apiBaseUrl: baseUrl, modelId: imageModel, analysisApiBaseUrl: baseUrl, analysisModel, analysisWireApi, maxConcurrency: 2, startIntervalMs: 1200, promptQuality: 'basic', promptMode: 'internal', userPromptPolicy: 'ignore', hiddenPrompt: '', analysisPrompt: '低价基础分析：只做必要判断，不做深度商业优化。', imagePrompt: '低价基础出图：效果目标约为旗舰版 30%，只完成核心生成，不做高级商业质感、复杂光影、材质精修和额外卖点补全。', imagePriceMinMinor: 50000, imagePriceMaxMinor: 50000, analysisPriceMinMinor: 50000, analysisPriceMaxMinor: 50000, queuePriority: 2 },
     { id: 'standard', name: '标准版', description: '7分钱/张，效果质量约为旗舰版30%', enabled: true, default: false, recommended: false, apiBaseUrl: baseUrl, modelId: imageModel, analysisApiBaseUrl: baseUrl, analysisModel, analysisWireApi, maxConcurrency: 3, startIntervalMs: 1000, promptQuality: 'standard', promptMode: 'hybrid', userPromptPolicy: 'partial', hiddenPrompt: '', analysisPrompt: '标准版分析：只保留必要理解和判断，不做旗舰版深度优化。', imagePrompt: '标准版出图：效果目标约为旗舰版 30%，做基础画面整理和必要生成，不做高级商业海报质感、复杂光影、材质精修、精细构图增强和额外卖点补全。', imagePriceMinMinor: 70000, imagePriceMaxMinor: 70000, analysisPriceMinMinor: 70000, analysisPriceMaxMinor: 70000, queuePriority: 5 }
   ];
+}
+
+function getConfiguredAnalysisModel(preferredModel = '') {
+  const preferred = String(preferredModel || '').trim();
+  if (!Array.isArray(state.analysisApiModels) || !state.analysisApiModels.length) return preferred;
+  const isSupported = state.analysisApiModels.some(item => item?.id === preferred);
+  return isSupported ? preferred : state.analysisApiModels[0]?.id || '';
 }
 
 function currentModelPackages() {
@@ -4930,7 +4975,7 @@ function collectModelPackagesFromForm() {
       apiKey: read('apiKey')?.value.trim() || '',
       analysisApiBaseUrl: read('analysisApiBaseUrl')?.value.trim() || state.apiSettings?.baseUrl || '',
       analysisApiKey: read('analysisApiKey')?.value.trim() || '',
-      analysisModel: read('analysisModel')?.value.trim() || state.apiSettings?.analysisModel || 'gpt-5-3',
+      analysisModel: read('analysisModel')?.value.trim() || getConfiguredAnalysisModel(state.apiSettings?.analysisModel),
       analysisWireApi: read('analysisWireApi')?.value || state.apiSettings?.analysisWireApi || 'chat_completions',
       maxConcurrency: Number(read('maxConcurrency')?.value) || 1,
       startIntervalMs: Number(read('startIntervalMs')?.value) || 0,
@@ -5047,7 +5092,7 @@ function renderApiSettings() {
   }
   $$('[data-toggle-secret]').forEach(button => { button.textContent = '显示'; });
   $('#imageModel').value = settings.imageModel || 'gpt-image-2';
-  $('#analysisModel').value = settings.analysisModel || 'gpt-5-3';
+  $('#analysisModel').value = getConfiguredAnalysisModel(settings.analysisModel);
   $('#analysisWireApi').value = settings.analysisWireApi || 'chat_completions';
   $('#apiResponseFormat').value = settings.responseFormat || 'url';
   $('#apiRequestTimeout').value = String(settings.requestTimeoutSeconds || 300);
@@ -5365,14 +5410,6 @@ function bindEvents() {
   };
   $$('.nav-item').forEach(button => button.onclick = () => setPage(button.dataset.page));
   $$('[data-page-link]').forEach(button => button.onclick = () => setPage(button.dataset.pageLink));
-  $('#refreshGlobalStatsButton')?.addEventListener('click', () => loadGlobalStats());
-  $('#refreshMobileStatsButton')?.addEventListener('click', () => loadMobileStats());
-  $('.global-stats-range')?.addEventListener('click', event => {
-    const button = event.target.closest('[data-global-stats-range]');
-    if (!button) return;
-    state.globalStatsRange = button.dataset.globalStatsRange || 'today';
-    loadGlobalStats();
-  });
   $$('.template-source-tabs [data-template-source-tab]').forEach(button => button.onclick = () => setTaskSourceTab(button.dataset.templateSourceTab));
   $$('[data-choose]').forEach(button => button.onclick = () => chooseFolder(button.dataset.choose));
   $$('[data-stage-asset]').forEach(button => button.onclick = () => stageAssetFolder(button.dataset.stageAsset));
@@ -5648,15 +5685,20 @@ function bindEvents() {
     if (task?.categoryId) state.activeTaobaoCategoryId = task.categoryId;
     renderTaobaoPublishPage();
   };
-  if ($('#taobaoPublishDetail')) $('#taobaoPublishDetail').onclick = event => {
-    if (event.target.closest('#queueTaobaoPublishButton')) return queueActiveTaobaoPublishTask();
-    if (event.target.closest('#copyTaobaoPublishDiagnosticsButton')) return copyTaobaoPublishDiagnostics();
-    if (event.target.closest('#openTaobaoTaskFolderButton')) {
+      if ($('#taobaoPublishDetail')) $('#taobaoPublishDetail').onclick = event => {
+        if (event.target.closest('#queueTaobaoPublishButton')) return queueActiveTaobaoPublishTask();
+        if (event.target.closest('#copyTaobaoPublishDiagnosticsButton')) return copyTaobaoPublishDiagnostics();
+        if (event.target.closest('#openTaobaoTaskFolderButton')) {
       const task = state.taobaoPublishTasks.find(item => (item.id || item.folder) === state.activeTaobaoPublishTaskId);
       if (task?.folder) return window.caishen.openFolder(task.folder);
-      return toast('请先选择任务', true);
-    }
-  };
+          return toast('请先选择任务', true);
+        }
+      };
+      if ($('#taobaoPublishDetail')) $('#taobaoPublishDetail').onchange = event => {
+        const storeSelect = event.target.closest('#taobaoTaskStoreSelect');
+        if (!storeSelect) return;
+        state.activeTaobaoStoreId = storeSelect.value;
+      };
   if ($('#taobaoCategoryEditor')) $('#taobaoCategoryEditor').onclick = event => {
     if (event.target.closest('#importTaobaoDiagnosticsButton')) applyTaobaoDiagnosticsSelectors();
   };
@@ -5670,6 +5712,14 @@ function bindEvents() {
   $('#saveBillingRulesButton').onclick = saveBillingRules;
   $('#refreshBillingButton').onclick = loadBillingAdmin;
   $('#clearBillingLedgerButton').onclick = clearBillingLedger;
+  if ($('#refreshGlobalStatsButton')) $('#refreshGlobalStatsButton').onclick = loadGlobalStats;
+  if ($('#refreshMobileStatsButton')) $('#refreshMobileStatsButton').onclick = loadMobileStats;
+  $$('.global-stats-range [data-global-stats-range]').forEach(button => {
+    button.onclick = () => {
+      state.globalStatsRange = button.dataset.globalStatsRange || 'today';
+      loadGlobalStats();
+    };
+  });
   $('#billingUserFilter').onchange = event => {
     state.billingAdminFilter = String(event.target.value || '');
     renderBillingAdmin();
@@ -5751,8 +5801,6 @@ function bindEvents() {
   $('#templateAnalysisResult').oninput = handleTemplateAnalysisFieldChange;
   $('#templateAnalysisResult').onchange = handleTemplateAnalysisFieldChange;
   $('#templateAnalysisResult').onclick = event => {
-    const forceButton = event.target.closest('[data-force-replace-analysis]');
-    if (forceButton) return analyzeActiveTemplateWithForcedReplace();
     const referenceButton = event.target.closest('[data-reference-analysis]');
     if (referenceButton) return analyzeActiveTemplateWithReference(referenceButton.dataset.referenceAnalysis);
   };

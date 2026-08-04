@@ -1,0 +1,38 @@
+{
+  "name": "@caishen/taobao-publisher",
+  "version": "0.1.0",
+  "private": true,
+  "description": "运营账号绑定的本地淘宝发布器",
+  "main": "src/main.js",
+  "scripts": {
+    "build": "node scripts/check-package.js",
+    "start": "electron .",
+    "smoke": "node scripts/smoke-start.js",
+    "pack": "node scripts/package-windows.js --dir",
+    "dist": "node scripts/package-windows.js"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "electron": "31.7.7",
+    "electron-builder": "24.13.3"
+  },
+  "build": {
+    "appId": "com.caishen.taobao-publisher",
+    "productName": "淘宝发布器",
+    "npmRebuild": false,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "signAndEditExecutable": false,
+      "target": [
+        "nsis"
+      ],
+      "artifactName": "${productName}-${version}-setup.${ext}"
+    }
+  }
+}

@@ -28,6 +28,17 @@ test('taobao category templates include the fixed product categories', () => {
   ]);
 });
 
+test('taobao category templates include search keywords and fallback category paths', () => {
+  const sideboard = TAOBAO_CATEGORY_TEMPLATES.find(item => item.id === 'sideboard');
+  assert.equal(sideboard.defaults.categoryKeyword, '餐边柜');
+  assert.deepEqual(sideboard.defaults.categoryPath, ['住宅家具', '柜类', '餐边柜']);
+  assert.equal(sideboard.defaults.brandName, '其他家');
+  assert.equal(sideboard.defaults.modelName, '其他');
+
+  assert.ok(TAOBAO_CATEGORY_TEMPLATES.every(item => item.defaults.categoryKeyword));
+  assert.ok(TAOBAO_CATEGORY_TEMPLATES.every(item => Array.isArray(item.defaults.categoryPath) && item.defaults.categoryPath.length >= 2));
+});
+
 test('taobao publish only accepts fully approved review tasks', () => {
   assert.equal(isReviewReadyForTaobao({
     jobs: [

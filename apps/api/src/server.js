@@ -981,10 +981,15 @@ const rpc = {
   getTaobaoPublishSettings: () => runtime.getTaobaoPublishSettings(),
   saveTaobaoPublishSettings: ([payload]) => runtime.saveTaobaoPublishSettings(payload || {}),
   listTaobaoPublishTasks: () => runtime.listTaobaoPublishTasks(),
-  queueTaobaoPublishTask: ([payload]) => runtime.queueTaobaoPublishTask({
+  queueTaobaoPublishTask: ([payload], context) => runtime.queueTaobaoPublishTask({
     ...(payload || {}),
     folder: managedPath(payload?.folder),
-    categoryId: String(payload?.categoryId || '')
+    categoryId: String(payload?.categoryId || ''),
+    ownerUserId: context?.user?.id || '',
+    storeId: String(payload?.storeId || ''),
+    deviceId: String(payload?.deviceId || ''),
+    requireStore: true,
+    requireStoreOwner: true
   }),
   getFileLink: ([target, kind]) => {
     const file = managedPath(target);
@@ -1080,7 +1085,15 @@ async function startServer() {
       if (!user) return res.status(401).json({ error: '请先登录 Web 端' });
       return res.json({ data: await runtime.runWithWorkspace(user.workspaceId, async () => {
         const settings = await runtime.getTaobaoPublishSettings();
-        return { token: settings.token || '', pollSeconds: 12 };
+        return {
+          token: settings.token || '',
+          pollSeconds: 12,
+          userId: user.id,
+          user,
+          localPublisher: settings.localPublisher || {},
+          stores: settings.stores || [],
+          devices: settings.devices || []
+        };
       }) });
     } catch (error) {
       return res.status(400).json({ error: error?.message || String(error) });
@@ -1090,7 +1103,25 @@ async function startServer() {
   app.post('/api/taobao/publish/claim', async (req, res) => {
     try {
       const token = String(req.body?.token || '');
+      if (req.body?.userId) {
+        const claimedUser = await auth.userFromRequest(req);
+        if (!claimedUser || claimedUser.id !== req.body?.userId) return res.status(401).json({ error: '本地发布器登录账号不匹配' });
+      }
       return res.json({ data: await runTaobaoPublishWithToken(token, () => runtime.claimTaobaoPublishTask(req.body || {})) });
+    } catch (error) {
+      return res.status(400).json({ error: error?.message || String(error) });
+    }
+  });
+
+  app.post('/api/taobao/publish/heartbeat', async (req, res) => {
+    try {
+      const user = await auth.userFromRequest(req);
+      if (!user) return res.status(401).json({ error: '请先登录 Web 端' });
+      if (req.body?.userId && String(req.body.userId) !== user.id) return res.status(401).json({ error: '本地发布器登录账号不匹配' });
+      return res.json({ data: await runtime.runWithWorkspace(user.workspaceId, () => runtime.heartbeatTaobaoPublisher({
+        ...(req.body || {}),
+        userId: user.id
+      })) });
     } catch (error) {
       return res.status(400).json({ error: error?.message || String(error) });
     }
@@ -1099,8 +1130,18 @@ async function startServer() {
   app.get('/api/taobao/publish/tasks', async (req, res) => {
     try {
       const token = String(req.query.token || req.get('x-caishen-taobao-token') || '');
+      const userId = String(req.query.userId || '');
+      if (userId) {
+        const requestedUser = await auth.userFromRequest(req);
+        if (!requestedUser || requestedUser.id !== userId) return res.status(401).json({ error: '本地发布器登录账号不匹配' });
+      }
       return res.json({ data: await runTaobaoPublishWithToken(token, async () => {
-        const { tasks, blockedTasks } = await runtime.listTaobaoPublishTasks();
+        const { tasks, blockedTasks } = await runtime.listTaobaoPublishTasks({
+          token,
+          userId,
+          storeId: String(req.query.storeId || ''),
+          deviceId: String(req.query.deviceId || '')
+        });
         return { tasks, blockedTasks };
       }) });
     } catch (error) {
@@ -1142,6 +1183,10 @@ async function startServer() {
   app.post('/api/taobao/publish/tasks/:id/status', async (req, res) => {
     try {
       const token = String(req.body?.token || '');
+      if (req.body?.userId) {
+        const requestedUser = await auth.userFromRequest(req);
+        if (!requestedUser || requestedUser.id !== req.body?.userId) return res.status(401).json({ error: '鏈湴鍙戝竷鍣ㄧ櫥褰曡处鍙蜂笉鍖归厤' });
+      }
       return res.json({ data: await runTaobaoPublishWithToken(token, () => runtime.updateTaobaoPublishStatus(req.params.id, req.body || {})) });
     } catch (error) {
       return res.status(400).json({ error: error?.message || String(error) });

@@ -2,8 +2,6 @@
 
 const fs = require('node:fs');
 
-const REVERSE_PROMPT_MODEL = 'gpt-5-3';
-
 const TEMPLATE_AUDIT_STATUS = Object.freeze({
   PENDING: '待审核',
   APPROVED: '审核通过',
@@ -109,7 +107,7 @@ function imageContent(dataUrl) {
 
 function buildTemplateAuditPayload(options = {}) {
   return {
-    model: textValue(options.model) || REVERSE_PROMPT_MODEL,
+    model: textValue(options.model) || textValue(options.fallbackModel),
     messages: [{
       role: 'user',
       content: [
@@ -125,7 +123,7 @@ function buildTemplateAuditPayload(options = {}) {
 
 function buildTemplateAuditRecheckPayload(options = {}) {
   return {
-    model: textValue(options.model) || REVERSE_PROMPT_MODEL,
+    model: textValue(options.model) || textValue(options.fallbackModel),
     messages: [{
       role: 'user',
       content: [
@@ -234,7 +232,6 @@ function getTemplateAuditStatus(job = {}, options = {}) {
 
 module.exports = {
   INVALID_PRODUCT_REPLACEMENT_PHRASES,
-  REVERSE_PROMPT_MODEL,
   TEMPLATE_AUDIT_STATUS,
   buildTemplateAuditPayload,
   buildTemplateAuditPrompt,

@@ -9,6 +9,7 @@ const STATUS = {
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 let runningTaskId = '';
 let categoryAttempt = {};
+let uploadAttempt = {};
 
 chrome.runtime.sendMessage({ type: 'CAISHEN_TAOBAO_CONTENT_READY' });
 
@@ -91,6 +92,90 @@ function clickElement(element) {
   }
   element.click?.();
   return true;
+}
+
+function trustedClickPoint(element, preferredText = '') {
+  const wanted = text(preferredText).replace(/\s+/g, '').toLocaleLowerCase('zh-CN');
+  let target = element;
+  if (wanted) {
+    const textTargets = [...target.querySelectorAll('*')]
+      .filter(visible)
+      .filter(candidate => text(candidate.innerText || candidate.textContent)
+        .replace(/\s+/g, '')
+        .toLocaleLowerCase('zh-CN') === wanted)
+      .sort((left, right) => {
+        const leftRect = left.getBoundingClientRect();
+        const rightRect = right.getBoundingClientRect();
+        return (leftRect.width * leftRect.height) - (rightRect.width * rightRect.height);
+      });
+    target = textTargets[0] || target;
+  }
+  const rect = target.getBoundingClientRect();
+  let x = rect.left + (rect.width / 2);
+  let y = rect.top + (rect.height / 2);
+  let frameDepth = 0;
+  let currentWindow = window;
+  try {
+    while (currentWindow !== currentWindow.top) {
+      const frameElement = currentWindow.frameElement;
+      if (!frameElement) break;
+      const frameRect = frameElement.getBoundingClientRect();
+      x += frameRect.left;
+      y += frameRect.top;
+      frameDepth += 1;
+      currentWindow = currentWindow.parent;
+    }
+  } catch {}
+  return {
+    x,
+    y,
+    frameDepth,
+    rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+    targetSelector: cssSelectorForDiagnostics(target),
+    topFrame: window === window.top
+  };
+}
+
+async function trustedClickElement(element, preferredText = '') {
+  if (!element || disabled(element)) return false;
+  element.scrollIntoView?.({ block: 'center', inline: 'center' });
+  await sleep(120);
+  const point = trustedClickPoint(element, preferredText);
+  const diagnostic = { ...point, selector: cssSelectorForDiagnostics(element) };
+  try {
+    const result = await chrome.runtime.sendMessage({ type: 'CAISHEN_TAOBAO_TRUSTED_CLICK', x: point.x, y: point.y });
+    diagnostic.result = result;
+    categoryAttempt.trustedClicks = [...(categoryAttempt.trustedClicks || []), diagnostic];
+    if (result?.ok) return true;
+  } catch (error) {
+    diagnostic.error = error?.message || String(error);
+    categoryAttempt.trustedClicks = [...(categoryAttempt.trustedClicks || []), diagnostic];
+  }
+  return clickElement(element);
+}
+
+async function trustedClickElementRightEdge(element) {
+  if (!element || disabled(element)) return false;
+  element.scrollIntoView?.({ block: 'center', inline: 'center' });
+  await sleep(120);
+  const point = trustedClickPoint(element);
+  const x = point.x + (point.rect.width / 2) - 18;
+  const diagnostic = {
+    ...point,
+    x,
+    selector: cssSelectorForDiagnostics(element),
+    edge: 'right'
+  };
+  try {
+    const result = await chrome.runtime.sendMessage({ type: 'CAISHEN_TAOBAO_TRUSTED_CLICK', x, y: point.y });
+    diagnostic.result = result;
+    categoryAttempt.trustedClicks = [...(categoryAttempt.trustedClicks || []), diagnostic];
+    if (result?.ok) return true;
+  } catch (error) {
+    diagnostic.error = error?.message || String(error);
+    categoryAttempt.trustedClicks = [...(categoryAttempt.trustedClicks || []), diagnostic];
+  }
+  return clickElement(element);
 }
 
 function selectorForElement(element) {
@@ -364,13 +449,365 @@ function scoreCategoryCandidate(element, keyword) {
   return score - Math.min(Math.floor(ownLabel.length / 20), 30);
 }
 
+function categoryClickTarget(element, keyword) {
+  if (!element) return null;
+  const wanted = text(keyword).toLocaleLowerCase('zh-CN');
+  const candidates = [];
+  let node = element;
+  for (let depth = 0; node && depth < 6 && node !== document.body; depth += 1, node = node.parentElement) {
+    const label = text(node.innerText || node.textContent || node.getAttribute?.('aria-label') || node.title)
+      .toLocaleLowerCase('zh-CN');
+    const rect = node.getBoundingClientRect?.();
+    if (!label.includes(wanted) || !rect || rect.height < 20 || rect.height > 120 || rect.width <= 0) continue;
+    const role = String(node.getAttribute?.('role') || '').toLowerCase();
+    const semantic = ['LI', 'BUTTON', 'A'].includes(node.tagName)
+      || ['option', 'radio', 'menuitem', 'treeitem', 'button'].includes(role);
+    if (!semantic && node.tagName !== 'DIV') continue;
+    candidates.push({ node, semantic, width: rect.width, depth });
+  }
+  candidates.sort((left, right) => Number(right.semantic) - Number(left.semantic)
+    || right.width - left.width
+    || left.depth - right.depth);
+  return candidates[0]?.node || element;
+}
+
 function findCategoryCandidate(keyword) {
   const candidates = [...document.querySelectorAll('button, [role="button"], a, li, div, span')]
     .map(element => ({ element, score: scoreCategoryCandidate(element, keyword) }))
     .filter(item => item.score > 0)
     .sort((left, right) => right.score - left.score);
   const directCandidates = candidates.filter(item => categoryOwnLabelIncludesKeyword(item.element, keyword));
-  return directCandidates[0]?.element || null;
+  const clickableCandidates = directCandidates.map(item => ({
+    ...item,
+    element: categoryClickTarget(item.element, keyword)
+  }));
+  return clickableCandidates[0]?.element || null;
+}
+
+function findConfiguredCategoryCandidate(task, keyword) {
+  const selected = query(selectors(task).categoryResult);
+  if (!selected || !visible(selected) || disabled(selected)) return null;
+  return categoryOwnLabelIncludesKeyword(selected, keyword) ? categoryClickTarget(selected, keyword) : null;
+}
+
+function findCategoryResultRadio(selected) {
+  let node = selected;
+  for (let depth = 0; node && depth < 8 && node !== document.body; depth += 1, node = node.parentElement) {
+    const radios = [...node.querySelectorAll('input[type="radio"]')].filter(visible).filter(element => !disabled(element));
+    if (radios.length === 1) return radios[0];
+    if (radios.length > 1) return null;
+  }
+  return null;
+}
+
+function findManualCategoryCandidate(keyword, excluded) {
+  const wanted = text(keyword).replace(/\s+/g, '').toLocaleLowerCase('zh-CN');
+  const candidates = [...document.querySelectorAll('li, [role="option"], [role="menuitem"], [role="treeitem"]')]
+    .filter(element => element !== excluded && visible(element) && !disabled(element))
+    .filter(element => element.getAttribute('role') !== 'tab' && !element.closest('[role="tablist"]'))
+    .filter(element => text(element.innerText || element.textContent || element.getAttribute('aria-label') || element.title)
+      .replace(/\s+/g, '')
+      .toLocaleLowerCase('zh-CN') === wanted)
+    .map(element => categoryClickTarget(element, keyword));
+  return candidates[0] || null;
+}
+
+function findExactVisibleOption(value) {
+  const wanted = text(value).replace(/\s+/g, '').toLocaleLowerCase('zh-CN');
+  return [...document.querySelectorAll('[role="option"], [role="menuitem"], li, div, span')]
+    .filter(visible)
+    .filter(element => !disabled(element))
+    .filter(element => text(element.innerText || element.textContent || element.getAttribute('aria-label') || element.title)
+      .replace(/\s+/g, '')
+      .toLocaleLowerCase('zh-CN') === wanted)
+    .sort((left, right) => {
+      const leftRect = left.getBoundingClientRect();
+      const rightRect = right.getBoundingClientRect();
+      return (leftRect.width * leftRect.height) - (rightRect.width * rightRect.height);
+    })[0] || null;
+}
+
+function findFirstVisibleBrandOption() {
+  return [...document.querySelectorAll('[role="option"], [role="menuitem"], li, div, span')]
+    .filter(visible)
+    .filter(element => !disabled(element))
+    .filter(element => {
+      const label = text(element.innerText || element.textContent || element.getAttribute('aria-label') || element.title);
+      return label && label.length <= 120 && !label.includes('[新增品牌]') && !label.includes('请选择');
+    })
+    .sort((left, right) => {
+      const leftRect = left.getBoundingClientRect();
+      const rightRect = right.getBoundingClientRect();
+      return (leftRect.width * leftRect.height) - (rightRect.width * rightRect.height);
+    })[0] || null;
+}
+
+async function waitForExactVisibleOption(value, timeoutMs = 5000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const option = findExactVisibleOption(value);
+    if (option) return option;
+    await sleep(200);
+  }
+  return null;
+}
+
+async function ensureCategorySearchMode(task) {
+  const searchMode = findExactVisibleOption('\u641c\u7d22\u53d1\u54c1');
+  if (searchMode) {
+    await trustedClickElement(searchMode, '\u641c\u7d22\u53d1\u54c1');
+    await sleep(600);
+  }
+  const started = Date.now();
+  while (Date.now() - started < 5000) {
+    const field = findCategorySearchInput(task);
+    if (field) return field;
+    await sleep(200);
+  }
+  throw fail('\u672a\u627e\u5230\u6dd8\u5b9d\u7c7b\u76ee\u641c\u7d22\u8f93\u5165\u6846', 'select-category');
+}
+
+function findCategoryBrandField(task) {
+  const configured = query(selectors(task).categoryBrand);
+  if (configured && visible(configured) && !disabled(configured)) return configured;
+  const candidates = fields().filter(element => {
+    const placeholder = text(element.getAttribute('placeholder'));
+    return placeholder === '\u8bf7\u9009\u62e9' || element.getAttribute('role') === 'combobox';
+  });
+  const brandCandidate = candidates.find(element => {
+    let node = element;
+    for (let depth = 0; node && depth < 8 && node !== document.body; depth += 1, node = node.parentElement) {
+      const context = text(node.innerText || node.textContent);
+      if (context.includes('\u54c1\u724c') && context.length < 1200) return true;
+    }
+    return false;
+  });
+  return brandCandidate || (candidates.length === 1 ? candidates[0] : null);
+}
+
+function findCategoryBrandSearchInput(field) {
+  const active = document.activeElement;
+  if (active && active !== field && fields().includes(active) && !disabled(active)) return active;
+  const fieldRect = field.getBoundingClientRect();
+  return fields()
+    .filter(element => element !== field && !disabled(element))
+    .filter(element => {
+      const placeholder = text(element.getAttribute('placeholder'));
+      return !placeholder.includes('\u4ea7\u54c1\u540d\u79f0') && !placeholder.includes('\u7c7b\u76ee\u5173\u952e\u8bcd');
+    })
+    .map(element => {
+      const rect = element.getBoundingClientRect();
+      const horizontalOverlap = Math.max(0, Math.min(rect.right, fieldRect.right) - Math.max(rect.left, fieldRect.left));
+      const verticalDistance = rect.top - fieldRect.bottom;
+      const popupSearchShape = rect.top >= fieldRect.bottom - 8
+        && rect.top <= fieldRect.bottom + 140
+        && rect.width >= Math.min(120, fieldRect.width * 0.5)
+        && rect.height >= 24;
+      return { element, horizontalOverlap, verticalDistance: Math.abs(verticalDistance), popupSearchShape };
+    })
+    .filter(item => item.horizontalOverlap > 0 && item.popupSearchShape)
+    .sort((left, right) => right.horizontalOverlap - left.horizontalOverlap || left.verticalDistance - right.verticalDistance)[0]?.element || null;
+}
+
+async function waitForCategoryBrandSearchInput(field, timeoutMs = 4000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const input = findCategoryBrandSearchInput(field);
+    if (input) return input;
+    await sleep(200);
+  }
+  return null;
+}
+
+async function waitForBrandModelField(timeoutMs = 4000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const field = query('input[name="p-20000~1"]') || findField(['\u578b\u53f7']);
+    if (field) return field;
+    await sleep(200);
+  }
+  return null;
+}
+
+function fieldValueText(field) {
+  if (!field) return '';
+  const own = text(field.value || field.getAttribute?.('aria-valuetext') || field.getAttribute?.('title'));
+  const chunks = [own];
+  let node = field;
+  for (let depth = 0; node && depth < 4 && node !== document.body; depth += 1, node = node.parentElement) {
+    const label = text(node.innerText || node.textContent);
+    if (label && label.length < 300) chunks.push(label);
+  }
+  return chunks.join(' ');
+}
+
+async function waitForFieldValue(field, expected, timeoutMs = 5000) {
+  const wanted = text(expected);
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (fieldValueText(field).includes(wanted)) return true;
+    await sleep(200);
+  }
+  return false;
+}
+
+async function selectCategoryBrand(task) {
+  const configuredBrand = text(task?.category?.defaults?.brand || task?.category?.defaults?.brandName) || '\u5176\u4ed6';
+  const brand = configuredBrand === '\u5176\u4ed6' ? '\u5176\u4ed6\u5bb6' : configuredBrand;
+  const field = findCategoryBrandField(task);
+  if (!field) return false;
+  if (field.tagName === 'SELECT') {
+    if (!(await setSelectValue(field, brand))) throw fail(`\u672a\u627e\u5230\u6dd8\u5b9d\u54c1\u724c\u9009\u9879\uff1a${brand}`, 'select-category');
+  } else {
+    await trustedClickElement(field);
+    clickElement(field);
+    let searchInput = await waitForCategoryBrandSearchInput(field);
+    if (!searchInput) {
+      await trustedClickElementRightEdge(field);
+      searchInput = await waitForCategoryBrandSearchInput(field, 5000);
+    }
+    if (!searchInput) throw fail('\u672a\u627e\u5230\u6dd8\u5b9d\u54c1\u724c\u641c\u7d22\u6846', 'select-category');
+    setNativeValue(searchInput, brand);
+    searchInput.focus();
+    const option = await waitForExactVisibleOption('\u5176\u4ed6\u5bb6') || findFirstVisibleBrandOption();
+    if (!option) throw fail(`\u672a\u627e\u5230\u6dd8\u5b9d\u54c1\u724c\u9009\u9879\uff1a${brand}`, 'select-category');
+    const optionTarget = option.closest('[role="option"], [role="menuitem"], li') || option;
+    await trustedClickElement(optionTarget, brand);
+    clickElement(optionTarget);
+    await sleep(500);
+    if (!(await waitForFieldValue(field, brand))) {
+      categoryAttempt.brandSelectionError = {
+        expected: brand,
+        actual: fieldValueText(field).slice(0, 160),
+        selector: cssSelectorForDiagnostics(field)
+      };
+      throw fail(`\u6dd8\u5b9d\u54c1\u724c\u672a\u9009\u4e2d\uff1a${brand}`, 'select-category');
+    }
+    const modelField = await waitForBrandModelField();
+    const modelValue = text(task?.category?.defaults?.modelName || task?.category?.defaults?.model || '\u5176\u4ed6');
+    if (modelField && modelValue) {
+      setNativeValue(modelField, modelValue);
+      await sleep(300);
+      if (!(await waitForFieldValue(modelField, modelValue, 3000))) {
+        categoryAttempt.brandModelError = {
+          expected: modelValue,
+          actual: fieldValueText(modelField).slice(0, 160),
+          selector: cssSelectorForDiagnostics(modelField)
+        };
+        throw fail(`\u6dd8\u5b9d\u578b\u53f7\u672a\u586b\u5199\uff1a${modelValue}`, 'select-category');
+      }
+      categoryAttempt.brandModel = {
+        value: modelValue,
+        selector: cssSelectorForDiagnostics(modelField)
+      };
+    }
+    categoryAttempt.brandSearch = {
+      query: '\u5176\u4ed6',
+      selector: cssSelectorForDiagnostics(searchInput),
+      option: cssSelectorForDiagnostics(optionTarget)
+    };
+  }
+  categoryAttempt.brand = {
+    value: brand,
+    selector: cssSelectorForDiagnostics(field)
+  };
+  return true;
+}
+
+async function openManualCategorySelector(task, keyword) {
+  const selectorLabel = findExactVisibleOption('\u9009\u62e9\u7c7b\u76ee');
+  const selectorButton = selectorLabel?.closest('button, [role="button"], a') || selectorLabel;
+  if (!selectorButton) return false;
+  await trustedClickElement(selectorButton, '\u9009\u62e9\u7c7b\u76ee');
+  clickElement(selectorButton);
+  await sleep(600);
+  const configuredPath = task?.category?.defaults?.categoryPath;
+  const categoryPath = Array.isArray(configuredPath) && configuredPath.length
+    ? configuredPath.map(text).filter(Boolean)
+    : ['\u4f4f\u5b85\u5bb6\u5177', '\u67dc\u7c7b', keyword];
+  categoryAttempt.manualPath = [];
+  for (const label of categoryPath) {
+    const option = await waitForExactVisibleOption(label);
+    if (!option) throw fail(`\u672a\u627e\u5230\u6dd8\u5b9d\u624b\u52a8\u7c7b\u76ee\u8282\u70b9\uff1a${label}`, 'select-category');
+    const optionTarget = categoryClickTarget(option, label);
+    categoryAttempt.manualPath.push({ label, selector: cssSelectorForDiagnostics(optionTarget) });
+    await trustedClickElement(optionTarget, label);
+    clickElement(optionTarget);
+    await sleep(450);
+  }
+  return true;
+}
+
+async function selectSearchCategoryCandidate(task, keyword) {
+  const selected = findConfiguredCategoryCandidate(task, keyword) || findCategoryCandidate(keyword);
+  if (!selected) return false;
+  categoryAttempt.selected = {
+    selector: cssSelectorForDiagnostics(selected),
+    tag: selected.tagName?.toLowerCase() || '',
+    text: categoryActionLabel(selected).slice(0, 240),
+    href: selected.href || ''
+  };
+  const resultRadio = findCategoryResultRadio(selected);
+  if (resultRadio) {
+    categoryAttempt.resultRadio = {
+      selector: cssSelectorForDiagnostics(resultRadio),
+      checked: Boolean(resultRadio.checked)
+    };
+    await trustedClickElement(resultRadio);
+    await sleep(600);
+  } else {
+    await trustedClickElement(selected, keyword);
+    await sleep(600);
+    if (await waitForPublishForm(1500)) return true;
+    const manualSelected = findManualCategoryCandidate(keyword, selected);
+    if (manualSelected) {
+      categoryAttempt.manualSelected = {
+        selector: cssSelectorForDiagnostics(manualSelected),
+        tag: manualSelected.tagName?.toLowerCase() || '',
+        text: categoryActionLabel(manualSelected).slice(0, 240)
+      };
+      await trustedClickElement(manualSelected, keyword);
+      await sleep(600);
+    }
+  }
+  await selectCategoryBrand(task);
+  const continuation = await waitForCategoryContinuation(selected, selected);
+  if (continuation) {
+    categoryAttempt.continuation = {
+      selector: cssSelectorForDiagnostics(continuation),
+      text: categoryActionLabel(continuation),
+      href: continuation.href || ''
+    };
+    await trustedClickElement(continuation);
+    if (await waitForPublishForm(3500)) return true;
+  }
+  const fallbackAction = findCategoryAction(selected, keyword);
+  if (fallbackAction && fallbackAction !== selected && fallbackAction !== continuation) {
+    categoryAttempt.fallback = {
+      selector: cssSelectorForDiagnostics(fallbackAction),
+      text: categoryActionLabel(fallbackAction),
+      href: fallbackAction.href || ''
+    };
+    clickElement(fallbackAction);
+    await sleep(1200);
+    if (await waitForPublishForm(3500)) return true;
+  }
+  return false;
+}
+
+async function selectManualCategoryPath(task, keyword) {
+  if (!(await openManualCategorySelector(task, keyword))) return false;
+  if (!(await selectCategoryBrand(task))) throw fail('未找到淘宝品牌必填控件', 'select-category');
+  const manualContinuation = await waitForCategoryContinuation(null, null);
+  if (!manualContinuation) throw fail('未找到淘宝类目确认按钮', 'select-category');
+  categoryAttempt.continuation = {
+    selector: cssSelectorForDiagnostics(manualContinuation),
+    text: categoryActionLabel(manualContinuation),
+    href: manualContinuation.href || ''
+  };
+  await trustedClickElement(manualContinuation);
+  clickElement(manualContinuation);
+  return waitForPublishForm(5000);
 }
 
 function categoryActionLabel(element) {
@@ -381,6 +818,7 @@ function categoryActionLabel(element) {
 function isCategoryAction(element) {
   if (!element || !visible(element) || disabled(element)) return false;
   if (!['BUTTON', 'A'].includes(element.tagName) && element.getAttribute('role') !== 'button') return false;
+  if (String(element.href || '').includes('copyItem=true')) return false;
   const label = categoryActionLabel(element);
   return label && !label.includes('\u641c\u7d22') && categoryActionWords.some(word => label.includes(word));
 }
@@ -407,15 +845,18 @@ function findCategoryAction(selected, keyword) {
 }
 
 function findCategoryContinuation(selected, excluded) {
-  const candidates = [...document.querySelectorAll('button, [role="button"], a')]
+  const confirmationOnly = label => label.includes('\u4e0b\u4e00\u6b65') || label.includes('\u786e\u8ba4');
+  const candidates = [...document.querySelectorAll('button, [role="button"], a, span, div')]
     .filter(element => element !== excluded)
+    .filter(element => visible(element) && !disabled(element))
+    .filter(element => confirmationOnly(categoryActionLabel(element)))
+    .map(element => element.closest('button, [role="button"], a') || element)
+    .filter((element, index, list) => list.indexOf(element) === index)
     .filter(isCategoryAction)
     .sort((left, right) => {
       const preferred = label => {
         if (label.includes('\u4e0b\u4e00\u6b65') || label.includes('\u786e\u8ba4')) return 0;
-        if (label.includes('\u9009\u62e9')) return 1;
-        if (label.includes('\u53d1\u5e03')) return 2;
-        return 3;
+        return 1;
       };
       return preferred(categoryActionLabel(left)) - preferred(categoryActionLabel(right))
         || categoryActionLabel(left).length - categoryActionLabel(right).length;
@@ -423,11 +864,21 @@ function findCategoryContinuation(selected, excluded) {
   return candidates[0] || null;
 }
 
+async function waitForCategoryContinuation(selected, excluded, timeoutMs = 5000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const continuation = findCategoryContinuation(selected, excluded);
+    if (continuation) return continuation;
+    await sleep(200);
+  }
+  return null;
+}
+
 async function waitForPublishForm(timeoutMs = 15000) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
     if (!isCategoryEntryPage()) return true;
-    if (findField(['标题', '宝贝标题', '商品标题']) || fileInputs().length) return true;
+    if (findField(['标题', '宝贝标题', '商品标题'])) return true;
     await sleep(500);
   }
   return false;
@@ -436,7 +887,7 @@ async function waitForPublishForm(timeoutMs = 15000) {
 async function selectTaobaoCategory(task) {
   const keyword = categoryKeyword(task);
   if (!keyword) throw fail('缺少淘宝类目搜索词', 'select-category');
-  const field = findCategorySearchInput(task);
+  const field = await ensureCategorySearchMode(task);
   if (!field) throw fail('未找到淘宝类目搜索输入框', 'select-category');
   setNativeValue(field, keyword);
   field.focus();
@@ -447,41 +898,12 @@ async function selectTaobaoCategory(task) {
     clickElement(searchButton);
     await sleep(1200);
   }
-  const selected = query(selectors(task).categoryResult) || findCategoryCandidate(keyword);
-  if (!selected) throw fail(`未找到淘宝类目候选：${keyword}`, 'select-category');
-  categoryAttempt = {
-    keyword,
-    selected: {
-      selector: cssSelectorForDiagnostics(selected),
-      tag: selected.tagName?.toLowerCase() || '',
-      text: categoryActionLabel(selected).slice(0, 240),
-      href: selected.href || ''
-    }
-  };
-  clickElement(selected);
-  await sleep(600);
-  if (await waitForPublishForm(1500)) return;
-  const continuation = findCategoryContinuation(selected, selected);
-  if (continuation) {
-    categoryAttempt.continuation = {
-      selector: cssSelectorForDiagnostics(continuation),
-      text: categoryActionLabel(continuation),
-      href: continuation.href || ''
-    };
-    clickElement(continuation);
-    if (await waitForPublishForm(3500)) return;
-  }
-  const fallbackAction = findCategoryAction(selected, keyword);
-  if (fallbackAction && fallbackAction !== selected && fallbackAction !== continuation) {
-    categoryAttempt.fallback = {
-      selector: cssSelectorForDiagnostics(fallbackAction),
-      text: categoryActionLabel(fallbackAction),
-      href: fallbackAction.href || ''
-    };
-    clickElement(fallbackAction);
-    await sleep(1200);
-  }
-  if (!(await waitForPublishForm())) throw fail(`已选择淘宝类目但未进入发布表单：${keyword}`, 'select-category');
+  categoryAttempt = { keyword };
+  categoryAttempt.mode = 'search';
+  if (await selectSearchCategoryCandidate(task, keyword)) return;
+  categoryAttempt.mode = 'manual-fallback';
+  if (await selectManualCategoryPath(task, keyword)) return;
+  throw fail(`已尝试搜索关键词和备用路径，但未进入淘宝发布表单：${keyword}`, 'select-category');
 }
 
 async function preparePublishForm(task) {
@@ -624,6 +1046,237 @@ function findFileInput(task, selectorKey, keywords) {
   return byKeywords(candidates, keywords) || null;
 }
 
+function uploadTriggerTarget(element, section) {
+  let best = element;
+  let node = element;
+  for (let depth = 0; node && node !== section && depth < 6; depth += 1, node = node.parentElement) {
+    const rect = node.getBoundingClientRect?.();
+    if (!rect || rect.width <= 0 || rect.height <= 0 || rect.width > 260 || rect.height > 260) continue;
+    best = node;
+  }
+  return best;
+}
+
+function findUploadTrigger(sectionSelector) {
+  const section = query(sectionSelector);
+  if (!section) return null;
+  const wanted = ['上传图片', '添加图片', '选择图片'];
+  const matches = [...section.querySelectorAll('button, [role="button"], a, label, div, span')]
+    .filter(visible)
+    .filter(element => wanted.includes(text(element.innerText || element.textContent).replace(/\s+/g, '')))
+    .sort((left, right) => {
+      const leftRect = left.getBoundingClientRect();
+      const rightRect = right.getBoundingClientRect();
+      return (leftRect.width * leftRect.height) - (rightRect.width * rightRect.height);
+    });
+  if (matches[0]) return uploadTriggerTarget(matches[0], section);
+  const structural = [...section.querySelectorAll('button, [role="button"], label, div')]
+    .filter(visible)
+    .filter(element => !disabled(element))
+    .map(element => {
+      const rect = element.getBoundingClientRect();
+      const marker = `${element.className || ''} ${element.id || ''} ${element.getAttribute('aria-label') || ''}`.toLocaleLowerCase('zh-CN');
+      const label = text(element.innerText || element.textContent).replace(/\s+/g, '');
+      const uploadHint = /(upload|uploader|image|img|pic|picture|file|media)/i.test(marker);
+      const emptyUploadCard = rect.width >= 44 && rect.width <= 220 && rect.height >= 44 && rect.height <= 220 && label.length <= 30;
+      return { element, rect, score: (uploadHint ? 20 : 0) + (emptyUploadCard ? 12 : 0) };
+    })
+    .filter(item => item.score > 0)
+    .sort((left, right) => right.score - left.score || (left.rect.width * left.rect.height) - (right.rect.width * right.rect.height));
+  return structural[0]?.element || null;
+}
+
+function uploadEvidenceCount(sectionSelector) {
+  const section = query(sectionSelector);
+  if (!section) return 0;
+  return [
+    ...section.querySelectorAll('img, [style*="background-image"], .ant-upload-list-item, .next-upload-list-item')
+  ].filter(visible).length;
+}
+
+async function waitForUploadEvidence(sectionSelector, beforeCount, timeoutMs = 3500) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (uploadEvidenceCount(sectionSelector) > beforeCount) return true;
+    await sleep(250);
+  }
+  return false;
+}
+
+async function waitForNewFileInput(existingInputs = [], timeoutMs = 2500) {
+  const existing = new Set(existingInputs);
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const input = fileInputs().find(item => !existing.has(item));
+    if (input) return input;
+    await sleep(120);
+  }
+  return null;
+}
+
+async function uploadWithDynamicInput(task, trigger, images, group, step) {
+  if (!trigger || !images.length) return false;
+  const before = fileInputs();
+  trigger.scrollIntoView?.({ block: 'center', inline: 'center' });
+  await sleep(120);
+  clickElement(trigger);
+  const input = await waitForNewFileInput(before);
+  if (!(await assignFiles(task, input, images, group, step))) return false;
+  await report(task.id, STATUS.uploading, {
+    detail: { step, files: images.length, uploadMode: 'dynamic-input' }
+  });
+  return true;
+}
+
+async function uploadWithChooserTarget(task, target, images, group, step, mode = '') {
+  if (!target || !images.length) return false;
+  target.scrollIntoView?.({ block: 'center', inline: 'center' });
+  await sleep(200);
+  const point = trustedClickPoint(target);
+  uploadAttempt.lastChooserTarget = {
+    mode,
+    group,
+    step,
+    selector: cssSelectorForDiagnostics(target),
+    text: text(target.innerText || target.textContent || target.getAttribute?.('aria-label') || target.title).slice(0, 120),
+    point
+  };
+  const response = await chrome.runtime.sendMessage({
+    type: 'CAISHEN_TAOBAO_UPLOAD_FILES',
+    taskId: task.id,
+    group,
+    useCachedUploadFiles: true,
+    images: images.map(image => ({
+      name: image.name,
+      _group: image._group,
+      _index: image._index
+    })),
+    x: point.x,
+    y: point.y
+  });
+  if (!response?.ok) throw fail(response?.error || `淘宝${step}上传失败`, step);
+  await report(task.id, STATUS.uploading, {
+    detail: { step, files: response.files || images.length, chooserMode: response.mode || mode }
+  });
+  await sleep(1200);
+  return true;
+}
+
+function findTaobaoPickerUploadTrigger(originalTrigger) {
+  const wanted = ['本地上传', '上传本地图片', '点击上传'];
+  const pageUploadSections = [
+    '#struct-mainImagesGroup',
+    '#struct-threeToFourImages',
+    '#sell-field-threeToFourImages'
+  ].map(selector => query(selector)).filter(Boolean);
+  const originalSection = originalTrigger?.closest?.('#struct-mainImagesGroup, #struct-threeToFourImages, #sell-field-threeToFourImages');
+  return [...document.querySelectorAll('button, [role="button"], a, label, div, span')]
+    .filter(visible)
+    .filter(element => !originalSection || !originalSection.contains(element))
+    .filter(element => !pageUploadSections.some(section => section.contains(element)))
+    .filter(element => {
+      const label = text(element.innerText || element.textContent || element.getAttribute('aria-label') || element.title).replace(/\s+/g, '');
+      return wanted.some(item => label === item || label.includes(item));
+    })
+    .map(element => {
+      const label = text(element.innerText || element.textContent || element.getAttribute('aria-label') || element.title).replace(/\s+/g, '');
+      const target = element.closest('button, [role="button"], label, a') || element;
+      const localUpload = label === '本地上传' || label.includes('上传本地图片');
+      const upload = label === '点击上传';
+      return { element: target, label, score: (localUpload ? 100 : 0) + (upload ? 20 : 0) };
+    })
+    .sort((left, right) => {
+      const leftRect = left.element.getBoundingClientRect();
+      const rightRect = right.element.getBoundingClientRect();
+      return right.score - left.score || (leftRect.width * leftRect.height) - (rightRect.width * rightRect.height);
+    })[0]?.element || null;
+}
+
+function collectTaobaoPickerUploadCandidates(originalTrigger) {
+  const pageUploadSections = [
+    '#struct-mainImagesGroup',
+    '#struct-threeToFourImages',
+    '#sell-field-threeToFourImages'
+  ].map(selector => query(selector)).filter(Boolean);
+  const originalSection = originalTrigger?.closest?.('#struct-mainImagesGroup, #struct-threeToFourImages, #sell-field-threeToFourImages');
+  return [...document.querySelectorAll('button, [role="button"], a, label, div, span')]
+    .filter(visible)
+    .filter(element => !originalSection || !originalSection.contains(element))
+    .filter(element => !pageUploadSections.some(section => section.contains(element)))
+    .map(element => ({
+      selector: cssSelectorForDiagnostics(element),
+      text: text(element.innerText || element.textContent || element.getAttribute('aria-label') || element.title).slice(0, 80)
+    }))
+    .filter(item => item.text && item.text.length <= 80 && /上传|本地|选择图片|图片空间/.test(item.text))
+    .slice(0, 20);
+}
+
+async function waitForTaobaoPickerUploadTrigger(originalTrigger, timeoutMs = 12000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const trigger = findTaobaoPickerUploadTrigger(originalTrigger);
+    if (trigger) return trigger;
+    await sleep(200);
+  }
+  return null;
+}
+
+async function uploadWithTaobaoPicker(task, trigger, images, group, step) {
+  if (!trigger || !images.length) return false;
+  const before = fileInputs();
+  await trustedClickElement(trigger, '上传图片');
+  clickElement(trigger);
+  await sleep(900);
+  const uploadEntry = await waitForTaobaoPickerUploadTrigger(trigger);
+  uploadAttempt.taobaoPicker = {
+    group,
+    step,
+    trigger: cssSelectorForDiagnostics(trigger),
+    uploadEntry: uploadEntry ? {
+      selector: cssSelectorForDiagnostics(uploadEntry),
+      text: text(uploadEntry.innerText || uploadEntry.textContent || uploadEntry.getAttribute?.('aria-label') || uploadEntry.title).slice(0, 120)
+    } : null,
+    candidates: collectTaobaoPickerUploadCandidates(trigger)
+  };
+  if (uploadEntry) {
+    if (await uploadWithChooserTarget(task, uploadEntry, images, group, step, 'taobao-picker')) return true;
+  }
+  const input = await waitForNewFileInput(before, 5000);
+  if (!(await assignFiles(task, input, images, group, step))) return false;
+  await report(task.id, STATUS.uploading, {
+    detail: { step, files: images.length, uploadMode: 'taobao-picker' }
+  });
+  return true;
+}
+
+async function uploadWithDrop(task, trigger, images, group, step, sectionSelector) {
+  if (!trigger || !images.length) return false;
+  const beforeCount = uploadEvidenceCount(sectionSelector);
+  trigger.scrollIntoView?.({ block: 'center', inline: 'center' });
+  await sleep(160);
+  const transfer = new DataTransfer();
+  for (let index = 0; index < images.length; index += 1) {
+    transfer.items.add(await fetchFile(task, images[index], group, index));
+  }
+  for (const type of ['dragenter', 'dragover', 'drop']) {
+    trigger.dispatchEvent(new DragEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      dataTransfer: transfer
+    }));
+    await sleep(type === 'drop' ? 600 : 80);
+  }
+  if (!(await waitForUploadEvidence(sectionSelector, beforeCount))) return false;
+  await report(task.id, STATUS.uploading, {
+    detail: { step, files: transfer.files.length, uploadMode: 'drop' }
+  });
+  return true;
+}
+
+async function uploadWithFileChooser(task, trigger, images, group, step) {
+  return uploadWithChooserTarget(task, trigger, images, group, step, 'direct');
+}
+
 async function revealUploadControls(task) {
   const uploadButton = findButton(['上传图片', '上传', '选择图片', '添加图片', '图片空间'], selectors(task).uploadButton);
   if (uploadButton) {
@@ -644,7 +1297,21 @@ async function uploadImages(task) {
   if (!allImages.length) throw fail('任务包没有可上传图片', 'upload');
 
   await revealUploadControls(task);
-  if (!fileInputs().length) throw fail('未找到淘宝图片上传控件', 'upload');
+  if (!fileInputs().length) {
+    const uploaded = [];
+    const mainTrigger = findUploadTrigger('#struct-mainImagesGroup');
+    if (await uploadWithDrop(task, mainTrigger, taggedMainImages, 'main', 'mainImages', '#struct-mainImagesGroup')
+      || await uploadWithDynamicInput(task, mainTrigger, taggedMainImages, 'main', 'mainImages')
+      || await uploadWithTaobaoPicker(task, mainTrigger, taggedMainImages, 'main', 'mainImages')
+      || await uploadWithFileChooser(task, mainTrigger, taggedMainImages, 'main', 'mainImages')) uploaded.push('main');
+    const ratioTrigger = findUploadTrigger('#sell-field-threeToFourImages');
+    if (await uploadWithDrop(task, ratioTrigger, taggedRatioImages, 'ratio', 'ratioImages', '#sell-field-threeToFourImages')
+      || await uploadWithDynamicInput(task, ratioTrigger, taggedRatioImages, 'ratio', 'ratioImages')
+      || await uploadWithTaobaoPicker(task, ratioTrigger, taggedRatioImages, 'ratio', 'ratioImages')
+      || await uploadWithFileChooser(task, ratioTrigger, taggedRatioImages, 'ratio', 'ratioImages')) uploaded.push('ratio');
+    if (!uploaded.length) throw fail('未找到淘宝图片上传控件', 'upload');
+    return;
+  }
 
   const allSelector = selectors(task).allImages;
   if (allSelector) {
@@ -792,12 +1459,14 @@ function collectDiagnostics(step) {
     visibleFields: collectVisibleFields(),
     visibleSelects: collectVisibleSelects(),
     visibleButtons: buttons,
-    categoryAttempt
+    categoryAttempt,
+    uploadAttempt
   };
 }
 
 async function runPublish(task) {
   if (!task?.id) throw fail('任务包缺少 ID', 'start');
+  uploadAttempt = {};
   await preparePublishForm(task);
   await report(task.id, STATUS.filling, { detail: { step: 'fill' } });
   await fillDefaults(task);
