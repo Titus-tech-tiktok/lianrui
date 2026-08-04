@@ -305,26 +305,26 @@ function normalizeApiBaseUrl(value) {
   if (!text) return '';
   if (text.length > 2000) throw new Error('API 地址过长');
   let parsed;
-  try { parsed = new URL(text); } catch { throw new Error('API 地址格式不正�?); }
-  if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('API 地址只支�?http �?https');
+  try { parsed = new URL(text); } catch { throw new Error('API 地址格式不正确'); }
+  if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('API 地址只支持 http 或 https');
   return text;
 }
 
 function normalizeModelName(value, fallback) {
   const text = String(value || fallback || '').trim();
-  if (!text || text.length > 120 || /[\r\n]/.test(text)) throw new Error('模型名称格式不正�?);
+  if (!text || text.length > 120 || /[\r\n]/.test(text)) throw new Error('模型名称格式不正确');
   return text;
 }
 
 function normalizeResponseFormat(value, fallback = 'url') {
   const text = String(value || fallback || 'url').trim();
-  if (!['b64_json', 'url'].includes(text)) throw new Error('图片响应格式不支�?);
+  if (!['b64_json', 'url'].includes(text)) throw new Error('图片响应格式不支持');
   return text;
 }
 
 function normalizeRequestTimeoutSeconds(value, fallback = 300) {
   const number = Number(value ?? fallback);
-  if (!Number.isFinite(number) || number < 1 || number > 600) throw new Error('请求超时必须�?1 �?600 秒之�?);
+  if (!Number.isFinite(number) || number < 1 || number > 600) throw new Error('请求超时必须在 1 到 600 秒之间');
   return Math.round(number);
 }
 
@@ -364,7 +364,7 @@ function normalizeAnalysisWireApi(value, fallback = 'chat_completions') {
   const text = String(value || fallback || 'chat_completions').trim().toLowerCase().replaceAll('-', '_');
   if (text === 'responses') return 'responses';
   if (text === 'chat' || text === 'chat_completions') return 'chat_completions';
-  throw new Error('文字接口协议只支�?Responses API �?Chat Completions');
+  throw new Error('文字接口协议只支持 Responses API 或 Chat Completions');
 }
 
 function apiBaseRoot(baseUrl) {
@@ -385,8 +385,8 @@ function apiEndpoint(baseUrl, pathName) {
 function maskedApiKey(value) {
   const key = String(value || '');
   if (!key) return '';
-  if (key.length <= 8) return `${key.slice(0, 2)}•••�?{key.slice(-2)}`;
-  return `${key.slice(0, 4)}•••••�?{key.slice(-4)}`;
+  if (key.length <= 8) return `${key.slice(0, 2)}••••${key.slice(-2)}`;
+  return `${key.slice(0, 4)}••••••${key.slice(-4)}`;
 }
 
 function normalizeModelPackageId(value, fallback) {
@@ -423,24 +423,24 @@ function normalizeModelPackageChoice(value, choices, fallback) {
 
 const DEFAULT_PACKAGE_PROMPTS = Object.freeze({
   basicAnalysis: [
-    '套餐策略：低价基础能力。只做必要判断，不做复杂商业增强�?,
-    '分析时只保留能决定是否生成、是否复制、是否人工确认的关键信息�?,
-    '遇到可执行任务时保持保守，不扩展高级场景、不补充复杂卖点�?
+    '套餐策略：低价基础能力。只做必要判断，不做复杂商业增强。',
+    '分析时只保留能决定是否生成、是否复制、是否人工确认的关键信息。',
+    '遇到可执行任务时保持保守，不扩展高级场景、不补充复杂卖点。'
   ].join('\n'),
   basicImage: [
-    '套餐策略：低价基础出图，效果目标约为旗舰版�?30%�?,
-    '只完成核心换�?迁移任务，不做高级商业质感、复杂光影、材质强化、精修氛围和额外细节补全�?,
-    '画面保持可用、干净、结构正确；不要追求旗舰版级别的高级棚拍、电商大片、精细反光和复杂后期�?,
-    '优先快速稳定完成，不进行额外创意发挥�?
+    '套餐策略：低价基础出图，效果目标约为旗舰版的 30%。',
+    '只完成核心换图/迁移任务，不做高级商业质感、复杂光影、材质强化、精修氛围和额外细节补全。',
+    '画面保持可用、干净、结构正确；不要追求旗舰版级别的高级棚拍、电商大片、精细反光和复杂后期。',
+    '优先快速稳定完成，不进行额外创意发挥。'
   ].join('\n'),
   standardAnalysis: [
-    '套餐策略：标准低价能力。只做基础理解，不做旗舰版深度优化�?,
-    '分析时输出必�?JSON 字段，少做延展判断和商业包装�?
+    '套餐策略：标准低价能力。只做基础理解，不做旗舰版深度优化。',
+    '分析时输出必要 JSON 字段，少做延展判断和商业包装。'
   ].join('\n'),
   standardImage: [
-    '套餐策略：标准版，效果目标约为旗舰版�?30%�?,
-    '只做基础画面整理和必要生成，不做高级商业海报质感、复杂光影、材质精修、精细构图增强和额外卖点补全�?,
-    '保持主体结构、印花关系和页面可用性，整体按普通电商可用图处理�?
+    '套餐策略：标准版，效果目标约为旗舰版的 30%。',
+    '只做基础画面整理和必要生成，不做高级商业海报质感、复杂光影、材质精修、精细构图增强和额外卖点补全。',
+    '保持主体结构、印花关系和页面可用性，整体按普通电商可用图处理。'
   ].join('\n'),
   flagshipAnalysis: '',
   flagshipImage: ''
@@ -458,7 +458,7 @@ function normalizeModelPackagesLegacy(value, currentSettings = {}) {
     return [{
       id: 'flagship',
       name: '默认模型',
-      description: '沿用系统原本的生图模�?,
+      description: '沿用系统原本的生图模型',
       enabled: true,
       default: true,
       recommended: true,
@@ -539,7 +539,7 @@ function normalizeModelPackagesLegacy(value, currentSettings = {}) {
 const FIXED_MODEL_PACKAGE_PRESETS = Object.freeze([
   {
     id: 'flagship',
-    name: '旗舰�?,
+    name: '旗舰版',
     description: '主推套餐，使用全局旗舰配置',
     enabled: true,
     default: true,
@@ -559,7 +559,7 @@ const FIXED_MODEL_PACKAGE_PRESETS = Object.freeze([
   {
     id: 'fast',
     name: '快速版',
-    description: '低价留客，效果质量与标准版一�?,
+    description: '低价留客，效果质量与标准版一致',
     enabled: true,
     default: false,
     recommended: false,
@@ -576,8 +576,8 @@ const FIXED_MODEL_PACKAGE_PRESETS = Object.freeze([
   },
   {
     id: 'standard',
-    name: '标准�?,
-    description: '效果质量约为旗舰�?0%',
+    name: '标准版',
+    description: '效果质量约为旗舰版30%',
     enabled: true,
     default: false,
     recommended: false,
@@ -753,8 +753,8 @@ async function saveApiSettings(payload = {}) {
       ...concurrency,
       modelPackages: normalizeModelPackages(payload.modelPackages, current)
     };
-    if (!next.baseUrl) throw new Error('请填�?API 地址');
-    if (!next.imageKey && !next.analysisKey) throw new Error('请至少填写一�?API 密钥');
+    if (!next.baseUrl) throw new Error('请填写 API 地址');
+    if (!next.imageKey && !next.analysisKey) throw new Error('请至少填写一个 API 密钥');
     await fsp.mkdir(path.dirname(apiSettingsFile()), { recursive: true });
     await fsp.writeFile(apiSettingsFile(), JSON.stringify(next, null, 2), { encoding: 'utf8', mode: 0o600 });
     runtimeApiSettings = next;
@@ -797,7 +797,7 @@ async function saveSelectedModelPackage(selectedModelPackageId) {
   const settings = await readPrivateApiSettings();
   const packages = normalizeModelPackages(settings.modelPackages, settings);
   const selected = String(selectedModelPackageId || '').trim();
-  if (!packages.some(item => item.enabled && item.id === selected)) throw new Error('模型套餐不存在或未启�?);
+  if (!packages.some(item => item.enabled && item.id === selected)) throw new Error('模型套餐不存在或未启用');
   const next = { selectedModelPackageId: selected, updatedAt: new Date().toISOString() };
   await fsp.mkdir(path.dirname(modelPackageSelectionFile()), { recursive: true });
   await fsp.writeFile(modelPackageSelectionFile(), JSON.stringify(next, null, 2), { encoding: 'utf8', mode: 0o600 });
@@ -843,7 +843,7 @@ async function activeApiConfig(channel = 'image') {
 function appendPackagePrompt(prompt, packagePrompt) {
   const extra = String(packagePrompt || '').trim();
   if (!extra) return String(prompt || '');
-  return `详情页${String(prompt || '').trim()}\n\n${extra}`.trim();
+  return `${String(prompt || '').trim()}\n\n${extra}`.trim();
 }
 
 function packagePromptFor(api, kind) {
@@ -883,13 +883,13 @@ function isComplexTemplatePrintAnalysis(analysis, job = {}) {
     '标题',
     '标签',
     '卖点',
-    '开�?,
+    '开门',
     '柜门',
     '内部',
     '储物',
     '层板',
     '多扇',
-    '多面�?,
+    '多面板',
     '道具'
   ];
   return signals.some(signal => text.includes(signal));
@@ -936,12 +936,12 @@ function isDetailSliceTemplate(job = {}, analysis = '') {
     'sku',
     '参数',
     '图鉴',
-    '多宫�?,
+    '多宫格',
     '多图',
     '拼图',
     '切片',
     '裁切',
-    '局�?,
+    '局部',
     '抽屉',
     'drawer',
     'multi-grid',
@@ -1030,9 +1030,9 @@ async function testAnalysisApi(payload = {}) {
     requestTimeoutSeconds: draft.requestTimeoutSeconds
   });
   if (!modelResult.models.some(model => model.id === draft.analysisModel)) {
-    const available = modelResult.models.map(model => model.id).join('�?) || '�?;
+    const available = modelResult.models.map(model => model.id).join('、') || '无';
     draft.analysisModel = modelResult.models.length ? modelResult.models[0].id : '';
-    if (!draft.analysisModel) throw new Error(`文字分析密钥不支持模�?${normalizeModelName(payload.analysisModel || current.analysisModel, '')}；可用模型：${available}`);
+    if (!draft.analysisModel) throw new Error(`文字分析密钥不支持模型 ${normalizeModelName(payload.analysisModel || current.analysisModel, '')}；可用模型：${available}`);
   }
   const startedAt = Date.now();
   const body = await analysisApiJson({
@@ -1040,7 +1040,7 @@ async function testAnalysisApi(payload = {}) {
     analysisKey: draft.key
   }, {
     model: draft.analysisModel,
-    messages: [{ role: 'user', content: '仅回�?OK' }],
+    messages: [{ role: 'user', content: '仅回复 OK' }],
     stream: false,
     max_tokens: 8
   }, Math.min(draft.requestTimeoutSeconds * 1000, 60000));
@@ -1262,15 +1262,15 @@ function publicTitleLibrary(library) {
 
 async function importTitleLibrary(fileValue) {
   const file = path.resolve(String(fileValue || ''));
-  if (!fileValue || !fs.existsSync(file)) throw new Error('请选择 Excel �?CSV 关键词表');
+  if (!fileValue || !fs.existsSync(file)) throw new Error('请选择 Excel 或 CSV 关键词表');
   const workbook = path.extname(file).toLowerCase() === '.csv'
     ? XLSX.read(await fsp.readFile(file, 'utf8'), { type: 'string' })
     : XLSX.readFile(file);
   const sheetName = workbook.SheetNames[0];
   const worksheet = sheetName ? workbook.Sheets[sheetName] : null;
-  if (!worksheet) throw new Error('Excel 没有工作�?);
+  if (!worksheet) throw new Error('Excel 没有工作表');
   const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false, defval: '' });
-  if (!rows.length) throw new Error('Excel 表为�?);
+  if (!rows.length) throw new Error('Excel 表为空');
   const imported = parseTitleKeywordRows(rows, {
     fileName: file,
     sheetName,
@@ -1298,7 +1298,7 @@ function isServablePath(file) {
 
 function fileToken(file) {
   const resolved = path.resolve(String(file || ''));
-  if (!isServablePath(resolved)) throw new Error('文件不属于当前工作区或成品输出目�?);
+  if (!isServablePath(resolved)) throw new Error('文件不属于当前工作区或成品输出目录');
   const payload = Buffer.from(resolved).toString('base64url');
   const signature = crypto.createHmac('sha256', FILE_TOKEN_SECRET).update(payload).digest('base64url');
   return `${payload}.${signature}`;
@@ -1352,7 +1352,7 @@ async function scanImages(root, query = '', limit = 10000) {
         files.push({
           path: fullPath,
           name: entry.name,
-          folder: path.relative(root, directory) || '根目�?,
+          folder: path.relative(root, directory) || '根目录',
           url: `${imageUrl(fullPath)}?v=${version}`,
           thumbnailUrl: thumbnailUrl(fullPath, 480, version),
           previewUrl: thumbnailUrl(fullPath, 1200, version)
@@ -1824,11 +1824,11 @@ function randomDelay(minimumMs, maximumMs, signal = null) {
   const minimum = Math.max(0, Math.trunc(minimumMs));
   const maximum = Math.max(minimum, Math.trunc(maximumMs));
   return new Promise((resolve, reject) => {
-    if (signal?.aborted) return reject(new Error('任务已停�?));
+    if (signal?.aborted) return reject(new Error('任务已停止'));
     const timer = setTimeout(resolve, minimum + Math.floor(Math.random() * (maximum - minimum + 1)));
     signal?.addEventListener?.('abort', () => {
       clearTimeout(timer);
-      reject(new Error('任务已停�?));
+      reject(new Error('任务已停止'));
     }, { once: true });
   });
 }
@@ -2083,11 +2083,11 @@ async function writeTaskSource(folder, task, generationMode) {
     taskNumber: Number(task.taskNumber || 0),
     note: task.note || '',
     createdAt: new Date().toISOString(),
-    status: '待人工筛�?
+    status: '待人工筛图'
   };
   const paths = metadataPaths(folder);
   await Promise.all([
-    writeJsonFile(paths.macSource, toMacSourceMetadata(source, { status: '待人工筛�?, createdAt: source.createdAt })),
+    writeJsonFile(paths.macSource, toMacSourceMetadata(source, { status: '待人工筛图', createdAt: source.createdAt })),
     writeJsonFile(paths.wpfSource, toWpfSourceMetadata(source))
   ]);
 }
@@ -2113,13 +2113,11 @@ function resolveInside(root, relativePath) {
 const STRUCTURED_TEMPLATE_SECTIONS = Object.freeze({
   main: new Set(['主图', '1-1主图', '1:1主图', '1_1主图', '1/1主图']),
   ratio: new Set(['3-4主图', '3:4主图', '3_4主图', '3/4主图']),
-  detail: new Set(['详情�?])
+  detail: new Set(['详情页'])
 });
-const DETAIL_FULL_FILE_NAMES = new Set(['detail-full', 'detail_full', '完整详情�?, '详情�?]);
-const DETAIL_FULL_SLICE_HEIGHT = Number(process.env.CAISHEN_DETAIL_FULL_SLICE_HEIGHT || 0);
-const DETAIL_FULL_SLICE_HEIGHT_MIN = 700;
-const DETAIL_FULL_SLICE_RATIO = 1.5;
-const DETAIL_FULL_SLICE_OVERLAP = Math.max(0, Number(process.env.CAISHEN_DETAIL_FULL_SLICE_OVERLAP || 0));
+const DETAIL_FULL_FILE_NAMES = new Set(['detail-full', 'detail_full', '完整详情页', '详情页']);
+const DETAIL_FULL_SLICE_HEIGHT = Math.max(800, Number(process.env.CAISHEN_DETAIL_FULL_SLICE_HEIGHT || 1600));
+const DETAIL_FULL_SLICE_OVERLAP = Math.max(0, Number(process.env.CAISHEN_DETAIL_FULL_SLICE_OVERLAP || 128));
 const TEMPLATE_INTERNAL_DIRS = new Set(['.caishen-template-cache', '.caishen-meta']);
 
 function normalizeTemplateRelativePath(value) {
@@ -2155,16 +2153,7 @@ function detailFullRelativePath(relativePath) {
 }
 
 function detailSliceRelativePath(index) {
-  return '\u8be6\u60c5\u9875' + String(index + 1).padStart(2, '0') + '.jpg';
-}
-
-function resolveDetailFullSliceHeight(width) {
-  const explicitHeight = DETAIL_FULL_SLICE_HEIGHT;
-  if (Number.isFinite(explicitHeight) && explicitHeight > 0) {
-    return Math.max(DETAIL_FULL_SLICE_HEIGHT_MIN, Math.floor(explicitHeight));
-  }
-  const safeWidth = Math.max(1, Math.floor(Number(width) || 790));
-  return Math.max(DETAIL_FULL_SLICE_HEIGHT_MIN, Math.round(safeWidth * DETAIL_FULL_SLICE_RATIO));
+  return `详情页/${String(index + 1).padStart(2, '0')}.jpg`;
 }
 
 async function ensureDetailFullSliceSpecs(templateRoot, fullPath) {
@@ -2173,9 +2162,8 @@ async function ensureDetailFullSliceSpecs(templateRoot, fullPath) {
   const metadata = await sharp(fullPath).metadata();
   const width = Math.max(1, Number(metadata.width) || 1);
   const height = Math.max(1, Number(metadata.height) || 1);
-  const sliceHeight = resolveDetailFullSliceHeight(width);
-  const sliceCount = Math.max(1, Math.ceil(height / sliceHeight));
-  const effectiveOverlap = Math.max(0, Math.min(Math.floor(DETAIL_FULL_SLICE_OVERLAP), Math.max(0, Math.floor(sliceHeight / 2) - 1)));
+  const sliceCount = Math.max(1, Math.ceil(height / DETAIL_FULL_SLICE_HEIGHT));
+  const effectiveOverlap = Math.max(0, Math.min(Math.floor(DETAIL_FULL_SLICE_OVERLAP), Math.max(0, Math.floor(DETAIL_FULL_SLICE_HEIGHT / 2) - 1)));
   const cacheKey = crypto.createHash('sha1').update(sourceRelativePath).digest('hex').slice(0, 16);
   const sliceRoot = path.join(templateRoot, '.caishen-meta', 'detail-full-slices', cacheKey);
   const manifestFile = path.join(sliceRoot, 'manifest.json');
@@ -2185,7 +2173,7 @@ async function ensureDetailFullSliceSpecs(templateRoot, fullPath) {
     mtimeMs: Math.trunc(sourceStat.mtimeMs),
     width,
     height,
-    sliceHeight,
+    sliceHeight: DETAIL_FULL_SLICE_HEIGHT,
     sliceOverlap: effectiveOverlap,
     sliceCount
   };
@@ -2197,9 +2185,9 @@ async function ensureDetailFullSliceSpecs(templateRoot, fullPath) {
     await fsp.rm(sliceRoot, { recursive: true, force: true });
     await fsp.mkdir(sliceRoot, { recursive: true });
     for (let index = 0; index < sliceCount; index += 1) {
-      const baseTop = index * sliceHeight;
+      const baseTop = index * DETAIL_FULL_SLICE_HEIGHT;
       const top = Math.max(0, index === 0 ? baseTop : baseTop - effectiveOverlap);
-      const nextBaseTop = Math.min(height, (index + 1) * sliceHeight);
+      const nextBaseTop = Math.min(height, (index + 1) * DETAIL_FULL_SLICE_HEIGHT);
       const nextTop = index < sliceCount - 1 ? nextBaseTop + effectiveOverlap : nextBaseTop;
       const sliceHeight = Math.max(1, Math.min(height, nextTop) - top);
       await sharp(fullPath)
@@ -2218,7 +2206,7 @@ async function ensureDetailFullSliceSpecs(templateRoot, fullPath) {
       templatePath,
       relativePath: detailSliceRelativePath(index),
       sourceRelativePath,
-      sectionName: '详情�?,
+      sectionName: '详情页',
       trimPixels: {
         top: trimTopPx,
         bottom: trimBottomPx
@@ -2384,9 +2372,9 @@ async function planTemplateOutputJobs(templateFolderPath, selectedPaths = null) 
   }
 
   if (unresolved.length) {
-    throw new Error(`仍有图片需要人工确认：${unresolved.join('�?)}`);
+    throw new Error(`仍有图片需要人工确认：${unresolved.join('、')}`);
   }
-  if (!matchedSelection) throw new Error('选中的套图图片不存在或已被移�?);
+  if (!matchedSelection) throw new Error('选中的套图图片不存在或已被移除');
   if (!planned.length) throw new Error('没有可输出的套图图片');
   return {
     jobs: planned,
@@ -2432,7 +2420,7 @@ async function collectTemplateItems(templateRoot) {
       templatePath: job.templatePath,
       path: job.templatePath,
       name: path.basename(job.relativePath),
-      folder: displayFolder && displayFolder !== '.' ? displayFolder : '根目�?,
+      folder: displayFolder && displayFolder !== '.' ? displayFolder : '根目录',
       templateUrl: `${imageUrl(job.templatePath)}?v=${version}`,
       url: `${imageUrl(job.templatePath)}?v=${version}`,
       thumbnailUrl: thumbnailUrl(job.templatePath, 480, version),
@@ -2526,10 +2514,10 @@ async function deleteTemplateFolder(folderValue) {
   const relative = path.relative(libraryRoot, folder);
   const segments = relative.split(path.sep).filter(Boolean);
   if (!relative || !isSameOrChildPath(libraryRoot, folder) || segments.length !== 2) {
-    throw new Error('只能删除已导入的套图文件�?);
+    throw new Error('只能删除已导入的套图文件夹');
   }
   const stat = await fsp.lstat(folder).catch(() => null);
-  if (!stat?.isDirectory()) throw new Error('套图文件夹不存在或已被删�?);
+  if (!stat?.isDirectory()) throw new Error('套图文件夹不存在或已被删除');
   const summary = await templateFolderImageSummary(folder);
   await fsp.rm(folder, { recursive: true, force: true });
   const collectionRoot = path.dirname(folder);
@@ -2576,7 +2564,7 @@ async function getTemplatePreparation(folderValue) {
 async function waitForTemplateWarmup(folder, timeoutMs = 10 * 60 * 1000) {
   const deadline = Date.now() + timeoutMs;
   while (warmingTemplateFolders.has(folder) && Date.now() < deadline) await randomDelay(400, 400);
-  if (warmingTemplateFolders.has(folder)) throw new Error('套图自动识别仍在执行，请稍后重试�?);
+  if (warmingTemplateFolders.has(folder)) throw new Error('套图自动识别仍在执行，请稍后重试。');
 }
 
 async function prepareTemplateFolder(folderValue) {
@@ -2720,8 +2708,8 @@ async function analyzeTemplateJob(job, options = {}) {
     const visualFallback = await createVisualFallbackTemplateAnalysis(job, 'AI returned no readable template analysis; local visual panel detection was used.');
     const fallback = visualFallback || createManualTemplateAnalysis({
       action: 'manual_check',
-      reason: 'AI 接口已返回但没有可读取的分析文本，请人工确认�?,
-      replaceArea: '不确�?,
+      reason: 'AI 接口已返回但没有可读取的分析文本，请人工确认。',
+      replaceArea: '不确定',
       forbiddenArea: '背景、文字、墙面、地面、柜脚、把手、抽屉内侧、柜门内侧、包装、留白等非可印花面板区域',
       regions: []
     });
@@ -2790,16 +2778,16 @@ async function analyzeTemplateJobWithRetry(job, retries = 3, onProgress = async 
 
 async function analyzeTemplateItemWithReference(payload = {}, options = {}) {
   const folder = String(payload.folder || '');
-  if (!folder || !fs.existsSync(folder)) throw new Error('套图文件夹不存在�?);
+  if (!folder || !fs.existsSync(folder)) throw new Error('套图文件夹不存在。');
   const relativePath = String(payload.relativePath || '');
   const referenceRelativePath = String(payload.referenceRelativePath || '');
   const forceReplacePrint = payload.forceReplacePrint === true;
-  if (!relativePath || (!referenceRelativePath && !forceReplacePrint)) throw new Error('缺少目标图或参考图�?);
+  if (!relativePath || (!referenceRelativePath && !forceReplacePrint)) throw new Error('缺少目标图或参考图。');
   const byKey = new Map((await buildTemplateJobs(folder)).map(job => [templateRelativeKey(job.relativePath), job]));
   const job = byKey.get(templateRelativeKey(relativePath));
   const referenceJob = referenceRelativePath ? byKey.get(templateRelativeKey(referenceRelativePath)) : null;
-  if (!job) throw new Error('没有找到目标套图图片�?);
-  if (referenceRelativePath && !referenceJob) throw new Error('没有找到参考套图图片�?);
+  if (!job) throw new Error('没有找到目标套图图片。');
+  if (referenceRelativePath && !referenceJob) throw new Error('没有找到参考套图图片。');
   const referenceDetails = referenceJob ? await templateAnalysisForJob(referenceJob) : null;
   const report = typeof options.reportProgress === 'function' ? options.reportProgress : async () => {};
   await report({ phase: 'queued', current: 0, total: 1, failed: 0, concurrency: 1, message: '参考重析已排队' });
@@ -2836,16 +2824,16 @@ async function analyzeTemplateItems(payload = {}, options = {}) {
   const folder = String(payload.folder || '');
   if (!folder || !fs.existsSync(folder)) throw new Error('套图文件夹不存在');
   const requested = new Set((payload.relativePaths || []).map(value => String(value).replaceAll('\\', '/').toLocaleLowerCase('zh-CN')));
-  if (!requested.size) throw new Error('请先选择需�?AI 分析的图�?);
+  if (!requested.size) throw new Error('请先选择需要 AI 分析的图片');
   const jobs = (await buildTemplateJobs(folder)).filter(job => requested.has(job.relativePath.replaceAll('\\', '/').toLocaleLowerCase('zh-CN')));
   if (!jobs.length) throw new Error('没有找到需要分析的套图图片');
   const concurrency = await activeApiConcurrencyLimit(jobs.length);
   let completed = 0;
   let failed = 0;
   const report = typeof options.reportProgress === 'function' ? options.reportProgress : async () => {};
-  await report({ phase: 'queued', current: 0, total: jobs.length, failed: 0, concurrency, message: `已排�?${jobs.length} 张，并发 ${concurrency}` });
+  await report({ phase: 'queued', current: 0, total: jobs.length, failed: 0, concurrency, message: `已排队 ${jobs.length} 张，并发 ${concurrency}` });
   const results = await runWithConcurrency(jobs, concurrency, job => analyzeTemplateJobWithRetry(job, 3, async progress => {
-    await report({ ...progress, current: completed, total: jobs.length, failed, concurrency, message: progress.phase === 'retrying' ? `分析失败，正在自动重试：${job.relativePath}` : `正在分析�?{job.relativePath}` });
+    await report({ ...progress, current: completed, total: jobs.length, failed, concurrency, message: progress.phase === 'retrying' ? `分析失败，正在自动重试：${job.relativePath}` : `正在分析：${job.relativePath}` });
   }).then(async result => {
     completed += 1;
     if (!result.ok) failed += 1;
@@ -2857,7 +2845,7 @@ async function analyzeTemplateItems(payload = {}, options = {}) {
       concurrency,
       completedRelativePath: job.relativePath,
       completedStatus: result.ok ? 'success' : 'failed',
-      message: result.ok ? `已完�?${completed}/${jobs.length}` : `分析失败�?{job.relativePath}`
+      message: result.ok ? `已完成 ${completed}/${jobs.length}` : `分析失败：${job.relativePath}`
     });
     return result;
   }));
@@ -2873,7 +2861,7 @@ async function analyzeTemplateItems(payload = {}, options = {}) {
 }
 
 async function analyzeTemplateFolder(folder) {
-  if (warmingTemplateFolders.has(folder)) throw new Error('当前套图正在后台分析，请稍后重新打开配置窗口�?);
+  if (warmingTemplateFolders.has(folder)) throw new Error('当前套图正在后台分析，请稍后重新打开配置窗口。');
   const jobs = await buildTemplateJobs(folder);
   const results = await runWithConcurrency(jobs, await activeApiConcurrencyLimit(jobs.length), analyzeTemplateJob);
   const failed = results.filter(result => !result.ok);
@@ -2961,7 +2949,7 @@ async function saveTemplateProductProfile(payload) {
   const folder = String(payload?.folder || '');
   if (!folder || !fs.existsSync(folder)) throw new Error('套图文件夹不存在');
   const profile = normalizeProductProfile(payload?.profile || {});
-  if (!profile.dimensions && !profile.material) throw new Error('至少填写尺寸或材�?);
+  if (!profile.dimensions && !profile.material) throw new Error('至少填写尺寸或材质');
   await writeProductProfileFile(getTemplateProductProfileFile(folder), profile);
   return profile;
 }
@@ -2979,11 +2967,11 @@ function containsAny(value, candidates) {
 function resolveActionWithProductProfile(action, templateAnalysis, productProfile, job) {
   const pathText = String(job?.relativePath || '');
   const templateText = `${pathText}\n${String(templateAnalysis || '')}`;
-  const isPureInfoPage = containsAny(templateText, ['包装', '运输', '物流', '安装', '售后', '买家须知', '纯文�?, '服务承诺', '注意事项', '装饰横幅', '品牌底图']);
+  const isPureInfoPage = containsAny(templateText, ['包装', '运输', '物流', '安装', '售后', '买家须知', '纯文字', '服务承诺', '注意事项', '装饰横幅', '品牌底图']);
   if (action === 'copy_template') {
     if (/"needs_master_product"\s*:\s*false/i.test(String(templateAnalysis || ''))) return 'copy_template';
     if (containsAny(pathText, ['sku', '尺寸', '参数', '规格'])) return 'generate_dimension_sheet';
-    if (containsAny(pathText, ['细节', '局�?, '特写', '边角', '台面', '门板', '纹理', '五金', '厚度', '工艺'])) return 'generate_detail_showcase';
+    if (containsAny(pathText, ['细节', '局部', '特写', '边角', '台面', '门板', '纹理', '五金', '厚度', '工艺'])) return 'generate_detail_showcase';
     if (containsAny(pathText, ['材质', '板材', '色卡'])) return 'generate_material_sheet';
     if (!isPureInfoPage) return 'generate_product_scene';
   }
@@ -3091,11 +3079,11 @@ async function auditGeneratedTemplate(masterImage, job, templateAnalysis) {
     rawText = String(response?.choices?.[0]?.message?.content || '').trim();
     first = parseTemplateAuditResult(rawText);
   } catch (error) {
-    first = { passed: true, reason: '审核接口不可用，保留生成结果�?, retryInstruction: '', rawText: JSON.stringify({ passed: true, reason: `审核接口不可用，保留生成结果�?{error.message}`, retry_instruction: '' }) };
+    first = { passed: true, reason: '审核接口不可用，保留生成结果。', retryInstruction: '', rawText: JSON.stringify({ passed: true, reason: `审核接口不可用，保留生成结果：${error.message}`, retry_instruction: '' }) };
   }
   let final = first;
   if (isInvalidAuditRequestingProductReplacement(first)) {
-    final = { passed: true, reason: '审核误判：审核意见要求替换母版商品，已按母版唯一标准保留结果�?, retryInstruction: '', rawText: JSON.stringify({ passed: true, reason: '审核误判：审核意见要求替换母版商品，已按母版唯一标准保留结果�?, retry_instruction: '' }) };
+    final = { passed: true, reason: '审核误判：审核意见要求替换母版商品，已按母版唯一标准保留结果。', retryInstruction: '', rawText: JSON.stringify({ passed: true, reason: '审核误判：审核意见要求替换母版商品，已按母版唯一标准保留结果。', retry_instruction: '' }) };
   } else if (!first.passed) {
     try {
       const response = await analysisApiJson(api,
@@ -3115,7 +3103,7 @@ async function auditGeneratedTemplate(masterImage, job, templateAnalysis) {
       const content = String(response?.choices?.[0]?.message?.content || '').trim();
       const recheck = parseTemplateAuditResult(content);
       final = isInvalidAuditRequestingProductReplacement(recheck)
-        ? { passed: true, reason: '复核通过：审核意见要求替换母版商品，已按母版唯一标准保留结果�?, retryInstruction: '', rawText: content }
+        ? { passed: true, reason: '复核通过：审核意见要求替换母版商品，已按母版唯一标准保留结果。', retryInstruction: '', rawText: content }
         : { ...recheck, rawText: content };
     } catch {
       final = first;
@@ -3140,22 +3128,22 @@ async function generateTemplateJob(job, source, config, options = {}) {
   const paths = metadataPaths(job.outputRoot, job.relativePath);
   await fsp.rm(paths.manualReview, { force: true }).catch(() => {});
   if (action === 'manual_check') {
-    await writeTemplateAudit(job, { passed: false, reason: '模板分析需要人工确认，未自动生成�?, retry_instruction: '请人工确认可替换印花区域后再单独重生成此图�?, action });
+    await writeTemplateAudit(job, { passed: false, reason: '模板分析需要人工确认，未自动生成。', retry_instruction: '请人工确认可替换印花区域后再单独重生成此图。', action });
     await fsp.mkdir(path.dirname(paths.manualReview), { recursive: true });
     await fsp.writeFile(paths.manualReview, analysis, 'utf8');
     throw new Error(`需要人工确认：${job.relativePath}`);
   }
   if (action === 'exclude') {
-    await writeTemplateAudit(job, { passed: true, reason: '已由运营明确排除，不进入成品输出�?, retry_instruction: '', action });
+    await writeTemplateAudit(job, { passed: true, reason: '已由运营明确排除，不进入成品输出。', retry_instruction: '', action });
     return { action, outputPath: '' };
   }
   if (action === 'copy_original') {
     await replaceOutputFile(job.outputPath, nextPath => fsp.copyFile(job.templatePath, nextPath));
-    await writeTemplateAudit(job, { passed: true, reason: '保留原图：逐字节复制套图源文件，不调用生图 API�?, retry_instruction: '', action });
+    await writeTemplateAudit(job, { passed: true, reason: '保留原图：逐字节复制套图源文件，不调用生图 API。', retry_instruction: '', action });
     return { action, outputPath: job.outputPath };
   }
   if (action === 'skip_copy') {
-    await writeTemplateAudit(job, { passed: true, reason: '已按模板配置跳过，不自动生成�?, retry_instruction: '', action });
+    await writeTemplateAudit(job, { passed: true, reason: '已按模板配置跳过，不自动生成。', retry_instruction: '', action });
     return { action, outputPath: '' };
   }
   if (action === 'copy_template') {
@@ -3176,8 +3164,8 @@ async function generateTemplateJob(job, source, config, options = {}) {
       templateAnalysis: analysis,
       templatePath: job.relativePath
     });
-    prompt += '\n\n本次输入图顺序：第一张是当前套图模板图，第二张是已生成的母版产品图，第三张是原始印花图。母版产品图是产品外观、柜门图案、颜色和印花效果的标准；当前套图模板图只提供本页构图、场景、文字、尺寸标注和透视关系；原始印花图只用于核对图案，不允许重新设计、拼贴或替换成相似风格。最终结果必须把母版产品迁移到当前模板场景中，并保持当前模板的文字和页面布局�?;
-    prompt += '\n\n硬性质量要求：印花只能落在柜门或抽屉的正面可替换面板内部，必须完整保留家具黑色外框、黑色门�?分隔线、黑色侧板、黑色台面、黑色底边、柜脚、把手、阴影和所有场景物品。不得让印花跨过或覆盖任何黑色边框黑边，不得把黑框染成印花，不得延伸到地面、墙面、台面、咖啡机、杯子、人物或其他道具�?;
+    prompt += '\n\n本次输入图顺序：第一张是当前套图模板图，第二张是已生成的母版产品图，第三张是原始印花图。母版产品图是产品外观、柜门图案、颜色和印花效果的标准；当前套图模板图只提供本页构图、场景、文字、尺寸标注和透视关系；原始印花图只用于核对图案，不允许重新设计、拼贴或替换成相似风格。最终结果必须把母版产品迁移到当前模板场景中，并保持当前模板的文字和页面布局。';
+    prompt += '\n\n硬性质量要求：印花只能落在柜门或抽屉的正面可替换面板内部，必须完整保留家具黑色外框、黑色门缝/分隔线、黑色侧板、黑色台面、黑色底边、柜脚、把手、阴影和所有场景物品。不得让印花跨过或覆盖任何黑色边框黑边，不得把黑框染成印花，不得延伸到地面、墙面、台面、咖啡机、杯子、人物或其他道具。';
     if (isComplexTemplatePrintAnalysis(analysis, job)) {
       prompt += `\n\n${flagshipComplexTemplatePrintPrompt()}`;
     }
@@ -3185,26 +3173,26 @@ async function generateTemplateJob(job, source, config, options = {}) {
       prompt += `\n\n${detailSliceLayoutProtectionPrompt()}`;
     }
     if (options.referenceResultPath && fs.existsSync(options.referenceResultPath)) {
-      prompt += '\n\n第四张输入图是运营选定的合格参考结果图。只参考它如何保留黑色边框、黑色侧板、台面、柜脚、门缝以及印花在柜门面板内的落位方式；不要复制它的构图、视角、家具尺寸、场景元素或具体像素。当前第一张套图模板仍然是最终构图标准�?;
+      prompt += '\n\n第四张输入图是运营选定的合格参考结果图。只参考它如何保留黑色边框、黑色侧板、台面、柜脚、门缝以及印花在柜门面板内的落位方式；不要复制它的构图、视角、家具尺寸、场景元素或具体像素。当前第一张套图模板仍然是最终构图标准。';
     }
     imagePaths = useMasterReference
       ? [job.templatePath, source.masterImagePath, source.printPath]
       : [job.templatePath, source.printPath];
     if (options.referenceResultPath && fs.existsSync(options.referenceResultPath)) imagePaths.push(options.referenceResultPath);
   } else {
-    const masterImage = (await fsp.readdir(job.outputRoot).catch(() => [])).map(name => path.join(job.outputRoot, name)).find(file => isImagePath(file) && path.basename(file, path.extname(file)) === '母版�?);
+    const masterImage = (await fsp.readdir(job.outputRoot).catch(() => [])).map(name => path.join(job.outputRoot, name)).find(file => isImagePath(file) && path.basename(file, path.extname(file)) === '母版图');
     if (!masterImage || !fs.existsSync(masterImage)) throw new Error('母版图不存在');
     prompt = renderPromptTemplate(await getPromptValue('templateMigration'), {
       templateAnalysis: analysis,
       productProfile: toPromptText(profile),
       action,
       retryInstruction: options.extraInstruction
-        ? `上一�?AI 审核未通过，本次必须修正：${String(options.extraInstruction).trim()}`
+        ? `上一次 AI 审核未通过，本次必须修正：${String(options.extraInstruction).trim()}`
         : '',
       templatePath: job.relativePath
     });
-    prompt += '\n\n本次输入图顺序：第一张输入图是当前套图模板图，第二张输入图是已生成的母版产品图，第三张输入图是原始印花图。当前套图模板图是最终画幅、版式、文字、标签、场景、构图和透视标准；母版产品图是商品结构、柜门图案、颜色、材质和印花落位的唯一商品标准；原始印花图只用于核对图案细节、颜色和主体完整性。最终结果必须把母版产品迁移到当前模板图的版�?场景中，不得继承模板旧商品结构、旧图案、旧尺寸或旧 SKU�?;
-    prompt += '\n\n硬性质量要求：保留当前模板图的中文标题、卖点标签、SKU 标签、尺寸标注、图标、页面编号、背景、道具、人物、光影和排版层级；商品本体必须来自母版产品图。印花只能落在柜门或抽屉的正面可替换面板内部，必须完整保留家具边框、门�?抽屉缝、侧板、台面、底边、柜脚、把手、阴影和所有场景物品。不得让印花覆盖文字、标签、边框、把手、柜脚、地面、墙面、人物或道具�?;
+    prompt += '\n\n本次输入图顺序：第一张输入图是当前套图模板图，第二张输入图是已生成的母版产品图，第三张输入图是原始印花图。当前套图模板图是最终画幅、版式、文字、标签、场景、构图和透视标准；母版产品图是商品结构、柜门图案、颜色、材质和印花落位的唯一商品标准；原始印花图只用于核对图案细节、颜色和主体完整性。最终结果必须把母版产品迁移到当前模板图的版式/场景中，不得继承模板旧商品结构、旧图案、旧尺寸或旧 SKU。';
+    prompt += '\n\n硬性质量要求：保留当前模板图的中文标题、卖点标签、SKU 标签、尺寸标注、图标、页面编号、背景、道具、人物、光影和排版层级；商品本体必须来自母版产品图。印花只能落在柜门或抽屉的正面可替换面板内部，必须完整保留家具边框、门缝/抽屉缝、侧板、台面、底边、柜脚、把手、阴影和所有场景物品。不得让印花覆盖文字、标签、边框、把手、柜脚、地面、墙面、人物或道具。';
     if (isComplexTemplatePrintAnalysis(analysis, job)) {
       prompt += `\n\n${flagshipComplexTemplatePrintPrompt()}`;
     }
@@ -3213,13 +3201,13 @@ async function generateTemplateJob(job, source, config, options = {}) {
     }
     imagePaths = [job.templatePath, masterImage, source.printPath];
   }
-  if (options.extraInstruction && source.generationMode === 'template_print') prompt += `\n\n本次运营补充要求�?{String(options.extraInstruction).trim()}`;
+  if (options.extraInstruction && source.generationMode === 'template_print') prompt += `\n\n本次运营补充要求：${String(options.extraInstruction).trim()}`;
   if (options.includePreviousResult && fs.existsSync(job.outputPath)) imagePaths.push(job.outputPath);
   const isRegeneration = Boolean(options.isRegeneration || options.extraInstruction);
   const bytes = await generateImage(prompt, imagePaths, {
     size: await templateOutputSize(job),
     quality: config.imageQuality || 'high',
-    billingDescription: options.extraInstruction ? '套图图片重新生成' : '套图换印花生�?,
+    billingDescription: options.extraInstruction ? '套图图片重新生成' : '套图换印花生图',
     billingReference: job.relativePath,
     billingOnceKey: isRegeneration
       ? billingOnceKey('image:template-job-regenerate', job.outputRoot, job.relativePath, Date.now(), crypto.randomUUID())
@@ -3250,7 +3238,7 @@ async function runWithConcurrency(items, limit, worker) {
 
 async function generateTemplateSetForFolder(folder, onlyMissing = true, relativePaths = null, options = {}) {
   const source = await readSourceMetadata(folder);
-  if (!source.templateFolderPath || !fs.existsSync(source.templateFolderPath)) throw new Error('任务缺少套图文件�?);
+  if (!source.templateFolderPath || !fs.existsSync(source.templateFolderPath)) throw new Error('任务缺少套图文件夹');
   const config = await loadConfig();
   if (source.generationMode !== 'template_print') await ensureTaskProductProfile(folder, source);
   let jobs = await buildTemplateJobs(source.templateFolderPath, folder);
@@ -3258,7 +3246,7 @@ async function generateTemplateSetForFolder(folder, onlyMissing = true, relative
   if (selectedPaths?.length) {
     const wanted = new Set(selectedPaths.map(value => String(value).replaceAll('\\', '/').toLocaleLowerCase('zh-CN')));
     jobs = jobs.filter(job => wanted.has(job.relativePath.replaceAll('\\', '/').toLocaleLowerCase('zh-CN')));
-    if (!jobs.length) throw new Error('选中的套图图片不存在或已被移除�?);
+    if (!jobs.length) throw new Error('选中的套图图片不存在或已被移除。');
   }
   if (onlyMissing) jobs = jobs.filter(job => !fs.existsSync(job.outputPath));
   let progressWrite = Promise.resolve();
@@ -3297,13 +3285,13 @@ async function generateTemplateSetForFolder(folder, onlyMissing = true, relative
     return progressWrite;
   };
   if (!jobs.length) {
-    if (!onlyMissing && !selectedPaths?.length) throw new Error('套图文件夹里没有可用图片�?);
+    if (!onlyMissing && !selectedPaths?.length) throw new Error('套图文件夹里没有可用图片。');
     const summary = { total: 0, current: 0, percent: 100, apiGenerated: 0, copied: 0, excluded: Math.max(0, Number(options.excludedCount) || 0), skipped: 0, failed: 0, waitingUpstream: 0, pending: 0, billingCostMinor: 0 };
     await publishProgress({ ...summary, phase: 'completed', message: '没有需要处理的图片' });
     return { folder, generated: 0, failures: [], summary };
   }
-  const startLabel = options.initial ? '开始生成套�? : onlyMissing ? '开始补生成缺失套图' : '开始重新生成整套图';
-  await addOperationLog(folder, `${startLabel}�?{jobs.length} 张`);
+  const startLabel = options.initial ? '开始生成套图' : onlyMissing ? '开始补生成缺失套图' : '开始重新生成整套图';
+  await addOperationLog(folder, `${startLabel}：${jobs.length} 张`);
   const live = { total: jobs.length, current: 0, apiGenerated: 0, copied: 0, excluded: Math.max(0, Number(options.excludedCount) || 0), skipped: 0, failed: 0, waitingUpstream: 0, billingCostMinor: 0 };
   const liveFailures = [];
   const isRegeneration = !onlyMissing && !options.initial;
@@ -3341,13 +3329,13 @@ async function generateTemplateSetForFolder(folder, onlyMissing = true, relative
       pending: Math.max(0, live.total - live.current),
       percent: live.total ? Math.round(live.current / live.total * 100) : 0,
       message: live.waitingUpstream
-        ? `生图接口等待重试 ${live.waitingUpstream} 张，已完�?${live.current}/${live.total}`
+        ? `生图接口等待重试 ${live.waitingUpstream} 张，已完成 ${live.current}/${live.total}`
         : `正在处理 ${live.current}/${live.total}`
     }).catch(() => {});
   };
   const results = await runWithConcurrency(jobs, await activeApiConcurrencyLimit(jobs.length), async job => {
     try {
-      if (options.signal?.aborted) throw new Error('任务已停�?);
+      if (options.signal?.aborted) throw new Error('任务已停止');
       const result = await generateTemplateJob(job, source, config, {
         extraInstruction: options.extraInstruction,
         isRegeneration,
@@ -3375,7 +3363,7 @@ async function generateTemplateSetForFolder(folder, onlyMissing = true, relative
         phase: 'generating',
         pending: Math.max(0, live.total - live.current),
         percent: Math.round(live.current / live.total * 100),
-        message: `正在处理 ${live.current}/${live.total}：API 生成 ${live.apiGenerated}，直接复�?${live.copied}，跳�?${live.skipped}`
+        message: `正在处理 ${live.current}/${live.total}：API 生成 ${live.apiGenerated}，直接复制 ${live.copied}，跳过 ${live.skipped}`
       });
     }
   });
@@ -3383,7 +3371,7 @@ async function generateTemplateSetForFolder(folder, onlyMissing = true, relative
   const failures = results.map((result, index) => result.ok ? null : `${jobs[index].relativePath}: ${result.error?.message || result.error}`).filter(Boolean);
   let rejected = 0;
   if (!failures.length && source.generationMode !== 'template_print' && config.auditMode === 'quality') {
-    const masterImage = (await fsp.readdir(folder).catch(() => [])).map(name => path.join(folder, name)).find(file => isImagePath(file) && path.basename(file, path.extname(file)) === '母版�?);
+    const masterImage = (await fsp.readdir(folder).catch(() => [])).map(name => path.join(folder, name)).find(file => isImagePath(file) && path.basename(file, path.extname(file)) === '母版图');
     const auditJobs = [];
     const productProfile = await loadProductProfileForJob({ outputRoot: folder, templateFolderPath: source.templateFolderPath });
     for (const job of jobs) {
@@ -3393,19 +3381,19 @@ async function generateTemplateSetForFolder(folder, onlyMissing = true, relative
       if (!['copy_template', 'skip_copy', 'manual_check'].includes(action)) auditJobs.push({ job, analysis });
     }
     if (masterImage && auditJobs.length) {
-      await addOperationLog(folder, `开�?AI 质检�?{auditJobs.length} 张`);
-      await publishProgress({ ...live, phase: 'auditing', percent: 100, message: `图片处理完成，正�?AI 质检 ${auditJobs.length} 张` });
+      await addOperationLog(folder, `开始 AI 质检：${auditJobs.length} 张`);
+      await publishProgress({ ...live, phase: 'auditing', percent: 100, message: `图片处理完成，正在 AI 质检 ${auditJobs.length} 张` });
       const audits = await runWithConcurrency(auditJobs, await activeApiConcurrencyLimit(auditJobs.length), item => auditGeneratedTemplate(masterImage, item.job, item.analysis));
       rejected = audits.filter(result => !result.ok || result.value?.passed === false).length;
     }
   }
   if (failures.length) {
     await writeJsonFile(metadataPaths(folder).generationErrors, { updated_at: new Date().toISOString(), count: failures.length, failures });
-    await addOperationLog(folder, `套图生成完成，但�?${failures.length} 张失败：${failures.slice(0, 3).join('�?)}`);
+    await addOperationLog(folder, `套图生成完成，但有 ${failures.length} 张失败：${failures.slice(0, 3).join('；')}`);
   } else {
     await fsp.rm(metadataPaths(folder).generationErrors, { force: true }).catch(() => {});
     const breakdown = `API 生成 ${live.apiGenerated} 张，直接复制 ${live.copied} 张，跳过 ${live.skipped} 张`;
-    await addOperationLog(folder, rejected > 0 ? `套图处理完成�?{breakdown}，AI 不通过 ${rejected} 张` : `套图处理完成�?{breakdown}，待人工确认`);
+    await addOperationLog(folder, rejected > 0 ? `套图处理完成：${breakdown}，AI 不通过 ${rejected} 张` : `套图处理完成：${breakdown}，待人工确认`);
   }
   const summary = {
     total: live.total,
@@ -3424,8 +3412,8 @@ async function generateTemplateSetForFolder(folder, onlyMissing = true, relative
     ...summary,
     phase: failures.length ? 'completed_with_errors' : 'completed',
     message: failures.length
-      ? `处理完成�?{failures.length} 张失败`
-      : `处理完成：API 生成 ${summary.apiGenerated}，直接复�?${summary.copied}，跳�?${summary.skipped}`
+      ? `处理完成，${failures.length} 张失败`
+      : `处理完成：API 生成 ${summary.apiGenerated}，直接复制 ${summary.copied}，跳过 ${summary.skipped}`
   });
   return { folder, generated: jobs.length - failures.length, failures, rejected, summary };
 }
@@ -3459,7 +3447,7 @@ async function regenerateSingleTemplate(payload, options = {}) {
       failed: Math.max(0, Number(existing?.failed) || 0),
       billingCostMinor: Math.max(0, Number(existing?.billingCostMinor) || 0),
       ...(update || {}),
-      message: String(update?.message || `正在重新生成图片�?{job.relativePath}`),
+      message: String(update?.message || `正在重新生成图片：${job.relativePath}`),
       activeRelativePath: job.relativePath,
       startedAt: existing?.startedAt || startedAt,
       updatedAt: new Date().toISOString()
@@ -3468,12 +3456,12 @@ async function regenerateSingleTemplate(payload, options = {}) {
     if (typeof options.reportProgress === 'function') await options.reportProgress(next);
     return next;
   };
-  await addOperationLog(folder, `开始重新生成单张：${job.relativePath}${extraInstruction ? '（含修正要求�? : ''}`);
-  await addOperationLog(folder, `开始重新生成图片：${job.relativePath}${referenceResultPath ? `（参考结果图�?{path.basename(referenceResultPath)}）` : ''}${extraInstruction ? '（含修正要求�? : ''}`);
+  await addOperationLog(folder, `开始重新生成单张：${job.relativePath}${extraInstruction ? '（含修正要求）' : ''}`);
+  await addOperationLog(folder, `开始重新生成图片：${job.relativePath}${referenceResultPath ? `（参考结果图：${path.basename(referenceResultPath)}）` : ''}${extraInstruction ? '（含修正要求）' : ''}`);
   await publishSingleProgress({
     phase: 'generating',
     pending: 1,
-    message: `正在重新生成�?{job.relativePath}`
+    message: `正在重新生成：${job.relativePath}`
   });
   const generated = await generateTemplateJob(job, source, config, {
     extraInstruction,
@@ -3487,8 +3475,8 @@ async function regenerateSingleTemplate(payload, options = {}) {
         pending: 1,
         waitingUpstream: event?.state === 'retrying' ? 1 : 0,
         message: event?.state === 'retrying'
-          ? `生图接口等待重试�?{job.relativePath}`
-          : `正在重新生成�?{job.relativePath}`
+          ? `生图接口等待重试：${job.relativePath}`
+          : `正在重新生成：${job.relativePath}`
       }).catch(() => {});
     }
   });
@@ -3498,7 +3486,7 @@ async function regenerateSingleTemplate(payload, options = {}) {
       && !['copy_template', 'skip_copy', 'manual_check'].includes(generated.action)) {
     const masterImage = (await fsp.readdir(folder).catch(() => []))
       .map(name => path.join(folder, name))
-      .find(file => isImagePath(file) && path.basename(file, path.extname(file)) === '母版�?);
+      .find(file => isImagePath(file) && path.basename(file, path.extname(file)) === '母版图');
     if (masterImage) {
       const { analysis } = await templateAnalysisForJob(job);
       await auditGeneratedTemplate(masterImage, job, analysis);
@@ -3522,12 +3510,12 @@ async function regenerateSingleTemplate(payload, options = {}) {
       updatedAt: new Date().toISOString()
     });
   }
-  await addOperationLog(folder, `重新生成完成�?{job.relativePath}`);
+  await addOperationLog(folder, `重新生成完成：${job.relativePath}`);
   await publishSingleProgress({
     phase: 'completed',
     pending: 0,
     waitingUpstream: 0,
-    message: `重新生成完成�?{job.relativePath}`,
+    message: `重新生成完成：${job.relativePath}`,
     completedAt: new Date().toISOString()
   });
   return { folder, relativePath: job.relativePath, outputPath: job.outputPath };
@@ -3537,7 +3525,7 @@ async function regenerateMasterForReviewFolder(folderValue) {
   const folder = String(folderValue || '');
   const source = await readSourceMetadata(folder);
   if (!source.productPath || !fs.existsSync(source.productPath) || !source.printPath || !fs.existsSync(source.printPath)) {
-    throw new Error('当前文件夹没有找到原始品类图和印花图记录�?);
+    throw new Error('当前文件夹没有找到原始品类图和印花图记录。');
   }
   await addOperationLog(folder, '开始重新生成母版图');
   const result = await generateMaster({
@@ -3565,7 +3553,7 @@ async function generateDirectTemplateTask(task, options = {}) {
   const plannedTask = { ...task, templateRelativePaths: plan.relativePaths };
   const config = await loadConfig();
   if (typeof options.reportProgress === 'function') {
-    await options.reportProgress({ phase: 'preparing', current: 0, total: 0, percent: 0, message: '正在创建任务目录�? });
+    await options.reportProgress({ phase: 'preparing', current: 0, total: 0, percent: 0, message: '正在创建任务目录…' });
   }
   const folder = await nextTaskFolder(config);
   await fsp.mkdir(folder, { recursive: true });
@@ -3575,7 +3563,7 @@ async function generateDirectTemplateTask(task, options = {}) {
     initial: true,
     excludedCount: plan.excludedRelativePaths.length
   });
-  if (result.failures.length) throw new Error(`�?${result.failures.length} 张失败：${result.failures[0]}`);
+  if (result.failures.length) throw new Error(`有 ${result.failures.length} 张失败：${result.failures[0]}`);
   return { folder, outputPath: folder, url: '', summary: result.summary };
 }
 
@@ -3589,11 +3577,11 @@ async function generateTemplateTaskMaster(task = {}, options = {}) {
   if (!referencePath || !fs.existsSync(referencePath)) throw new Error('请先选择母版参考图');
   const config = await loadConfig();
   if (typeof options.reportProgress === 'function') {
-    await options.reportProgress({ phase: 'generating', current: 0, total: 1, percent: 10, message: '正在生成母版图�? });
+    await options.reportProgress({ phase: 'generating', current: 0, total: 1, percent: 10, message: '正在生成母版图…' });
   }
   const pack = await activeModelPackage();
   const prompt = String(await getPromptValue('templateMasterGeneration') || '').trim();
-  const bytes = await generateImage(prompt || '根据第一张产品参考图和第二张印花图生成标准电商母版图�?, [referencePath, task.printPath], {
+  const bytes = await generateImage(prompt || '根据第一张产品参考图和第二张印花图生成标准电商母版图。', [referencePath, task.printPath], {
     size: config.imageSize || '1024x1024',
     quality: config.imageQuality || 'high',
     billingDescription: '套图母版生成',
@@ -3614,7 +3602,7 @@ async function generateTemplateTaskMaster(task = {}, options = {}) {
     billingCostMinor: Math.max(0, Number(bytes.billingAmountMinor) || 0)
   };
   if (typeof options.reportProgress === 'function') {
-    await options.reportProgress({ phase: 'completed', current: 1, total: 1, percent: 100, message: '母版图生成完�?, billingCostMinor: 0 });
+    await options.reportProgress({ phase: 'completed', current: 1, total: 1, percent: 100, message: '母版图生成完成', billingCostMinor: 0 });
   }
   return result;
 }
@@ -3622,7 +3610,7 @@ async function generateTemplateTaskMaster(task = {}, options = {}) {
 async function generateTask(task, options = {}) {
   if (task?.generationMode !== 'template_print') return generateMaster(task, options);
   if (typeof options.reportProgress === 'function') {
-    await options.reportProgress({ phase: 'queued', current: 0, total: 0, percent: 0, message: '已进入套图处理队�? });
+    await options.reportProgress({ phase: 'queued', current: 0, total: 0, percent: 0, message: '已进入套图处理队列' });
   }
   return generateDirectTemplateTask(task, options);
 }
@@ -3633,7 +3621,7 @@ async function generateMaster(task, options = {}) {
   if (!task?.templateFolderPath || !fs.existsSync(task.templateFolderPath)) throw new Error('套图文件夹不存在');
   const config = await loadConfig();
   if (typeof options.reportProgress === 'function') {
-    await options.reportProgress({ phase: 'generating', current: 0, total: 1, percent: 10, apiGenerated: 0, copied: 0, skipped: 0, failed: 0, message: '正在生成母版图�? });
+    await options.reportProgress({ phase: 'generating', current: 0, total: 1, percent: 10, apiGenerated: 0, copied: 0, skipped: 0, failed: 0, message: '正在生成母版图…' });
   }
   const folder = await nextTaskFolder(config);
   await fsp.mkdir(folder, { recursive: true });
@@ -3643,18 +3631,18 @@ async function generateMaster(task, options = {}) {
   const bytes = await generateImage(prompt, [task.productPath, task.printPath], {
     size: config.imageSize || '1024x1024',
     quality: config.imageQuality || 'high',
-    billingDescription: '母版图生�?,
+    billingDescription: '母版图生成',
     billingReference: task.id || path.basename(task.productPath),
     billingOnceKey: billingOnceKey('image:master', folder),
     signal: options.signal,
     onRequestState: options.onRequestState
   });
-  const outputPath = path.join(folder, '母版�?png');
+  const outputPath = path.join(folder, '母版图.png');
   await fsp.writeFile(outputPath, bytes);
   await addOperationLog(folder, `生成母版图完成：${path.basename(outputPath)}`);
   const summary = { total: 1, current: 1, percent: 100, apiGenerated: 1, copied: 0, skipped: 0, failed: 0, pending: 0 };
   if (typeof options.reportProgress === 'function') {
-    await options.reportProgress({ ...summary, folder, phase: 'completed', message: '母版图生成完�? });
+    await options.reportProgress({ ...summary, folder, phase: 'completed', message: '母版图生成完成' });
   }
   return { folder, outputPath, url: imageUrl(outputPath), summary };
 }
@@ -3697,7 +3685,7 @@ async function reviewFolders() {
         const rawStatus = deriveImageStatus(record, config.auditMode);
         const status = rawStatus === '人工通过' ? '已通过'
           : rawStatus === '人工不通过' || rawStatus === '审核不通过' ? 'AI不通过'
-            : rawStatus === '直接套模�?自动通过' ? '直接套模�?
+            : rawStatus === '直接套模板-自动通过' ? '直接套模板'
               : rawStatus;
         const templateModifiedAt = (await fsp.stat(job.templatePath).catch(() => null))?.mtimeMs || 0;
         const outputModifiedAt = record.outputExists ? (await fsp.stat(job.outputPath).catch(() => null))?.mtimeMs || 0 : 0;
@@ -3713,7 +3701,7 @@ async function reviewFolders() {
     }
     if (!images.length && !jobs.length) continue;
     const stat = await fsp.stat(folder);
-    const masterImage = images.find(image => path.basename(image.path, path.extname(image.path)) === '母版�?) || null;
+    const masterImage = images.find(image => path.basename(image.path, path.extname(image.path)) === '母版图') || null;
     const generationErrors = await readJsonFile(paths.generationErrors, {});
     const generationFailures = Array.isArray(generationErrors?.failures) ? generationErrors.failures.map(String) : [];
     for (const job of jobs) {
@@ -3759,7 +3747,7 @@ async function reviewFolders() {
       source,
       logs: folderRecord.logs,
       masterImage,
-      masterStatus: masterImage ? '母版已生�? : '',
+      masterStatus: masterImage ? '母版已生成' : '',
       status: deriveFolderStatus(folderRecord, config.auditMode),
       generationProgress,
       modifiedAt: stat.mtimeMs
@@ -3849,7 +3837,7 @@ async function generateTitleForTask(folderValue) {
   const folder = String(payload.folder || '');
   if (!folder || !fs.existsSync(folder)) throw new Error('任务文件夹不存在');
   const task = (await listReadyTitleTasks()).find(item => path.resolve(item.folder) === path.resolve(folder));
-  if (!task) throw new Error('任务图片尚未全部通过，不能生成标�?);
+  if (!task) throw new Error('任务图片尚未全部通过，不能生成标题');
   const category = String(payload.category || task.category || '').trim();
   const library = await loadCategoryTitleLibrary(category);
   if (!library || titleLibraryRecordCount(library) === 0) throw new Error(`缺少 ${category} 关键词库，请先导入。`);
@@ -3878,9 +3866,9 @@ async function saveTitleForTask(payload = {}) {
   const folder = String(payload.folder || '');
   if (!folder || !fs.existsSync(folder)) throw new Error('任务文件夹不存在');
   const task = (await listReadyTitleTasks()).find(item => path.resolve(item.folder) === path.resolve(folder));
-  if (!task) throw new Error('任务图片尚未全部通过，不能保存标�?);
+  if (!task) throw new Error('任务图片尚未全部通过，不能保存标题');
   const title = normalizeTitleText(payload.title || '').slice(0, 30);
-  if (!title) throw new Error('请输入标�?);
+  if (!title) throw new Error('请输入标题');
   const category = String(payload.category || task.category || '').trim();
   await writeTitlesWorkbook(task.titleFile, category, [title]);
   return { ...task, category, hasTitle: true, firstTitle: title };
@@ -4010,7 +3998,7 @@ async function taobaoPublishBaseTasks() {
       name: review.name,
       categoryId,
       categoryName: category?.name || '',
-      status: saved.status || (categoryId ? '待发�? : '未配�?),
+      status: saved.status || (categoryId ? '待发布' : '未配置'),
       failureReason: saved.failureReason || '',
       detail: saved.detail || {},
       updatedAt: saved.updatedAt || '',
@@ -4038,7 +4026,7 @@ async function taobaoPublishBlockedTasks() {
     const reasons = [
       ...taobaoReviewBlockers(review),
       ...(!titleTask?.firstTitle ? ['缺少淘宝标题'] : []),
-      ...(!imagePackage.ok ? [`缺少${imagePackage.missing.join('�?)}`] : [])
+      ...(!imagePackage.ok ? [`缺少${imagePackage.missing.join('、')}`] : [])
     ];
     return {
       folder: review.folder,
@@ -4072,10 +4060,10 @@ async function queueTaobaoPublishTask(payload = {}) {
   const review = (await reviewFolders()).find(item => path.resolve(item.folder) === path.resolve(folder));
   if (!review || !isReviewReadyForTaobao(review)) throw new Error('只有人工筛图整套通过的任务可以发布到淘宝');
   const titleTask = (await listReadyTitleTasks()).find(item => path.resolve(item.folder) === path.resolve(folder));
-  if (!titleTask?.firstTitle) throw new Error('任务缺少标题，请先生成标�?);
+  if (!titleTask?.firstTitle) throw new Error('任务缺少标题，请先生成标题');
   const images = classifyTaobaoImages(review.jobs || []);
   const imagePackage = validateTaobaoImagePackage(images);
-  if (!imagePackage.ok) throw new Error(`发布任务缺少${imagePackage.missing.join('�?)}`);
+  if (!imagePackage.ok) throw new Error(`发布任务缺少${imagePackage.missing.join('、')}`);
   const now = new Date().toISOString();
   const id = taobaoPublishTaskId(folder, categoryId);
   const state = await readTaobaoPublishState();
@@ -4099,17 +4087,17 @@ async function queueTaobaoPublishTask(payload = {}) {
 async function getTaobaoPublishPackage(id) {
   const state = await readTaobaoPublishState();
   const record = state.tasks.find(item => item.id === id);
-  if (!record) throw new Error('发布任务不存�?);
+  if (!record) throw new Error('发布任务不存在');
   const settings = await getTaobaoPublishSettings();
   const category = settings.categories.find(item => item.id === record.categoryId);
-  if (!category) throw new Error('发布类目不存�?);
+  if (!category) throw new Error('发布类目不存在');
   const review = (await reviewFolders()).find(item => path.resolve(item.folder) === path.resolve(record.folder));
   if (!review || !isReviewReadyForTaobao(review)) throw new Error('任务不再满足发布条件');
   const titleTask = (await listReadyTitleTasks()).find(item => path.resolve(item.folder) === path.resolve(record.folder));
   if (!titleTask?.firstTitle) throw new Error('任务缺少标题');
   const images = classifyTaobaoImages(review.jobs || []);
   const imagePackage = validateTaobaoImagePackage(images);
-  if (!imagePackage.ok) throw new Error(`发布任务缺少${imagePackage.missing.join('�?)}`);
+  if (!imagePackage.ok) throw new Error(`发布任务缺少${imagePackage.missing.join('、')}`);
   return {
     id: record.id,
     folder: record.folder,
@@ -4129,7 +4117,7 @@ async function claimTaobaoPublishTask(payload = {}) {
   const record = state.tasks.find(item => item.status === '等待插件接收');
   if (!record) return null;
   const now = new Date().toISOString();
-  record.status = '插件已接�?;
+  record.status = '插件已接收';
   record.extensionId = String(payload.extensionId || '');
   record.updatedAt = now;
   await writeTaobaoPublishState(state);
@@ -4139,10 +4127,10 @@ async function claimTaobaoPublishTask(payload = {}) {
 async function updateTaobaoPublishStatus(id, payload = {}) {
   const settings = await getTaobaoPublishSettings();
   if (payload.token != null && String(payload.token || '') !== settings.token) throw new Error('淘宝发布助手令牌无效');
-  const allowed = new Set(['等待插件接收', '插件已接�?, '正在打开淘宝页面', '正在填写字段', '正在上传图片', '正在保存草稿', '已保存草�?, '失败']);
+  const allowed = new Set(['等待插件接收', '插件已接收', '正在打开淘宝页面', '正在填写字段', '正在上传图片', '正在保存草稿', '已保存草稿', '失败']);
   const state = await readTaobaoPublishState();
   const record = state.tasks.find(item => item.id === id);
-  if (!record) throw new Error('发布任务不存�?);
+  if (!record) throw new Error('发布任务不存在');
   const status = String(payload.status || record.status);
   if (allowed.has(status)) record.status = status;
   record.failureReason = String(payload.failureReason || payload.error || '');
@@ -4154,7 +4142,7 @@ async function updateTaobaoPublishStatus(id, payload = {}) {
 
 async function findReviewJob(folder, relativePath) {
   const source = await readSourceMetadata(folder);
-  if (!source.templateFolderPath || !fs.existsSync(source.templateFolderPath)) throw new Error('任务缺少套图文件�?);
+  if (!source.templateFolderPath || !fs.existsSync(source.templateFolderPath)) throw new Error('任务缺少套图文件夹');
   const wanted = String(relativePath || '').replaceAll('\\', '/').toLocaleLowerCase('zh-CN');
   const selectedPaths = new Set((source.templateRelativePaths || []).map(value => String(value).replaceAll('\\', '/').toLocaleLowerCase('zh-CN')));
   const job = (await buildTemplateJobs(source.templateFolderPath, folder)).find(item => {
@@ -4170,7 +4158,7 @@ async function resolveReviewReferenceResultPath(folder, relativePath) {
   if (!value) return '';
   const referenceJob = await findReviewJob(folder, value);
   if (!referenceJob.outputPath || !fs.existsSync(referenceJob.outputPath)) {
-    throw new Error(`参考结果图尚未生成�?{referenceJob.relativePath}`);
+    throw new Error(`参考结果图尚未生成：${referenceJob.relativePath}`);
   }
   return referenceJob.outputPath;
 }
@@ -4188,7 +4176,7 @@ async function setTemplateManualStatus(payload) {
   const images = current.images.filter(image => image.relativePath.replaceAll('\\', '/').toLocaleLowerCase('zh-CN') !== job.relativePath.replaceAll('\\', '/').toLocaleLowerCase('zh-CN'));
   images.push({ relativePath: job.relativePath, outputPath: job.outputPath, outputExists: fs.existsSync(job.outputPath), manualStatus: status, reviewedAt: updatedAt });
   await writeJsonFile(reviewPaths.macReview, toMacReviewMetadata(current, { images, reviewedAt: updatedAt }));
-  await addOperationLog(folder, `${status === '人工通过' ? '人工标记通过' : '人工标记不通过'}�?{job.relativePath}`);
+  await addOperationLog(folder, `${status === '人工通过' ? '人工标记通过' : '人工标记不通过'}：${job.relativePath}`);
   return true;
 }
 
@@ -4210,7 +4198,7 @@ async function approveReviewFolder(folder, allowSkip = false) {
   }
   const missing = actionableJobs.filter(job => !fs.existsSync(job.outputPath));
   if (missing.length) {
-    await addOperationLog(folder, `批量通过任务列表：还�?${missing.length} 张未生成，未归档`);
+    await addOperationLog(folder, `批量通过任务列表：还有 ${missing.length} 张未生成，未归档`);
     if (allowSkip) return { approved: false, missing: missing.length };
     throw new Error(`还有 ${missing.length} 张套图未生成`);
   }
@@ -4249,7 +4237,7 @@ async function resetConfig() {
 }
 
 async function generateFree(payload = {}, options = {}) {
-  if (!payload.sourcePath || !fs.existsSync(payload.sourcePath)) throw new Error('请选择源图�?);
+  if (!payload.sourcePath || !fs.existsSync(payload.sourcePath)) throw new Error('请选择源图片');
   if (!String(payload.prompt || '').trim()) throw new Error('请输入生图提示词');
   const config = await loadConfig();
   const folder = path.join(config.outputPath || currentDefaultOutputRoot(), '自由生图');
@@ -4272,7 +4260,7 @@ async function saveTitleSetup(payload = {}) {
   library.prefixRoots = parseTitlePrefixRoots(payload.prefixes || '');
   library.prefixRoot = library.prefixRoots[0] || '';
   library.requiredRoots = parseTitlePrefixRoots(payload.requiredRoots || []);
-  if (!library.prefixRoots.length) throw new Error('至少填写一个标题开头词�?);
+  if (!library.prefixRoots.length) throw new Error('至少填写一个标题开头词根');
   await saveCategoryTitleLibrary(library);
   return saveTitleLibrary(library);
 }
@@ -4282,7 +4270,7 @@ async function generateTitles(payload = {}) {
   if (!library) throw new Error('请先导入关键词表');
   const prefixRoots = parseTitlePrefixRoots(payload.prefixes || library.prefixRoots || []);
   const requiredRoots = parseTitlePrefixRoots(payload.requiredRoots || library.requiredRoots || []);
-  if (!prefixRoots.length) throw new Error('请先填写至少一个标题开头词�?);
+  if (!prefixRoots.length) throw new Error('请先填写至少一个标题开头词根');
   library.prefixRoots = prefixRoots;
   library.prefixRoot = prefixRoots[0];
   library.requiredRoots = requiredRoots;
