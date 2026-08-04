@@ -2725,8 +2725,13 @@ async function analyzeTemplateJob(job, options = {}) {
   }
   const cache = templateCachePaths(job.templateRoot, job.relativePath);
   let validated = validateTemplateAnalysis(analysisText, { source: 'ai' });
-  if (validated.action === 'manual_check') {
-    const visualFallback = await createVisualFallbackTemplateAnalysis(job, 'AI marked this template for manual check; local visual panel detection found executable light cabinet panels.');
+  if (validated.action === 'manual_check' || validated.action === 'copy_original') {
+    const visualFallback = await createVisualFallbackTemplateAnalysis(
+      job,
+      validated.action === 'copy_original'
+        ? 'AI marked this template as copy_original, but local visual panel detection found executable light cabinet panels.'
+        : 'AI marked this template for manual check; local visual panel detection found executable light cabinet panels.'
+    );
     if (visualFallback) validated = visualFallback;
   }
   const normalizedAnalysis = JSON.stringify(validated);
