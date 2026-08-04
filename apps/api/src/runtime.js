@@ -2116,8 +2116,10 @@ const STRUCTURED_TEMPLATE_SECTIONS = Object.freeze({
   detail: new Set(['详情页'])
 });
 const DETAIL_FULL_FILE_NAMES = new Set(['detail-full', 'detail_full', '完整详情页', '详情页']);
-const DETAIL_FULL_SLICE_HEIGHT = Math.max(800, Number(process.env.CAISHEN_DETAIL_FULL_SLICE_HEIGHT || 1600));
-const DETAIL_FULL_SLICE_OVERLAP = Math.max(0, Number(process.env.CAISHEN_DETAIL_FULL_SLICE_OVERLAP || 128));
+const DETAIL_FULL_SLICE_HEIGHT = Number(process.env.CAISHEN_DETAIL_FULL_SLICE_HEIGHT || 0);
+const DETAIL_FULL_SLICE_HEIGHT_MIN = 700;
+const DETAIL_FULL_SLICE_RATIO = 1.5;
+const DETAIL_FULL_SLICE_OVERLAP = Math.max(0, Number(process.env.CAISHEN_DETAIL_FULL_SLICE_OVERLAP || 0));
 const TEMPLATE_INTERNAL_DIRS = new Set(['.caishen-template-cache', '.caishen-meta']);
 
 function normalizeTemplateRelativePath(value) {
@@ -2156,14 +2158,24 @@ function detailSliceRelativePath(index) {
   return `详情页/${String(index + 1).padStart(2, '0')}.jpg`;
 }
 
+function resolveDetailFullSliceHeight(width) {
+  const explicitHeight = DETAIL_FULL_SLICE_HEIGHT;
+  if (Number.isFinite(explicitHeight) && explicitHeight > 0) {
+    return Math.max(DETAIL_FULL_SLICE_HEIGHT_MIN, Math.floor(explicitHeight));
+  }
+  const safeWidth = Math.max(1, Math.floor(Number(width) || 790));
+  return Math.max(DETAIL_FULL_SLICE_HEIGHT_MIN, Math.round(safeWidth * DETAIL_FULL_SLICE_RATIO));
+}
+
 async function ensureDetailFullSliceSpecs(templateRoot, fullPath) {
   const sourceRelativePath = normalizeTemplateRelativePath(path.relative(templateRoot, fullPath));
   const sourceStat = await fsp.stat(fullPath);
   const metadata = await sharp(fullPath).metadata();
   const width = Math.max(1, Number(metadata.width) || 1);
   const height = Math.max(1, Number(metadata.height) || 1);
-  const sliceCount = Math.max(1, Math.ceil(height / DETAIL_FULL_SLICE_HEIGHT));
-  const effectiveOverlap = Math.max(0, Math.min(Math.floor(DETAIL_FULL_SLICE_OVERLAP), Math.max(0, Math.floor(DETAIL_FULL_SLICE_HEIGHT / 2) - 1)));
+  const sliceHeight = resolveDetailFullSliceHeight(width);
+  const sliceCount = Math.max(1, Math.ceil(height / sliceHeight));
+  const effectiveOverlap = Math.max(0, Math.min(Math.floor(DETAIL_FULL_SLICE_OVERLAP), Math.max(0, Math.floor(sliceHeight / 2) - 1)));
   const cacheKey = crypto.createHash('sha1').update(sourceRelativePath).digest('hex').slice(0, 16);
   const sliceRoot = path.join(templateRoot, '.caishen-meta', 'detail-full-slices', cacheKey);
   const manifestFile = path.join(sliceRoot, 'manifest.json');
@@ -2173,7 +2185,7 @@ async function ensureDetailFullSliceSpecs(templateRoot, fullPath) {
     mtimeMs: Math.trunc(sourceStat.mtimeMs),
     width,
     height,
-    sliceHeight: DETAIL_FULL_SLICE_HEIGHT,
+    sliceHeight,
     sliceOverlap: effectiveOverlap,
     sliceCount
   };
@@ -2185,13 +2197,13 @@ async function ensureDetailFullSliceSpecs(templateRoot, fullPath) {
     await fsp.rm(sliceRoot, { recursive: true, force: true });
     await fsp.mkdir(sliceRoot, { recursive: true });
     for (let index = 0; index < sliceCount; index += 1) {
-      const baseTop = index * DETAIL_FULL_SLICE_HEIGHT;
+      const baseTop = index * sliceHeight;
       const top = Math.max(0, index === 0 ? baseTop : baseTop - effectiveOverlap);
-      const nextBaseTop = Math.min(height, (index + 1) * DETAIL_FULL_SLICE_HEIGHT);
+      const nextBaseTop = Math.min(height, (index + 1) * sliceHeight);
       const nextTop = index < sliceCount - 1 ? nextBaseTop + effectiveOverlap : nextBaseTop;
-      const sliceHeight = Math.max(1, Math.min(height, nextTop) - top);
+      const currentSliceHeight = Math.max(1, Math.min(height, nextTop) - top);
       await sharp(fullPath)
-        .extract({ left: 0, top, width, height: sliceHeight })
+        .extract({ left: 0, top, width, height: currentSliceHeight })
         .jpeg({ quality: 95 })
         .toFile(sliceFiles[index]);
     }
@@ -3687,13 +3699,17 @@ async function reviewFolders() {
           : rawStatus === '人工不通过' || rawStatus === '审核不通过' ? 'AI不通过'
             : rawStatus === '直接套模板-自动通过' ? '直接套模板'
               : rawStatus;
-        const templateModifiedAt = (await fsp.stat(job.templatePath).catch(() => null))?.mtimeMs || 0;
+        const templateStat = await fsp.stat(job.templatePath).catch(() => null);
+        const templateModifiedAt = templateStat?.mtimeMs || 0;
+        const templateVersion = templateStat ? `${Math.trunc(templateStat.mtimeMs)}-${templateStat.size}` : String(templateModifiedAt || 0);
         const outputModifiedAt = record.outputExists ? (await fsp.stat(job.outputPath).catch(() => null))?.mtimeMs || 0 : 0;
         jobs.push({
           ...record,
           status,
           action: summary.action,
           templateUrl: `${imageUrl(job.templatePath)}?v=${encodeURIComponent(templateModifiedAt)}`,
+          templateThumbnailUrl: thumbnailUrl(job.templatePath, 480, templateVersion),
+          templatePreviewUrl: thumbnailUrl(job.templatePath, 1200, templateVersion),
           outputUrl: record.outputExists ? `${imageUrl(job.outputPath)}?v=${encodeURIComponent(outputModifiedAt)}` : '',
           outputModifiedAt
         });
