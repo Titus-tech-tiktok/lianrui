@@ -4879,6 +4879,22 @@ function getConfiguredAnalysisModel(preferredModel = '') {
   return isSupported ? preferred : state.analysisApiModels[0]?.id || '';
 }
 
+function getInputAnalysisModel() {
+  return String($('#analysisModel')?.value || '').trim() || state.apiSettings?.analysisModel || '';
+}
+
+function syncPackageAnalysisModelsFromInput() {
+  const nextModel = getInputAnalysisModel();
+  if (!nextModel) return;
+  const sourceModel = String(state.apiSettings?.analysisModel || '').trim();
+  $$('.model-package-editor').forEach(row => {
+    const input = row.querySelector('[data-package-field="analysisModel"]');
+    if (!input) return;
+    const currentModel = input.value.trim();
+    if (!currentModel || currentModel === sourceModel) input.value = nextModel;
+  });
+}
+
 function currentModelPackages() {
   const packages = isSuperAdmin()
     ? (state.apiSettings?.modelPackages || state.modelPackageSettings?.modelPackages || [])
@@ -4966,6 +4982,7 @@ function renderModelPackages() {
 }
 
 function collectModelPackagesFromForm() {
+  syncPackageAnalysisModelsFromInput();
   return $$('.model-package-editor').map((row, index) => {
     const read = field => row.querySelector(`[data-package-field="${field}"]`);
     return {
@@ -4977,7 +4994,7 @@ function collectModelPackagesFromForm() {
       apiKey: read('apiKey')?.value.trim() || '',
       analysisApiBaseUrl: read('analysisApiBaseUrl')?.value.trim() || state.apiSettings?.baseUrl || '',
       analysisApiKey: read('analysisApiKey')?.value.trim() || '',
-      analysisModel: read('analysisModel')?.value.trim() || getConfiguredAnalysisModel(state.apiSettings?.analysisModel),
+      analysisModel: read('analysisModel')?.value.trim() || getInputAnalysisModel(),
       analysisWireApi: read('analysisWireApi')?.value || state.apiSettings?.analysisWireApi || 'chat_completions',
       maxConcurrency: Number(read('maxConcurrency')?.value) || 1,
       startIntervalMs: Number(read('startIntervalMs')?.value) || 0,
@@ -5184,6 +5201,7 @@ function applySelectedApiModel() {
   const target = state.apiModelChannel === 'analysis' ? 'analysis' : 'image';
   const label = target === 'image' ? '图片模型' : '分析模型';
   $(target === 'image' ? '#imageModel' : '#analysisModel').value = state.selectedApiModelId;
+  if (target === 'analysis') syncPackageAnalysisModelsFromInput();
   closeApiModelModal();
   toast(`已设为${label}，保存设置后生效`);
 }
@@ -5758,6 +5776,8 @@ function bindEvents() {
   $('#apiModelSearch').oninput = renderApiModelList;
   $('#openImageModelsButton').onclick = () => openApiModelModal('image');
   $('#openAnalysisModelsButton').onclick = () => openApiModelModal('analysis');
+  $('#analysisModel').onchange = syncPackageAnalysisModelsFromInput;
+  $('#analysisModel').oninput = syncPackageAnalysisModelsFromInput;
   $('#closeApiModelModalButton').onclick = closeApiModelModal;
   $('#apiModelModal').onclick = event => { if (event.target === $('#apiModelModal')) closeApiModelModal(); };
   $('#applyApiModelButton').onclick = applySelectedApiModel;

@@ -738,20 +738,27 @@ async function saveApiSettings(payload = {}) {
   const operation = apiSettingsWriteChain.then(async () => {
     const current = await readPrivateApiSettings();
     const concurrency = normalizeImageConcurrencySettings(payload, current);
+    const nextAnalysisModel = normalizeModelName(payload.analysisModel, current.analysisModel);
+    const nextImageModel = normalizeModelName(payload.imageModel, current.imageModel);
     const next = {
       version: 2,
       serviceUrl: current.serviceUrl,
       baseUrl: normalizeApiBaseUrl(payload.baseUrl),
       imageKey: String(payload.imageApiKey || payload.apiKey || '').trim() || current.imageKey,
       analysisKey: String(payload.analysisApiKey || '').trim() || current.analysisKey,
-      imageModel: normalizeModelName(payload.imageModel, current.imageModel),
-      analysisModel: normalizeModelName(payload.analysisModel, current.analysisModel),
+      imageModel: nextImageModel,
+      analysisModel: nextAnalysisModel,
       analysisWireApi: normalizeAnalysisWireApi(payload.analysisWireApi, current.analysisWireApi),
       responseFormat: normalizeResponseFormat(payload.responseFormat, current.responseFormat),
       requestTimeoutSeconds: normalizeRequestTimeoutSeconds(payload.requestTimeoutSeconds, current.requestTimeoutSeconds),
       allowAdminPromptView: payload.allowAdminPromptView === true,
       ...concurrency,
-      modelPackages: normalizeModelPackages(payload.modelPackages, current)
+      modelPackages: normalizeModelPackages(payload.modelPackages, {
+        ...current,
+        baseUrl: normalizeApiBaseUrl(payload.baseUrl),
+        imageModel: nextImageModel,
+        analysisModel: nextAnalysisModel
+      })
     };
     if (!next.baseUrl) throw new Error('请填写 API 地址');
     if (!next.imageKey && !next.analysisKey) throw new Error('请至少填写一个 API 密钥');
