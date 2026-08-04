@@ -6557,6 +6557,9 @@ label input, label textarea {
 .template-result-fields > label > span { color: var(--ink); margin-bottom: 6px; font-size: 12px; font-weight: 750; display: block; }
 .template-result-fields textarea { min-height: 0; resize: vertical; line-height: 1.6; }
 .template-result-action { grid-template-columns: 100px minmax(0, 1fr); align-items: center; gap: 8px 12px; display: grid !important; }
+.template-action-toolbar { display: flex; gap: 6px; align-items: center; }
+.template-action-toolbar select { min-width: 120px; }
+.template-action-toolbar .secondary.mini { min-width: 0; white-space: nowrap; }
 .template-result-action > span { margin: 0 !important; }
 .template-result-action select { height: 42px; }
 .template-result-action small { grid-column: 2; }

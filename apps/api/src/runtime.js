@@ -3013,7 +3013,16 @@ async function writeTemplateSizedImage(job, bytes, trimPixels = null) {
   const trimTop = Math.max(0, Number(trimPixels?.top || 0) | 0);
   const trimBottom = Math.max(0, Number(trimPixels?.bottom || 0) | 0);
   let image = sharp(bytes);
-  if (width && height) image = image.resize(width, height, { fit: 'cover', position: 'centre' });
+  if (width && height) {
+    image = image.resize({
+      width,
+      height,
+      fit: 'contain',
+      position: 'northwest',
+      background: { r: 255, g: 255, b: 255, alpha: 1 },
+      withoutEnlargement: false
+    });
+  }
   if (trimTop || trimBottom) {
     const trimmedHeight = Math.max(1, height - trimTop - trimBottom);
     image = image.extract({ left: 0, top: trimTop, width, height: trimmedHeight });

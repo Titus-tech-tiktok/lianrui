@@ -1931,7 +1931,7 @@ function toggleAllVisibleAssets() {
 
 const ASSET_TEMPLATE_FILTERS = [
   ['all', '全部'],
-  ['replace_print', '换印花'],
+  ['replace_print', '强制换印花'],
   ['copy_original', '保留原图'],
   ['exclude', '不输出'],
   ['manual_check', '人工确认'],
@@ -1995,7 +1995,7 @@ function renderAssetManagementGrid() {
       const progress = state.assetAnalysisProgress.get(item.path);
       const analysisStatus = assetItemAnalysisStatus(item);
       const analyzed = assetItemAnalyzed(item);
-      const actionLabel = ({ replace_print: '换印花', copy_original: '保留原图', exclude: '不输出', manual_check: '人工确认' })[normalizeTemplateUiAction(item.action)] || '待确认';
+      const actionLabel = ({ replace_print: '强制换印花', copy_original: '保留原图', exclude: '不输出', manual_check: '人工确认' })[normalizeTemplateUiAction(item.action)] || '待确认';
       const statusText = analysisStatus === 'queued' ? '等待 AI 分析'
         : analysisStatus === 'running' ? `AI 分析中${progress?.attempt ? ` · 第 ${progress.attempt} 次` : ''}`
           : analysisStatus === 'failed' ? `分析失败 · 点击 AI 分析重试${item.analysisAttempts ? `（已尝试 ${item.analysisAttempts} 次）` : ''}`
@@ -4088,7 +4088,7 @@ async function queueActiveTaobaoPublishTask() {
 }
 
 const TEMPLATE_ACTIONS = [
-  ['replace_print', '换印花'],
+  ['replace_print', '强制换印花'],
   ['copy_original', '保留原图'],
   ['exclude', '不输出'],
   ['manual_check', '人工确认']
@@ -4096,7 +4096,7 @@ const TEMPLATE_ACTIONS = [
 
 function templateActionHint(action) {
   action = normalizeTemplateUiAction(action);
-  if (action === 'replace_print') return '调用生图 API，用母版商品迁移到当前套图页面。';
+  if (action === 'replace_print') return '强制换印花：调用生图 API，用母版商品迁移到当前套图页面。';
   if (action === 'copy_original') return '直接复制原套图，不消耗生图 API。';
   if (action === 'exclude') return '不生成也不复制，最终套图不包含这张图。';
   return '暂不生成，等运营确认动作。';
@@ -4114,7 +4114,7 @@ function applyTemplateActionDefaults(item, card) {
   if (weakManualTemplateText(item.reason)) item.reason = '运营手动确认该图需要替换家具留白面板印花。';
   if (weakManualTemplateText(item.replaceArea)) item.replaceArea = '运营确认的留白家具面板或柜门外表面。';
   if (weakManualTemplateText(item.forbiddenArea)) {
-    item.forbiddenArea = '背景、文字、墙面、地面、柜脚、把手、边框、门缝、抽屉内侧、柜门内侧、包装和道具均保持不变。';
+    item.forbiddenArea = '背景、人物、文字、墙面地面、柜脚、把手、边框、门缝、抽屉内侧、柜门内侧、包装和道具均保持不变。';
   }
   const reason = card.querySelector('[data-template-field="reason"]');
   const replaceArea = card.querySelector('[data-template-field="replaceArea"]');
@@ -4207,7 +4207,7 @@ function renderTemplateAnalysisResult() {
   container.innerHTML = `<div class="template-result-layout">
     <figure><img src="${escapeHtml(item.previewUrl || item.templateUrl)}" alt="${escapeHtml(item.relativePath)}"><figcaption>${escapeHtml(item.relativePath)}</figcaption></figure>
     <div class="template-result-fields" data-template-index="${itemIndex}">
-      <label class="template-result-action"><span>动作</span><select data-template-field="action">${TEMPLATE_ACTIONS.map(([value, label]) => `<option value="${value}"${normalizeTemplateUiAction(item.action) === value ? ' selected' : ''}>${label}</option>`).join('')}</select><small class="template-action-hint">${escapeHtml(templateActionHint(item.action))}</small></label>
+<label class="template-result-action"><span>操作</span><div class="template-action-toolbar"><select data-template-field="action">${TEMPLATE_ACTIONS.map(([value, label]) => `<option value="${value}"${normalizeTemplateUiAction(item.action) === value ? ' selected' : ''}>${label}</option>`).join('')}</select><button class="secondary mini" type="button" data-template-set-action="replace_print">强制换印花</button><button class="secondary mini" type="button" data-template-set-action="copy_original">保留原图</button></div><small class="template-action-hint">${escapeHtml(templateActionHint(item.action))}</small></label>
       <label><span>图片理解</span><textarea rows="3" data-template-field="reason" placeholder="AI 对画面内容和用途的理解">${escapeHtml(item.reason)}</textarea></label>
       <label><span>生成目标</span><textarea rows="2" data-template-field="replaceArea" placeholder="这张图应如何使用母版商品">${escapeHtml(item.replaceArea)}</textarea></label>
       <label><span>不可修改</span><textarea rows="2" data-template-field="forbiddenArea" placeholder="人物、文字、背景等必须保留的区域">${escapeHtml(item.forbiddenArea)}</textarea></label>
@@ -5801,6 +5801,17 @@ function bindEvents() {
   $('#templateAnalysisResult').oninput = handleTemplateAnalysisFieldChange;
   $('#templateAnalysisResult').onchange = handleTemplateAnalysisFieldChange;
   $('#templateAnalysisResult').onclick = event => {
+    const actionQuickButton = event.target.closest('[data-template-set-action]');
+    if (actionQuickButton) {
+      const path = state.activeTemplatePath;
+      const quickItem = state.templateItems.find((entry) => entry.path === path);
+      if (!quickItem) return;
+      quickItem.action = actionQuickButton.dataset.templateSetAction;
+      const card = document.querySelector('#templateAnalysisResult [data-template-index]');
+      applyTemplateActionDefaults(quickItem, card);
+      renderTemplateAnalysisResult();
+      return;
+    }
     const referenceButton = event.target.closest('[data-reference-analysis]');
     if (referenceButton) return analyzeActiveTemplateWithReference(referenceButton.dataset.referenceAnalysis);
   };
@@ -5958,3 +5969,4 @@ start().catch(error => {
   $('#authHint').textContent = `无法连接服务器：${errorText(error)}`;
   $('#authHint').classList.add('error');
 });
+
