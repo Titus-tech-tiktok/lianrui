@@ -915,6 +915,7 @@ function detailSliceLayoutProtectionPrompt() {
     'ORDERED_DETAIL_SLICE_CONTINUITY_MODE',
     'This output is one ordered detail-page slice, not a complete long detail page. Keep the original slice width, height, crop window, page background and layout exactly aligned to the first input image so adjacent slices can be uploaded to Taobao in order and visually reconnect.',
     'Keep the top edge and bottom edge bands stable: do not change, enlarge, remove or invent objects, text, backgrounds, borders, panel lines, shadows or product surfaces that touch a slice boundary.',
+    'For this slice, keep the original coordinate system of the template: do not shift any text glyph baseline, margins, separators, frame lines, grid cards, icon positions, or white-space bands. If text crosses a boundary, keep it complete with its original x/y offset.',
     'Do not generate the full detail page, do not merge neighboring slices, do not create a new poster, and do not invent content above or below the current canvas.',
     'Do not enlarge, crop, move or restyle Chinese text, titles, subtitles, page numbers, badges, icons, separators, paper texture, rounded cards, background bands, margins or decorative borders from the first input image.',
     'Only migrate the master product appearance onto visible cabinet, drawer-front, door-front or exterior panel surfaces that are already present in the first input image.',
@@ -2116,6 +2117,7 @@ const STRUCTURED_TEMPLATE_SECTIONS = Object.freeze({
 });
 const DETAIL_FULL_FILE_NAMES = new Set(['detail-full', 'detail_full', '完整详情页', '详情页']);
 const DETAIL_FULL_SLICE_HEIGHT = Math.max(800, Number(process.env.CAISHEN_DETAIL_FULL_SLICE_HEIGHT || 1600));
+const DETAIL_FULL_SLICE_OVERLAP = Math.max(0, Number(process.env.CAISHEN_DETAIL_FULL_SLICE_OVERLAP || 128));
 const TEMPLATE_INTERNAL_DIRS = new Set(['.caishen-template-cache', '.caishen-meta']);
 
 function normalizeTemplateRelativePath(value) {
@@ -2161,6 +2163,7 @@ async function ensureDetailFullSliceSpecs(templateRoot, fullPath) {
   const width = Math.max(1, Number(metadata.width) || 1);
   const height = Math.max(1, Number(metadata.height) || 1);
   const sliceCount = Math.max(1, Math.ceil(height / DETAIL_FULL_SLICE_HEIGHT));
+  const effectiveOverlap = Math.max(0, Math.min(Math.floor(DETAIL_FULL_SLICE_OVERLAP), Math.max(0, Math.floor(DETAIL_FULL_SLICE_HEIGHT / 2) - 1)));
   const cacheKey = crypto.createHash('sha1').update(sourceRelativePath).digest('hex').slice(0, 16);
   const sliceRoot = path.join(templateRoot, '.caishen-meta', 'detail-full-slices', cacheKey);
   const manifestFile = path.join(sliceRoot, 'manifest.json');
@@ -2171,6 +2174,7 @@ async function ensureDetailFullSliceSpecs(templateRoot, fullPath) {
     width,
     height,
     sliceHeight: DETAIL_FULL_SLICE_HEIGHT,
+    sliceOverlap: effectiveOverlap,
     sliceCount
   };
   const existing = await readJsonFile(manifestFile, null);
@@ -2181,8 +2185,11 @@ async function ensureDetailFullSliceSpecs(templateRoot, fullPath) {
     await fsp.rm(sliceRoot, { recursive: true, force: true });
     await fsp.mkdir(sliceRoot, { recursive: true });
     for (let index = 0; index < sliceCount; index += 1) {
-      const top = index * DETAIL_FULL_SLICE_HEIGHT;
-      const sliceHeight = Math.min(DETAIL_FULL_SLICE_HEIGHT, height - top);
+      const baseTop = index * DETAIL_FULL_SLICE_HEIGHT;
+      const top = Math.max(0, index === 0 ? baseTop : baseTop - effectiveOverlap);
+      const nextBaseTop = Math.min(height, (index + 1) * DETAIL_FULL_SLICE_HEIGHT);
+      const nextTop = index < sliceCount - 1 ? nextBaseTop + effectiveOverlap : nextBaseTop;
+      const sliceHeight = Math.max(1, Math.min(height, nextTop) - top);
       await sharp(fullPath)
         .extract({ left: 0, top, width, height: sliceHeight })
         .jpeg({ quality: 95 })
@@ -2190,12 +2197,22 @@ async function ensureDetailFullSliceSpecs(templateRoot, fullPath) {
     }
     await writeJsonFile(manifestFile, manifest);
   }
-  const specs = sliceFiles.map((templatePath, index) => ({
-    templatePath,
-    relativePath: detailSliceRelativePath(index),
-    sourceRelativePath,
-    sectionName: '详情页'
-  }));
+  const specs = sliceFiles.map((templatePath, index) => {
+    const isFirst = index === 0;
+    const isLast = index === sliceCount - 1;
+    const trimTopPx = isFirst ? 0 : effectiveOverlap;
+    const trimBottomPx = isLast ? 0 : effectiveOverlap;
+    return {
+      templatePath,
+      relativePath: detailSliceRelativePath(index),
+      sourceRelativePath,
+      sectionName: '详情页',
+      trimPixels: {
+        top: trimTopPx,
+        bottom: trimBottomPx
+      }
+    };
+  });
   for (let index = 0; index < specs.length; index += 1) {
     specs[index].neighborImages = [
       index > 0 ? { label: 'previous slice', relativePath: specs[index - 1].relativePath, templatePath: specs[index - 1].templatePath } : null,
@@ -2272,6 +2289,7 @@ async function buildTemplateJobs(templateRoot, outputRoot = templateRoot) {
       relativePath,
       outputRoot,
       outputPath: path.join(outputRoot, relativePath),
+      trimPixels: spec.trimPixels || null,
       sourceRelativePath: spec.sourceRelativePath || relativePath,
       neighborImages: spec.neighborImages || null,
       sectionName: spec.sectionName || templateSectionName(relativePath)
@@ -2988,12 +3006,18 @@ async function replaceOutputFile(outputPath, writeNext) {
   }
 }
 
-async function writeTemplateSizedImage(job, bytes) {
+async function writeTemplateSizedImage(job, bytes, trimPixels = null) {
   const metadata = await sharp(job.templatePath).metadata();
   const width = Number(metadata.width || 0);
   const height = Number(metadata.height || 0);
+  const trimTop = Math.max(0, Number(trimPixels?.top || 0) | 0);
+  const trimBottom = Math.max(0, Number(trimPixels?.bottom || 0) | 0);
   let image = sharp(bytes);
   if (width && height) image = image.resize(width, height, { fit: 'cover', position: 'centre' });
+  if (trimTop || trimBottom) {
+    const trimmedHeight = Math.max(1, height - trimTop - trimBottom);
+    image = image.extract({ left: 0, top: trimTop, width, height: trimmedHeight });
+  }
   const extension = path.extname(job.outputPath).toLowerCase();
   if (extension === '.jpg' || extension === '.jpeg') image = image.jpeg({ quality: 94 });
   else image = image.png();
@@ -3179,7 +3203,7 @@ async function generateTemplateJob(job, source, config, options = {}) {
     onRequestState: options.onRequestState
   });
   const billedMinor = Math.max(0, Number(bytes.billingAmountMinor) || 0);
-  await writeTemplateSizedImage(job, bytes);
+  await writeTemplateSizedImage(job, bytes, job.trimPixels);
   await fsp.rm(paths.templateAudit, { force: true }).catch(() => {});
   return { action, outputPath: job.outputPath, billedMinor };
 }
