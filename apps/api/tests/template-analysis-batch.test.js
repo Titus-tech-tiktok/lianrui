@@ -7,6 +7,26 @@ const path = require('node:path');
 const sharp = require('sharp');
 const { TEMPLATE_CACHE_VERSION } = require('../src/core/template-regions');
 
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function removeTempWithRetry(target) {
+  let lastError;
+  sharp.cache(false);
+  for (let attempt = 0; attempt < 15; attempt += 1) {
+    try {
+      await fs.rm(target, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      lastError = error;
+      if (!['EPERM', 'EBUSY', 'ENOTEMPTY'].includes(error?.code) || attempt === 14) break;
+      await wait(100 * (attempt + 1));
+    }
+  }
+  throw lastError;
+}
+
 test('单张和批量 AI 分析失败会重试三次并持久显示最终状态', async (t) => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'caishen-template-analysis-'));
   let mode = 'recover';
@@ -124,6 +144,7 @@ test('批量 AI 分析使用系统 API 并发配置', async (t) => {
     baseUrl: `http://127.0.0.1:${server.address().port}/v1`,
     imageApiKey: 'image-key',
     analysisApiKey: 'test-key',
+    analysisModel: 'gpt-analysis-test',
     imageInitialConcurrency: 7,
     imageMaxConcurrency: 7,
     imageStartIntervalMs: 0
@@ -139,6 +160,91 @@ test('批量 AI 分析使用系统 API 并发配置', async (t) => {
   assert.ok(maxActive <= 8);
   assert.equal(batch.completed, 8);
   assert.equal(batch.failed, 0);
+});
+
+test('full detail page slices use capped analysis concurrency while regular images keep configured concurrency', async (t) => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'caishen-template-analysis-detail-cap-'));
+  let active = 0;
+  let maxActive = 0;
+  let detailActive = 0;
+  let maxDetailActive = 0;
+  const server = http.createServer((req, res) => {
+    if (req.url !== '/v1/chat/completions') return res.writeHead(404).end();
+    const chunks = [];
+    active += 1;
+    maxActive = Math.max(maxActive, active);
+    req.on('data', chunk => chunks.push(chunk));
+    req.on('end', () => {
+      const body = Buffer.concat(chunks).toString('utf8');
+      const isDetail = body.includes('详情页/');
+      if (isDetail) {
+        detailActive += 1;
+        maxDetailActive = Math.max(maxDetailActive, detailActive);
+      }
+      setTimeout(() => {
+        active -= 1;
+        if (isDetail) detailActive -= 1;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({
+          version: TEMPLATE_CACHE_VERSION,
+          action: 'replace_print',
+          confidence: 0.93,
+          reason: 'cabinet panels can receive print',
+          replace_area: 'front cabinet exterior panels',
+          forbidden_area: 'text, background, props and non-cabinet areas',
+          replace_regions: []
+        }) } }] }));
+      }, 30);
+    });
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(async () => {
+    server.closeAllConnections?.();
+    await new Promise(resolve => server.close(resolve));
+    await removeTempWithRetry(temp);
+  });
+
+  process.env.CAISHEN_DATA_DIR = temp;
+  process.env.CAISHEN_WORKSPACE_ID = 'template-analysis-detail-cap';
+  process.env.CAISHEN_API_BASE_URL = `http://127.0.0.1:${server.address().port}/v1`;
+  process.env.CAISHEN_API_KEY = 'test-key';
+  process.env.CAISHEN_ANALYSIS_API_KEY = 'test-key';
+  process.env.CAISHEN_REVERSE_PROMPT_MODEL = 'gpt-analysis-test';
+  process.env.CAISHEN_ANALYSIS_WIRE_API = 'chat_completions';
+  delete process.env.CAISHEN_DETAIL_FULL_SLICE_HEIGHT;
+  delete process.env.CAISHEN_DETAIL_FULL_SLICE_OVERLAP;
+  const runtimePath = require.resolve('../src/runtime');
+  delete require.cache[runtimePath];
+  const runtime = require('../src/runtime');
+  await runtime.initializeRuntime();
+  await runtime.saveApiSettings({
+    baseUrl: `http://127.0.0.1:${server.address().port}/v1`,
+    imageApiKey: 'image-key',
+    analysisApiKey: 'test-key',
+    analysisModel: 'gpt-analysis-test',
+    imageInitialConcurrency: 8,
+    imageMaxConcurrency: 8,
+    imageStartIntervalMs: 0
+  });
+
+  const folder = path.join(runtime.WORKSPACE_ROOT, 'assets', 'template', 'set');
+  await fs.mkdir(path.join(folder, '1-1主图'), { recursive: true });
+  await fs.mkdir(path.join(folder, '详情页'), { recursive: true });
+  const regularNames = Array.from({ length: 6 }, (_, index) => path.join('1-1主图', `${index + 1}.jpg`));
+  await Promise.all(regularNames.map(name => sharp({ create: { width: 80, height: 80, channels: 3, background: '#d8c59b' } }).jpeg().toFile(path.join(folder, name))));
+  await sharp({ create: { width: 790, height: 7110, channels: 3, background: '#eadfce' } })
+    .jpeg()
+    .toFile(path.join(folder, '详情页', '详情页.jpg'));
+
+  const items = await runtime.listTemplates(folder);
+  const relativePaths = items.map(item => item.relativePath);
+  assert.equal(relativePaths.filter(value => value.startsWith('详情页/')).length, 6);
+
+  const batch = await runtime.analyzeTemplateItems({ folder, relativePaths });
+  assert.equal(batch.completed, 12);
+  assert.equal(batch.failed, 0);
+  assert.ok(maxActive > 4, 'regular images should still use configured high concurrency');
+  assert.ok(maxDetailActive <= 4, `detail slices should be capped at 4 concurrent requests, saw ${maxDetailActive}`);
 });
 
 test('paid analysis responses are not shown as failed when content needs local fallback', async (t) => {

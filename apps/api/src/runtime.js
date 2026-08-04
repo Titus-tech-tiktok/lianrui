@@ -2120,6 +2120,7 @@ const DETAIL_FULL_SLICE_HEIGHT = Number(process.env.CAISHEN_DETAIL_FULL_SLICE_HE
 const DETAIL_FULL_SLICE_HEIGHT_MIN = 700;
 const DETAIL_FULL_SLICE_RATIO = 1.5;
 const DETAIL_FULL_SLICE_OVERLAP = Math.max(0, Number(process.env.CAISHEN_DETAIL_FULL_SLICE_OVERLAP || 0));
+const DETAIL_SLICE_ANALYSIS_CONCURRENCY = 4;
 const TEMPLATE_INTERNAL_DIRS = new Set(['.caishen-template-cache', '.caishen-meta']);
 
 function normalizeTemplateRelativePath(value) {
@@ -2156,6 +2157,12 @@ function detailFullRelativePath(relativePath) {
 
 function detailSliceRelativePath(index) {
   return `详情页/${String(index + 1).padStart(2, '0')}.jpg`;
+}
+
+function isGeneratedDetailSliceJob(job = {}) {
+  const relativePath = normalizeTemplateRelativePath(job.relativePath);
+  const sourceRelativePath = normalizeTemplateRelativePath(job.sourceRelativePath || relativePath);
+  return sourceRelativePath !== relativePath && isDetailSliceTemplate(job, '');
 }
 
 function resolveDetailFullSliceHeight(width) {
@@ -2839,12 +2846,16 @@ async function analyzeTemplateItems(payload = {}, options = {}) {
   if (!requested.size) throw new Error('请先选择需要 AI 分析的图片');
   const jobs = (await buildTemplateJobs(folder)).filter(job => requested.has(job.relativePath.replaceAll('\\', '/').toLocaleLowerCase('zh-CN')));
   if (!jobs.length) throw new Error('没有找到需要分析的套图图片');
-  const concurrency = await activeApiConcurrencyLimit(jobs.length);
+  const regularJobs = jobs.filter(job => !isGeneratedDetailSliceJob(job));
+  const detailSliceJobs = jobs.filter(isGeneratedDetailSliceJob);
+  const regularConcurrency = regularJobs.length ? await activeApiConcurrencyLimit(regularJobs.length) : 0;
+  const detailSliceConcurrency = detailSliceJobs.length ? Math.min(DETAIL_SLICE_ANALYSIS_CONCURRENCY, detailSliceJobs.length) : 0;
+  const concurrency = Math.max(regularConcurrency, detailSliceConcurrency);
   let completed = 0;
   let failed = 0;
   const report = typeof options.reportProgress === 'function' ? options.reportProgress : async () => {};
   await report({ phase: 'queued', current: 0, total: jobs.length, failed: 0, concurrency, message: `已排队 ${jobs.length} 张，并发 ${concurrency}` });
-  const results = await runWithConcurrency(jobs, concurrency, job => analyzeTemplateJobWithRetry(job, 3, async progress => {
+  const analyzeJob = job => analyzeTemplateJobWithRetry(job, 3, async progress => {
     await report({ ...progress, current: completed, total: jobs.length, failed, concurrency, message: progress.phase === 'retrying' ? `分析失败，正在自动重试：${job.relativePath}` : `正在分析：${job.relativePath}` });
   }).then(async result => {
     completed += 1;
@@ -2860,7 +2871,11 @@ async function analyzeTemplateItems(payload = {}, options = {}) {
       message: result.ok ? `已完成 ${completed}/${jobs.length}` : `分析失败：${job.relativePath}`
     });
     return result;
-  }));
+  });
+  const results = [
+    ...(regularJobs.length ? await runWithConcurrency(regularJobs, regularConcurrency, analyzeJob) : []),
+    ...(detailSliceJobs.length ? await runWithConcurrency(detailSliceJobs, detailSliceConcurrency, analyzeJob) : [])
+  ];
   const values = results.map(result => result.value).filter(Boolean);
   return {
     total: jobs.length,
@@ -2875,7 +2890,12 @@ async function analyzeTemplateItems(payload = {}, options = {}) {
 async function analyzeTemplateFolder(folder) {
   if (warmingTemplateFolders.has(folder)) throw new Error('当前套图正在后台分析，请稍后重新打开配置窗口。');
   const jobs = await buildTemplateJobs(folder);
-  const results = await runWithConcurrency(jobs, await activeApiConcurrencyLimit(jobs.length), analyzeTemplateJob);
+  const regularJobs = jobs.filter(job => !isGeneratedDetailSliceJob(job));
+  const detailSliceJobs = jobs.filter(isGeneratedDetailSliceJob);
+  const results = [
+    ...(regularJobs.length ? await runWithConcurrency(regularJobs, await activeApiConcurrencyLimit(regularJobs.length), analyzeTemplateJob) : []),
+    ...(detailSliceJobs.length ? await runWithConcurrency(detailSliceJobs, Math.min(DETAIL_SLICE_ANALYSIS_CONCURRENCY, detailSliceJobs.length), analyzeTemplateJob) : [])
+  ];
   const failed = results.filter(result => !result.ok);
   if (failed.length === jobs.length && jobs.length) throw failed[0].error;
   return listTemplates(folder);
