@@ -1498,7 +1498,7 @@ async function startServer() {
     if (req.query.download === '1') res.download(file, path.basename(file));
     else {
       res.set('Cache-Control', req.query.v ? 'private, max-age=31536000, immutable' : 'private, no-cache');
-      res.sendFile(file);
+      res.sendFile(file, { dotfiles: 'allow' });
     }
   });
 
@@ -1535,7 +1535,7 @@ async function startServer() {
     } catch (error) {
       console.warn(`[thumbnail] ${path.basename(file)}: ${error?.message || error}`);
       res.set('Cache-Control', 'private, no-cache');
-      return res.sendFile(file);
+      return res.sendFile(file, { dotfiles: 'allow' });
     }
   });
 
