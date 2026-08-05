@@ -2238,6 +2238,7 @@ function resolveInside(root, relativePath) {
 const STRUCTURED_TEMPLATE_SECTIONS = Object.freeze({
   main: new Set(['主图', '1-1主图', '1:1主图', '1_1主图', '1/1主图']),
   ratio: new Set(['3-4主图', '3:4主图', '3_4主图', '3/4主图']),
+  sku: new Set(['sku', 'SKU']),
   detail: new Set(['详情页', '详情'])
 });
 const DETAIL_FULL_FILE_NAMES = new Set(['detail-full', 'detail_full', '完整详情页', '详情页']);
@@ -2363,6 +2364,7 @@ async function ensureDetailFullSliceSpecs(templateRoot, fullPath) {
 async function buildStructuredTemplateJobSpecs(templateRoot, imagePaths) {
   const mainSpecs = [];
   const ratioSpecs = [];
+  const skuSpecs = [];
   const detailSpecs = [];
   const detailFullImages = [];
   for (const templatePath of imagePaths) {
@@ -2374,6 +2376,10 @@ async function buildStructuredTemplateJobSpecs(templateRoot, imagePaths) {
     }
     if (STRUCTURED_TEMPLATE_SECTIONS.ratio.has(sectionName)) {
       ratioSpecs.push({ templatePath, relativePath, sectionName });
+      continue;
+    }
+    if (STRUCTURED_TEMPLATE_SECTIONS.sku.has(sectionName)) {
+      skuSpecs.push({ templatePath, relativePath, sectionName });
       continue;
     }
     if (STRUCTURED_TEMPLATE_SECTIONS.detail.has(sectionName)) {
@@ -2389,7 +2395,7 @@ async function buildStructuredTemplateJobSpecs(templateRoot, imagePaths) {
   for (const detailFullPath of detailFullImages) {
     detailSpecs.push(...await ensureDetailFullSliceSpecs(templateRoot, detailFullPath));
   }
-  return [...mainSpecs, ...ratioSpecs, ...detailSpecs];
+  return [...mainSpecs, ...ratioSpecs, ...skuSpecs, ...detailSpecs];
 }
 
 async function listTemplateImagePaths(templateRoot) {
