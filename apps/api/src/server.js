@@ -668,6 +668,7 @@ async function handleFolderUpload(req, res) {
     await moveUploadedFile(files[index].path, target);
   }
 
+  if (kind === 'template') await runtime.prepareTemplateStructure(collectionRoot);
   return res.json({ root: collectionRoot, count: files.length, name: commonRoot || '素材' });
 }
 
@@ -779,6 +780,7 @@ async function finishAssetSync(sessionId, workspaceId = runtime.WORKSPACE_ID) {
   const missing = [...session.entries.values()].filter(item => item.needed).length;
   if (missing) throw new Error(`还有 ${missing} 张图片未上传完成`);
   await fsp.mkdir(session.root, { recursive: true });
+  if (session.kind === 'template') await runtime.prepareTemplateStructure(session.root);
   assetSyncSessions.delete(session.id);
   return {
     root: session.root,

@@ -2615,6 +2615,30 @@ async function templateFolderImageSummary(root) {
   };
 }
 
+async function templateFolderJobSummary(root) {
+  const jobs = await buildTemplateJobs(root);
+  const previewJob = jobs[0] || null;
+  if (!previewJob) return { count: 0, preview: null };
+  const stat = await fsp.stat(previewJob.templatePath).catch(() => null);
+  const version = stat ? `${Math.trunc(stat.mtimeMs)}-${stat.size}` : '1';
+  return {
+    count: jobs.length,
+    preview: {
+      name: path.basename(previewJob.templatePath),
+      thumbnailUrl: thumbnailUrl(previewJob.templatePath, 480, version),
+      previewUrl: thumbnailUrl(previewJob.templatePath, 1200, version),
+      url: `${imageUrl(previewJob.templatePath)}?v=${version}`
+    }
+  };
+}
+
+async function prepareTemplateStructure(folderValue) {
+  const folder = String(folderValue || '');
+  if (!folder || !fs.existsSync(folder)) throw new Error('Template folder does not exist');
+  await buildTemplateJobs(folder);
+  return listTemplates(folder);
+}
+
 async function listTemplateFolders() {
   const libraryRoot = path.join(currentWorkspaceRoot(), 'assets', 'template');
   let collections = [];
@@ -2629,7 +2653,7 @@ async function listTemplateFolders() {
       if (!child.isDirectory() || child.name.startsWith('.')) continue;
       const folder = path.join(collectionRoot, child.name);
       const [summary, stat] = await Promise.all([
-        templateFolderImageSummary(folder),
+        templateFolderJobSummary(folder).catch(() => templateFolderImageSummary(folder)),
         fsp.stat(folder).catch(() => null)
       ]);
       folders.push({
@@ -4564,6 +4588,7 @@ const runtimeExports = {
   publicTitleLibrary,
   runWithWorkspace,
   prepareTemplateFolder,
+  prepareTemplateStructure,
   regenerateMasterForReviewFolder,
   regenerateSingleTemplate,
   resetConfig,
