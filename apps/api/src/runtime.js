@@ -2127,7 +2127,6 @@ const DETAIL_FULL_SLICE_HEIGHT = Number(process.env.CAISHEN_DETAIL_FULL_SLICE_HE
 const DETAIL_FULL_SLICE_HEIGHT_MIN = 700;
 const DETAIL_FULL_SLICE_RATIO = 1.5;
 const DETAIL_FULL_SLICE_OVERLAP = Math.max(0, Number(process.env.CAISHEN_DETAIL_FULL_SLICE_OVERLAP || 0));
-const DETAIL_SLICE_ANALYSIS_CONCURRENCY = 4;
 const TEMPLATE_INTERNAL_DIRS = new Set(['.caishen-template-cache', '.caishen-meta']);
 
 function normalizeTemplateRelativePath(value) {
@@ -2164,12 +2163,6 @@ function detailFullRelativePath(relativePath) {
 
 function detailSliceRelativePath(index) {
   return `详情页/${String(index + 1).padStart(2, '0')}.jpg`;
-}
-
-function isGeneratedDetailSliceJob(job = {}) {
-  const relativePath = normalizeTemplateRelativePath(job.relativePath);
-  const sourceRelativePath = normalizeTemplateRelativePath(job.sourceRelativePath || relativePath);
-  return sourceRelativePath !== relativePath && isDetailSliceTemplate(job, '');
 }
 
 function resolveDetailFullSliceHeight(width) {
@@ -2853,11 +2846,7 @@ async function analyzeTemplateItems(payload = {}, options = {}) {
   if (!requested.size) throw new Error('请先选择需要 AI 分析的图片');
   const jobs = (await buildTemplateJobs(folder)).filter(job => requested.has(job.relativePath.replaceAll('\\', '/').toLocaleLowerCase('zh-CN')));
   if (!jobs.length) throw new Error('没有找到需要分析的套图图片');
-  const regularJobs = jobs.filter(job => !isGeneratedDetailSliceJob(job));
-  const detailSliceJobs = jobs.filter(isGeneratedDetailSliceJob);
-  const regularConcurrency = regularJobs.length ? await activeApiConcurrencyLimit(regularJobs.length) : 0;
-  const detailSliceConcurrency = detailSliceJobs.length ? Math.min(DETAIL_SLICE_ANALYSIS_CONCURRENCY, detailSliceJobs.length) : 0;
-  const concurrency = Math.max(regularConcurrency, detailSliceConcurrency);
+  const concurrency = await activeApiConcurrencyLimit(jobs.length);
   let completed = 0;
   let failed = 0;
   const report = typeof options.reportProgress === 'function' ? options.reportProgress : async () => {};
@@ -2879,10 +2868,7 @@ async function analyzeTemplateItems(payload = {}, options = {}) {
     });
     return result;
   });
-  const results = [
-    ...(regularJobs.length ? await runWithConcurrency(regularJobs, regularConcurrency, analyzeJob) : []),
-    ...(detailSliceJobs.length ? await runWithConcurrency(detailSliceJobs, detailSliceConcurrency, analyzeJob) : [])
-  ];
+  const results = await runWithConcurrency(jobs, concurrency, analyzeJob);
   const values = results.map(result => result.value).filter(Boolean);
   return {
     total: jobs.length,
@@ -2897,12 +2883,7 @@ async function analyzeTemplateItems(payload = {}, options = {}) {
 async function analyzeTemplateFolder(folder) {
   if (warmingTemplateFolders.has(folder)) throw new Error('当前套图正在后台分析，请稍后重新打开配置窗口。');
   const jobs = await buildTemplateJobs(folder);
-  const regularJobs = jobs.filter(job => !isGeneratedDetailSliceJob(job));
-  const detailSliceJobs = jobs.filter(isGeneratedDetailSliceJob);
-  const results = [
-    ...(regularJobs.length ? await runWithConcurrency(regularJobs, await activeApiConcurrencyLimit(regularJobs.length), analyzeTemplateJob) : []),
-    ...(detailSliceJobs.length ? await runWithConcurrency(detailSliceJobs, Math.min(DETAIL_SLICE_ANALYSIS_CONCURRENCY, detailSliceJobs.length), analyzeTemplateJob) : [])
-  ];
+  const results = await runWithConcurrency(jobs, await activeApiConcurrencyLimit(jobs.length), analyzeTemplateJob);
   const failed = results.filter(result => !result.ok);
   if (failed.length === jobs.length && jobs.length) throw failed[0].error;
   return listTemplates(folder);
@@ -3328,6 +3309,71 @@ async function generateTemplateSetForFolder(folder, onlyMissing = true, relative
     const summary = { total: 0, current: 0, percent: 100, apiGenerated: 0, copied: 0, excluded: Math.max(0, Number(options.excludedCount) || 0), skipped: 0, failed: 0, waitingUpstream: 0, pending: 0, billingCostMinor: 0 };
     await publishProgress({ ...summary, phase: 'completed', message: '没有需要处理的图片' });
     return { folder, generated: 0, failures: [], summary };
+  }
+  if (options.signal?.aborted) throw new Error('任务已取消');
+  const analysisJobs = [];
+  for (const job of jobs) {
+    const cacheState = await templateAnalysisForJob(job);
+    if (!cacheState.cached) analysisJobs.push(job);
+  }
+  if (analysisJobs.length) {
+    const analysisConcurrency = await activeApiConcurrencyLimit(jobs.length);
+    let analysisCompleted = 0;
+    let analysisFailed = 0;
+    await publishProgress({
+      phase: 'queued',
+      total: analysisJobs.length,
+      current: 0,
+      failed: 0,
+      percent: 0,
+      apiGenerated: 0,
+      copied: 0,
+      excluded: Math.max(0, Number(options.excludedCount) || 0),
+      skipped: 0,
+      waitingUpstream: 0,
+      billingCostMinor: 0,
+      pending: analysisJobs.length,
+      message: `AI 分析已排队 ${analysisJobs.length} 张，按最大并发 ${analysisConcurrency} 进行`
+    });
+    const analyzeWithProgress = (job) => analyzeTemplateJobWithRetry(job, 3, async progress => {
+      await publishProgress({
+        phase: 'analyzing',
+        total: jobs.length,
+        current: analysisCompleted,
+        failed: analysisFailed,
+        percent: Math.round(Math.min(100, analysisCompleted / Math.max(1, jobs.length) * 100)),
+        apiGenerated: 0,
+        copied: 0,
+        excluded: Math.max(0, Number(options.excludedCount) || 0),
+        skipped: 0,
+        waitingUpstream: 0,
+        billingCostMinor: 0,
+        pending: Math.max(0, analysisJobs.length - analysisCompleted),
+        message: progress.phase === 'retrying'
+          ? `AI 分析失败，正在重试：${job.relativePath}`
+          : `正在分析：${job.relativePath}`
+      });
+    }).then(async result => {
+      analysisCompleted += 1;
+      if (!result.ok) analysisFailed += 1;
+      await publishProgress({
+        phase: analysisCompleted === analysisJobs.length ? 'analyzing' : 'analyzing',
+        total: jobs.length,
+        current: analysisCompleted,
+        failed: analysisFailed,
+        percent: Math.round(Math.min(100, analysisCompleted / Math.max(1, jobs.length) * 100)),
+        apiGenerated: 0,
+        copied: 0,
+        excluded: Math.max(0, Number(options.excludedCount) || 0),
+        skipped: 0,
+        waitingUpstream: 0,
+        billingCostMinor: 0,
+        pending: Math.max(0, jobs.length - analysisCompleted),
+        message: result.ok ? `AI 分析完成 ${analysisCompleted}/${jobs.length}` : `AI 分析失败：${job.relativePath}`
+      });
+      return result;
+    });
+    await runWithConcurrency(analysisJobs, analysisConcurrency, analyzeWithProgress);
   }
   const startLabel = options.initial ? '开始生成套图' : onlyMissing ? '开始补生成缺失套图' : '开始重新生成整套图';
   await addOperationLog(folder, `${startLabel}：${jobs.length} 张`);

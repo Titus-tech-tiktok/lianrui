@@ -162,7 +162,7 @@ test('批量 AI 分析使用系统 API 并发配置', async (t) => {
   assert.equal(batch.failed, 0);
 });
 
-test('full detail page slices use capped analysis concurrency while regular images keep configured concurrency', async (t) => {
+test('full detail page slices use unified analysis concurrency with regular images', async (t) => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'caishen-template-analysis-detail-cap-'));
   let active = 0;
   let maxActive = 0;
@@ -243,8 +243,8 @@ test('full detail page slices use capped analysis concurrency while regular imag
   const batch = await runtime.analyzeTemplateItems({ folder, relativePaths });
   assert.equal(batch.completed, 12);
   assert.equal(batch.failed, 0);
-  assert.ok(maxActive > 4, 'regular images should still use configured high concurrency');
-  assert.ok(maxDetailActive <= 4, `detail slices should be capped at 4 concurrent requests, saw ${maxDetailActive}`);
+  assert.ok(maxActive > 4, 'analysis should use configured high concurrency');
+  assert.ok(maxDetailActive <= maxActive, `detail slices should stay in unified concurrency, saw ${maxDetailActive}`);
 });
 
 test('paid analysis responses are not shown as failed when content needs local fallback', async (t) => {
