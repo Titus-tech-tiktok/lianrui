@@ -1,4 +1,4 @@
-const crypto = require('node:crypto');
+﻿const crypto = require('node:crypto');
 const { AsyncLocalStorage } = require('node:async_hooks');
 const { execFile } = require('node:child_process');
 const sharp = require('sharp');
@@ -921,6 +921,8 @@ function detailSliceLayoutProtectionPrompt() {
     'This template may be a sliced ecommerce detail page, a multi-grid detail card, or a cropped partial product close-up from a long page. Treat the first input image as a locked layout canvas.',
     'ORDERED_DETAIL_SLICE_CONTINUITY_MODE',
     'This output is one ordered detail-page slice, not a complete long detail page. Keep the original slice width, height, crop window, page background and layout exactly aligned to the first input image so adjacent slices can be uploaded to Taobao in order and visually reconnect.',
+    'Do not perform any out-of-bounds completion: do not inpaint missing cabinets, do not recreate truncated boundaries, and do not infer or extend any geometry that is outside the visible crop of the first input image.',
+    'Keep crop and composition as if coordinates are absolute: the final output must preserve the same left/right/top/bottom crop window and not switch to a different viewport.',
     'Keep the top edge and bottom edge bands stable: do not change, enlarge, remove or invent objects, text, backgrounds, borders, panel lines, shadows or product surfaces that touch a slice boundary.',
     'For this slice, keep the original coordinate system of the template: do not shift any text glyph baseline, margins, separators, frame lines, grid cards, icon positions, or white-space bands. If text crosses a boundary, keep it complete with its original x/y offset.',
     'Do not generate the full detail page, do not merge neighboring slices, do not create a new poster, and do not invent content above or below the current canvas.',
@@ -928,9 +930,119 @@ function detailSliceLayoutProtectionPrompt() {
     'Only migrate the master product appearance onto visible cabinet, drawer-front, door-front or exterior panel surfaces that are already present in the first input image.',
     'A cropped drawer front or partial cabinet surface is still a valid target when it visibly belongs to the exterior product surface. Process only the visible part inside the current canvas; never invent the missing off-canvas continuation.',
     'For multi-grid pages, each small panel keeps its original crop, camera angle, text area and card frame. Do not merge panels, swap panel order, resize panels or turn the page into a new poster.',
+    'A valid output keeps all card frames and all panel borders as-is, and must not output a single merged poster or scene that hides the original tile boundaries.',
     'Keep all non-product details from the first input image unchanged: hands, people, snacks, books, lamps, plants, labels, measurement text, icons, copywriting blocks, shadows, walls, floors and existing empty space.',
     'If a product surface is ambiguous, preserve that local area rather than expanding the print into text or background.'
   ].join('\n');
+}
+
+function isMultiGridTemplate(job = {}, analysis = '') {
+  const text = `${String(job?.relativePath || '')}\n${String(job?.sectionName || '')}\n${String(analysis || '')}`.toLowerCase();
+  return ['多宫格', '多图', '拼图', 'multi-grid', 'multi panel', 'multi-panel', 'multi_panel', 'grid'].some(signal => text.includes(signal));
+}
+
+function _sampleNormalizedBandDiff(templateImage, outputImage, width, height, region) {
+  const sampleStep = 2;
+  const half = Math.max(1, Math.min(Math.floor(height / 2), 64));
+  let total = 0;
+  let diffSum = 0;
+  if (width <= 0 || height <= 0) return 1;
+
+  const sampleBand = (x, y, limitX, limitY, getOffset) => {
+    const yStart = Math.max(0, y);
+    const yEnd = Math.min(height, limitY);
+    const xStart = Math.max(0, x);
+    const xEnd = Math.min(width, limitX);
+    for (let py = yStart; py < yEnd; py += sampleStep) {
+      for (let px = xStart; px < xEnd; px += sampleStep) {
+        const offset = getOffset(px, py);
+        const r1 = templateImage[offset];
+        const g1 = templateImage[offset + 1];
+        const b1 = templateImage[offset + 2];
+        const r2 = outputImage[offset];
+        const g2 = outputImage[offset + 1];
+        const b2 = outputImage[offset + 2];
+        const row = (Math.abs(r1 - r2) + Math.abs(g1 - g2) + Math.abs(b1 - b2)) / 255 / 3;
+        diffSum += row;
+        total += 1;
+      }
+    }
+  };
+
+  switch (region) {
+    case 'top': {
+      const band = Math.max(1, Math.min(Math.floor(height * 0.08), 56));
+      sampleBand(0, 0, width, band, (x, y) => (y * width + x) * 4);
+      break;
+    }
+    case 'bottom': {
+      const band = Math.max(1, Math.min(Math.floor(height * 0.08), 56));
+      sampleBand(0, height - band, width, height, (x, y) => (y * width + x) * 4);
+      break;
+    }
+    case 'left': {
+      const band = Math.max(1, Math.min(Math.floor(width * 0.08), 56));
+      sampleBand(0, 0, band, height, (x, y) => (y * width + x) * 4);
+      break;
+    }
+    case 'right': {
+      const band = Math.max(1, Math.min(Math.floor(width * 0.08), 56));
+      sampleBand(width - band, 0, width, height, (x, y) => (y * width + x) * 4);
+      break;
+    }
+    default: {
+      return 0;
+    }
+  }
+
+  if (!total) return 0;
+  return diffSum / total;
+}
+
+async function validateTemplateOutputLayout(job, bytes, analysis = '') {
+  const templatePath = job?.templatePath || '';
+  if (!templatePath || !fs.existsSync(templatePath) || !bytes || bytes.length <= 0) return { passed: false, reason: '输出图像为空或模板缺失' };
+  const templateMeta = await sharp(templatePath).metadata();
+  const targetWidth = Math.max(1, Number(templateMeta.width) || 1);
+  const targetHeight = Math.max(1, Number(templateMeta.height) || 1);
+
+  const templateRaw = await sharp(templatePath)
+    .resize({ width: targetWidth, height: targetHeight, fit: 'fill' })
+    .ensureAlpha()
+    .raw()
+    .toBuffer();
+  const generatedRaw = await sharp(bytes)
+    .resize({ width: targetWidth, height: targetHeight, fit: 'fill' })
+    .ensureAlpha()
+    .raw()
+    .toBuffer();
+
+  const metrics = {
+    top: _sampleNormalizedBandDiff(templateRaw, generatedRaw, targetWidth, targetHeight, 'top'),
+    bottom: _sampleNormalizedBandDiff(templateRaw, generatedRaw, targetWidth, targetHeight, 'bottom'),
+    left: _sampleNormalizedBandDiff(templateRaw, generatedRaw, targetWidth, targetHeight, 'left'),
+    right: _sampleNormalizedBandDiff(templateRaw, generatedRaw, targetWidth, targetHeight, 'right')
+  };
+
+  const isDetailSlice = isDetailSliceTemplate(job, analysis);
+  const isMultiGrid = isMultiGridTemplate(job, analysis);
+  const heavyBoundaryDrift = isDetailSlice && (metrics.left > 0.34 || metrics.right > 0.34 || metrics.top > 0.34 || metrics.bottom > 0.34);
+  const multiGridDrift = isMultiGrid && isDetailSlice && (metrics.left > 0.22 || metrics.right > 0.22 || metrics.top > 0.22 || metrics.bottom > 0.22);
+
+  if (heavyBoundaryDrift) {
+    return {
+      passed: false,
+      reason: `布局校验未通过：边界漂移过大（top:${metrics.top.toFixed(2)} bottom:${metrics.bottom.toFixed(2)} left:${metrics.left.toFixed(2)} right:${metrics.right.toFixed(2)}）。`
+    };
+  }
+  if (multiGridDrift) {
+    return {
+      passed: false,
+      reason: `多宫格校验未通过：边界与页面结构偏差过大（top:${metrics.top.toFixed(2)} bottom:${metrics.bottom.toFixed(2)} left:${metrics.left.toFixed(2)} right:${metrics.right.toFixed(2)}）。`
+    };
+  }
+
+  return { passed: true };
 }
 
 function isDetailSliceTemplate(job = {}, analysis = '') {
@@ -3237,6 +3349,14 @@ async function generateTemplateJob(job, source, config, options = {}) {
     onRequestState: options.onRequestState
   });
   const billedMinor = Math.max(0, Number(bytes.billingAmountMinor) || 0);
+  const strictLayoutCheck = isDetailSliceTemplate(job, analysis);
+  if (strictLayoutCheck) {
+    const check = await validateTemplateOutputLayout(job, bytes, analysis);
+    if (!check.passed) {
+      await writeTemplateAudit(job, { passed: false, reason: `生成结果不满足固定版式约束：${check.reason}`, retry_instruction: '请重新生图；不要改版式和边界裁切。', action });
+      throw new Error(check.reason);
+    }
+  }
   await writeTemplateSizedImage(job, bytes, job.trimPixels);
   await fsp.rm(paths.templateAudit, { force: true }).catch(() => {});
   return { action, outputPath: job.outputPath, billedMinor };
