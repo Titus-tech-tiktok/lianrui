@@ -2238,7 +2238,7 @@ function resolveInside(root, relativePath) {
 const STRUCTURED_TEMPLATE_SECTIONS = Object.freeze({
   main: new Set(['主图', '1-1主图', '1:1主图', '1_1主图', '1/1主图']),
   ratio: new Set(['3-4主图', '3:4主图', '3_4主图', '3/4主图']),
-  detail: new Set(['详情页'])
+  detail: new Set(['详情页', '详情'])
 });
 const DETAIL_FULL_FILE_NAMES = new Set(['detail-full', 'detail_full', '完整详情页', '详情页']);
 const DETAIL_FULL_SLICE_HEIGHT = Number(process.env.CAISHEN_DETAIL_FULL_SLICE_HEIGHT || 0);
@@ -2279,8 +2279,8 @@ function detailFullRelativePath(relativePath) {
   return DETAIL_FULL_FILE_NAMES.has(path.basename(parts.at(-1), path.extname(parts.at(-1))).toLocaleLowerCase('zh-CN'));
 }
 
-function detailSliceRelativePath(index) {
-  return `详情页/${String(index + 1).padStart(2, '0')}.jpg`;
+function detailSliceRelativePath(sectionName, index) {
+  return `${sectionName}/${String(index + 1).padStart(2, '0')}.jpg`;
 }
 
 function resolveDetailFullSliceHeight(width) {
@@ -2294,6 +2294,7 @@ function resolveDetailFullSliceHeight(width) {
 
 async function ensureDetailFullSliceSpecs(templateRoot, fullPath) {
   const sourceRelativePath = normalizeTemplateRelativePath(path.relative(templateRoot, fullPath));
+  const detailSectionName = templateSectionName(sourceRelativePath);
   const sourceStat = await fsp.stat(fullPath);
   const metadata = await sharp(fullPath).metadata();
   const width = Math.max(1, Number(metadata.width) || 1);
@@ -2341,9 +2342,9 @@ async function ensureDetailFullSliceSpecs(templateRoot, fullPath) {
     const trimBottomPx = isLast ? 0 : effectiveOverlap;
     return {
       templatePath,
-      relativePath: detailSliceRelativePath(index),
+      relativePath: detailSliceRelativePath(detailSectionName, index),
       sourceRelativePath,
-      sectionName: '详情页',
+      sectionName: detailSectionName,
       trimPixels: {
         top: trimTopPx,
         bottom: trimBottomPx

@@ -13,11 +13,12 @@ test('every workspace lists a full detail page as sliced template jobs', async (
   delete require.cache[runtimePath];
   const runtime = require('../src/runtime');
   const mainDirectory = `1-1\u4e3b\u56fe`;
-  const detailDirectory = '\u8be6\u60c5\u9875';
-  const detailFile = `${detailDirectory}.jpg`;
+  const detailDirectories = ['\u8be6\u60c5\u9875', '\u8be6\u60c5'];
 
-  for (const workspaceId of ['local', 'user-member']) {
+  for (const [index, workspaceId] of ['local', 'user-member'].entries()) {
     await runtime.runWithWorkspace(workspaceId, async () => {
+      const detailDirectory = detailDirectories[index];
+      const detailFile = '\u8be6\u60c5\u9875.jpg';
       const folder = path.join(runtime.WORKSPACE_ROOT, 'assets', 'template', 'batch', 'template');
       await fs.mkdir(path.join(folder, mainDirectory), { recursive: true });
       await fs.mkdir(path.join(folder, detailDirectory), { recursive: true });
