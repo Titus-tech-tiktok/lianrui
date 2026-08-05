@@ -1027,7 +1027,11 @@ async function validateTemplateOutputLayout(job, bytes, analysis = '') {
   const isDetailSlice = isDetailSliceTemplate(job, analysis);
   const isMultiGrid = isMultiGridTemplate(job, analysis);
   const heavyBoundaryDrift = isDetailSlice && (metrics.left > 0.34 || metrics.right > 0.34 || metrics.top > 0.34 || metrics.bottom > 0.34);
-  const multiGridDrift = isMultiGrid && isDetailSlice && (metrics.left > 0.22 || metrics.right > 0.22 || metrics.top > 0.22 || metrics.bottom > 0.22);
+  const sideValues = [metrics.top, metrics.bottom, metrics.left, metrics.right];
+  const sideMax = Math.max(...sideValues);
+  const sideAvg = (metrics.top + metrics.bottom + metrics.left + metrics.right) / 4;
+  const sideExceedCount = sideValues.filter(item => item > 0.24).length;
+  const multiGridDrift = isMultiGrid && isDetailSlice && (sideMax > 0.5 || (sideExceedCount >= 2 && sideAvg > 0.18));
 
   if (heavyBoundaryDrift) {
     return {
