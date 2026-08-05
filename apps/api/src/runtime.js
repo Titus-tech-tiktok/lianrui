@@ -1031,7 +1031,9 @@ async function validateTemplateOutputLayout(job, bytes, analysis = '') {
   const sideMax = Math.max(...sideValues);
   const sideAvg = (metrics.top + metrics.bottom + metrics.left + metrics.right) / 4;
   const sideExceedCount = sideValues.filter(item => item > 0.24).length;
-  const multiGridDrift = isMultiGrid && isDetailSlice && (sideMax > 0.5 || (sideExceedCount >= 2 && sideAvg > 0.18));
+  const sideBelowMinorThreshold = sideValues.filter(item => item <= 0.2).length;
+  const singleDominantEdge = sideMax > 0.28 && sideExceedCount === 1 && sideBelowMinorThreshold >= 3;
+  const multiGridDrift = isMultiGrid && isDetailSlice && !singleDominantEdge && (sideMax > 0.5 || (sideExceedCount >= 2 && sideAvg > 0.18));
 
   if (heavyBoundaryDrift) {
     return {
