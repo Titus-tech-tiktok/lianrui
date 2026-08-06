@@ -2639,7 +2639,10 @@ async function createTemplateEditMask(job, analysis) {
   const maskPath = path.join(cache.cacheFolder, `${path.basename(cache.analysisFile, '.json')}-${fingerprint}.mask.png`);
   if (fs.existsSync(maskPath)) return maskPath;
   await fsp.mkdir(path.dirname(maskPath), { recursive: true });
-  // OpenAI image-edit masks use transparent pixels as editable areas. Build a\n  // real alpha cut-out; drawing a transparent polygon over an opaque white\n  // rectangle does not erase that rectangle and produces a fully locked mask.\n  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><defs><mask id="editable-cutout"><rect width="100%" height="100%" fill="#ffffff"/><g fill="#000000">${points.map(value => `<polygon points="${value}"/>`).join('')}</g></mask></defs><rect width="100%" height="100%" fill="#ffffff" mask="url(#editable-cutout)"/></svg>`;
+  // OpenAI image-edit masks use transparent pixels as editable areas. Build a
+  // real alpha cut-out; drawing a transparent polygon over an opaque white
+  // rectangle does not erase that rectangle and produces a fully locked mask.
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><defs><mask id="editable-cutout"><rect width="100%" height="100%" fill="#ffffff"/><g fill="#000000">${points.map(value => `<polygon points="${value}"/>`).join('')}</g></mask></defs><rect width="100%" height="100%" fill="#ffffff" mask="url(#editable-cutout)"/></svg>`;
   await sharp(Buffer.from(svg)).png().toFile(maskPath);
   return maskPath;
 }
