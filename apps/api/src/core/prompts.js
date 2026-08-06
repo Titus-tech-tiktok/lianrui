@@ -69,7 +69,7 @@ const TEMPLATE_ANALYSIS_PROMPT = `请把这张电商套图模板图分析成可�
 }
 
 硬性规则：
-- V10 结构中的字段应尽量完整输出；缺少说明性字段时后端会补默认值，不要因此把可执行图片改成人工确认。
+- V11 结构中的字段应尽量完整输出；缺少说明性字段时后端会补默认值，不要因此把可执行图片改成人工确认。
 - 对 processingMode=replace_print，必须输出 printableSurfaces：只圈出当前图片里实际可见、需要换印花的柜门或抽屉外侧面板。polygon 使用 0 到 1 的归一化坐标；每个点为 [x,y]；只画面板内部，绝不包含黑色边框、门缝、把手、柜脚、文字、尺寸线、背景、道具或被裁掉的画面。
 - 对 copy_original 或 manual_check，printableSurfaces 必须为空数组。
 - replace_print 表示“这张套图需要用母版商品重新生成”，不是局部标注换印花。
