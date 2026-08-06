@@ -459,11 +459,10 @@ async function writeJob(job) {
 }
 
 async function modelPackageWorkspaceForUser(user) {
-  if (!user || user.role !== 'member') return user?.workspaceId || runtime.WORKSPACE_ID;
-  if (!user.parentUserId) return user.workspaceId;
-  const users = await auth.listUsers();
-  const parent = users.find(item => item.id === user.parentUserId && item.role === 'admin');
-  return parent?.workspaceId || user.workspaceId;
+  // Analysis and generation are platform capabilities. Keep their effective
+  // model/concurrency selection identical for every role and every new account;
+  // only user assets and outputs remain isolated in the user's own workspace.
+  return runtime.WORKSPACE_ID;
 }
 
 function publicJob(job) {
@@ -1593,6 +1592,7 @@ module.exports = {
   decodeFileToken,
   deleteAssetFiles,
   isWithin,
+  modelPackageWorkspaceForUser,
   normalizedThumbnailWidth,
   safeRelative,
   startServer,
