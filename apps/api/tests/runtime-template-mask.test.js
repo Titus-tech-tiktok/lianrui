@@ -52,3 +52,15 @@ test('masked result preserves every template pixel outside editable panels', asy
   assert.equal(info.height, 120);
 });
 
+test('local panel detection keeps cabinet surfaces cropped by an image edge', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'caishen-cropped-panel-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const templatePath = path.join(root, 'cropped-detail.png');
+  await sharp({ create: { width: 120, height: 160, channels: 3, background: '#201b18' } })
+    .composite([{ input: { create: { width: 76, height: 116, channels: 3, background: '#ddd8cf' } }, left: 22, top: 44 }])
+    .png()
+    .toFile(templatePath);
+  const surfaces = await runtime.detectTemplateLightCabinetPanels(templatePath);
+  assert.ok(surfaces.length >= 1);
+  assert.equal(surfaces.some(surface => surface.polygon.some(([, y]) => y === 1)), true);
+});
