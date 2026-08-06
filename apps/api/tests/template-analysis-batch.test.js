@@ -64,8 +64,13 @@ test('单张和批量 AI 分析失败会重试三次并持久显示最终状态'
   process.env.CAISHEN_API_BASE_URL = `http://127.0.0.1:${server.address().port}/v1`;
   process.env.CAISHEN_API_KEY = 'test-key';
   process.env.CAISHEN_ANALYSIS_API_KEY = 'test-key';
+  process.env.CAISHEN_REVERSE_PROMPT_MODEL = 'gpt-analysis-test';
   process.env.CAISHEN_ANALYSIS_WIRE_API = 'chat_completions';
   process.env.CAISHEN_ANALYSIS_RETRY_BASE_MS = '1';
+  process.env.CAISHEN_ANALYSIS_API_MAX_ATTEMPTS = '5';
+  process.env.CAISHEN_ANALYSIS_API_BACKOFF_BASE_MS = '1';
+  process.env.CAISHEN_ANALYSIS_API_BACKOFF_MAX_MS = '2';
+  process.env.CAISHEN_ANALYSIS_API_START_INTERVAL_MS = '0';
   const runtimePath = require.resolve('../src/runtime');
   delete require.cache[runtimePath];
   const runtime = require('../src/runtime');
@@ -82,10 +87,10 @@ test('单张和批量 AI 分析失败会重试三次并持久显示最终状态'
   requests = 0;
   const failed = await runtime.analyzeTemplateItems({ folder, relativePaths: ['two.png'] });
   const failedItem = failed.items.find(item => item.relativePath === 'two.png');
-  assert.equal(requests, 4);
+  assert.equal(requests, 5, 'retryable API failures are retried by the shared analysis queue');
   assert.equal(failed.failed, 1);
   assert.equal(failedItem.analysisStatus, 'failed');
-  assert.equal(failedItem.analysisAttempts, 4);
+  assert.equal(failedItem.analysisAttempts, 1);
   assert.match(failedItem.analysisError, /temporary failure/);
 
   mode = 'success';
@@ -136,6 +141,9 @@ test('批量 AI 分析使用系统 API 并发配置', async (t) => {
   process.env.CAISHEN_API_KEY = 'test-key';
   process.env.CAISHEN_ANALYSIS_API_KEY = 'test-key';
   process.env.CAISHEN_ANALYSIS_WIRE_API = 'chat_completions';
+  process.env.CAISHEN_ANALYSIS_API_MAX_CONCURRENCY = '4';
+  process.env.CAISHEN_ANALYSIS_API_INITIAL_CONCURRENCY = '4';
+  process.env.CAISHEN_ANALYSIS_API_START_INTERVAL_MS = '0';
   const runtimePath = require.resolve('../src/runtime');
   delete require.cache[runtimePath];
   const runtime = require('../src/runtime');
@@ -155,9 +163,9 @@ test('批量 AI 分析使用系统 API 并发配置', async (t) => {
   await Promise.all(names.map(name => sharp({ create: { width: 24, height: 24, channels: 3, background: '#d8c59b' } }).png().toFile(path.join(folder, name))));
 
   const batch = await runtime.analyzeTemplateItems({ folder, relativePaths: names });
-  assert.equal(batch.concurrency, 8);
+  assert.equal(batch.concurrency, 4);
   assert.ok(maxActive > 1);
-  assert.ok(maxActive <= 8);
+  assert.ok(maxActive <= 4);
   assert.equal(batch.completed, 8);
   assert.equal(batch.failed, 0);
 });
@@ -211,6 +219,9 @@ test('full detail page slices use unified analysis concurrency with regular imag
   process.env.CAISHEN_ANALYSIS_API_KEY = 'test-key';
   process.env.CAISHEN_REVERSE_PROMPT_MODEL = 'gpt-analysis-test';
   process.env.CAISHEN_ANALYSIS_WIRE_API = 'chat_completions';
+  process.env.CAISHEN_ANALYSIS_API_MAX_CONCURRENCY = '4';
+  process.env.CAISHEN_ANALYSIS_API_INITIAL_CONCURRENCY = '4';
+  process.env.CAISHEN_ANALYSIS_API_START_INTERVAL_MS = '0';
   delete process.env.CAISHEN_DETAIL_FULL_SLICE_HEIGHT;
   delete process.env.CAISHEN_DETAIL_FULL_SLICE_OVERLAP;
   const runtimePath = require.resolve('../src/runtime');
@@ -243,7 +254,8 @@ test('full detail page slices use unified analysis concurrency with regular imag
   const batch = await runtime.analyzeTemplateItems({ folder, relativePaths });
   assert.equal(batch.completed, 12);
   assert.equal(batch.failed, 0);
-  assert.ok(maxActive > 4, 'analysis should use configured high concurrency');
+  assert.ok(maxActive > 1, 'analysis should still run concurrently');
+  assert.ok(maxActive <= 4, 'analysis should use the stable independent ceiling');
   assert.ok(maxDetailActive <= maxActive, `detail slices should stay in unified concurrency, saw ${maxDetailActive}`);
 });
 

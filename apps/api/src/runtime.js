@@ -220,6 +220,22 @@ const IMAGE_API_BACKOFF_MAX_MS = Math.max(IMAGE_API_BACKOFF_BASE_MS, Number(
 const IMAGE_API_TIMEOUT_MS = Math.max(1000, Number(process.env.CAISHEN_IMAGE_API_TIMEOUT_MS || 300000));
 const IMAGE_URL_TIMEOUT_MS = Math.max(1000, Number(process.env.CAISHEN_IMAGE_URL_TIMEOUT_MS || 300000));
 const ANALYSIS_RETRY_BASE_MS = Math.max(1, Number(process.env.CAISHEN_ANALYSIS_RETRY_BASE_MS || 600));
+const DEFAULT_ANALYSIS_API_CONCURRENCY = Math.min(12, Math.max(1, Number(
+  process.env.CAISHEN_ANALYSIS_API_MAX_CONCURRENCY || 4
+)));
+const DEFAULT_ANALYSIS_API_INITIAL_CONCURRENCY = Math.min(DEFAULT_ANALYSIS_API_CONCURRENCY, Math.max(1, Number(
+  process.env.CAISHEN_ANALYSIS_API_INITIAL_CONCURRENCY || 2
+)));
+const DEFAULT_ANALYSIS_API_START_INTERVAL_MS = Math.max(0, Number(
+  process.env.CAISHEN_ANALYSIS_API_START_INTERVAL_MS || 500
+));
+const ANALYSIS_API_MAX_ATTEMPTS = Math.max(1, Number(process.env.CAISHEN_ANALYSIS_API_MAX_ATTEMPTS || 5));
+const ANALYSIS_API_BACKOFF_BASE_MS = Math.max(250, Number(
+  process.env.CAISHEN_ANALYSIS_API_BACKOFF_BASE_MS || 1500
+));
+const ANALYSIS_API_BACKOFF_MAX_MS = Math.max(ANALYSIS_API_BACKOFF_BASE_MS, Number(
+  process.env.CAISHEN_ANALYSIS_API_BACKOFF_MAX_MS || 60000
+));
 const imageApiScheduler = new AdaptiveImageScheduler({
   initialConcurrency: DEFAULT_IMAGE_API_INITIAL_CONCURRENCY,
   maxConcurrency: DEFAULT_IMAGE_API_CONCURRENCY,
@@ -229,6 +245,17 @@ const imageApiScheduler = new AdaptiveImageScheduler({
   maxAttempts: IMAGE_API_MAX_ATTEMPTS,
   baseBackoffMs: IMAGE_API_BACKOFF_BASE_MS,
   maxBackoffMs: IMAGE_API_BACKOFF_MAX_MS
+});
+// Text analysis has a lower, independent ceiling: image-package concurrency can be far too high for vision LLM requests.
+const analysisApiScheduler = new AdaptiveImageScheduler({
+  initialConcurrency: DEFAULT_ANALYSIS_API_INITIAL_CONCURRENCY,
+  maxConcurrency: DEFAULT_ANALYSIS_API_CONCURRENCY,
+  minStartIntervalMs: DEFAULT_ANALYSIS_API_START_INTERVAL_MS,
+  healthyWindowSize: 8,
+  healthySuccessRatio: 0.9,
+  maxAttempts: ANALYSIS_API_MAX_ATTEMPTS,
+  baseBackoffMs: ANALYSIS_API_BACKOFF_BASE_MS,
+  maxBackoffMs: ANALYSIS_API_BACKOFF_MAX_MS
 });
 const imageReferenceCache = createImageReferenceCache({
   cacheRoot: path.join(SYSTEM_STATE_ROOT, 'image-reference-cache'),
@@ -313,6 +340,12 @@ function normalizeApiBaseUrl(value) {
 function normalizeModelName(value, fallback) {
   const text = String(value || fallback || '').trim();
   if (!text || text.length > 120 || /[\r\n]/.test(text)) throw new Error('模型名称格式不正确');
+  return text;
+}
+
+function normalizeOptionalModelName(value) {
+  const text = String(value || '').trim();
+  if (text.length > 120 || /[\r\n]/.test(text)) throw new Error('模型名称格式不正确');
   return text;
 }
 
@@ -467,7 +500,7 @@ function normalizeModelPackagesLegacy(value, currentSettings = {}) {
       modelId: normalizeModelName(currentSettings.imageModel, ENV_API.imageModel),
       analysisApiBaseUrl: normalizeApiBaseUrl(currentSettings.baseUrl),
       analysisApiKey: String(currentSettings.analysisKey || currentSettings.imageKey || '').trim(),
-      analysisModel: normalizeModelName(currentSettings.analysisModel, ENV_API.analysisModel),
+      analysisModel: normalizeOptionalModelName(currentSettings.analysisModel || ENV_API.analysisModel),
       analysisWireApi: normalizeAnalysisWireApi(currentSettings.analysisWireApi, ENV_API.analysisWireApi),
       maxConcurrency: normalizeModelPackageInteger(currentSettings.imageMaxConcurrency, DEFAULT_IMAGE_API_CONCURRENCY, 1, 50),
       startIntervalMs: normalizeModelPackageInteger(currentSettings.imageStartIntervalMs, DEFAULT_IMAGE_API_START_INTERVAL_MS, 0, 60000),
@@ -505,7 +538,7 @@ function normalizeModelPackagesLegacy(value, currentSettings = {}) {
       modelId: normalizeModelName(item?.modelId || item?.imageModel || current.modelId || currentSettings.imageModel, currentSettings.imageModel || ENV_API.imageModel),
       analysisApiBaseUrl,
       analysisApiKey,
-      analysisModel: normalizeModelName(item?.analysisModel || current.analysisModel || currentSettings.analysisModel, currentSettings.analysisModel || ENV_API.analysisModel),
+      analysisModel: normalizeOptionalModelName(item?.analysisModel || current.analysisModel || currentSettings.analysisModel || ENV_API.analysisModel),
       analysisWireApi: normalizeAnalysisWireApi(item?.analysisWireApi || current.analysisWireApi || currentSettings.analysisWireApi, currentSettings.analysisWireApi || ENV_API.analysisWireApi),
       maxConcurrency: normalizeModelPackageInteger(item?.maxConcurrency, current.maxConcurrency || 1, 1, 50),
       startIntervalMs: normalizeModelPackageInteger(item?.startIntervalMs, current.startIntervalMs || 500, 0, 60000),
@@ -626,7 +659,7 @@ function normalizeModelPackages(value, currentSettings = {}) {
       modelId: normalizeModelName(item?.modelId || item?.imageModel || current.modelId || currentSettings.imageModel, currentSettings.imageModel || ENV_API.imageModel),
       analysisApiBaseUrl,
       analysisApiKey: String(item?.analysisApiKey || item?.packageAnalysisApiKey || '').trim() || current.analysisApiKey || '',
-      analysisModel: normalizeModelName(item?.analysisModel || current.analysisModel || currentSettings.analysisModel, currentSettings.analysisModel || ENV_API.analysisModel),
+      analysisModel: normalizeOptionalModelName(item?.analysisModel || current.analysisModel || currentSettings.analysisModel || ENV_API.analysisModel),
       analysisWireApi: normalizeAnalysisWireApi(item?.analysisWireApi || current.analysisWireApi || currentSettings.analysisWireApi, currentSettings.analysisWireApi || ENV_API.analysisWireApi),
       maxConcurrency: normalizeModelPackageInteger(item?.maxConcurrency, current.maxConcurrency || preset.maxConcurrency, 1, 50),
       startIntervalMs: normalizeModelPackageInteger(item?.startIntervalMs, current.startIntervalMs || preset.startIntervalMs, 0, 60000),
@@ -827,7 +860,8 @@ async function activeApiConfig(channel = 'image') {
       ...settings,
       baseUrl: normalizeApiBaseUrl(pack.analysisApiBaseUrl || pack.apiBaseUrl || settings.baseUrl),
       analysisKey: String(pack.analysisApiKey || settings.analysisKey || settings.imageKey || '').trim(),
-      analysisModel: String(pack.analysisModel || settings.analysisModel || pack.modelId || settings.imageModel || '').trim(),
+      // Never fall back to the image model. A chat request sent to gpt-image-* only creates opaque analysis failures.
+      analysisModel: String(pack.analysisModel || settings.analysisModel || '').trim(),
       analysisWireApi: pack.analysisWireApi || settings.analysisWireApi,
       activeModelPackage: pack
     };
@@ -1094,10 +1128,7 @@ function packageBillingRange(pack, kind) {
 }
 
 async function activeApiConcurrencyLimit(total = Infinity) {
-  const pack = await activeModelPackage();
-  const settingsMax = normalizeImageConcurrencySettings(currentApiSettings()).imageMaxConcurrency || DEFAULT_IMAGE_API_CONCURRENCY;
-  const packageMax = pack ? Number(pack.maxConcurrency) : 0;
-  const max = Math.max(1, Math.min(50, packageMax || settingsMax));
+  const max = DEFAULT_ANALYSIS_API_CONCURRENCY;
   const count = Number(total);
   if (!Number.isFinite(count)) return max;
   return Math.min(max, Math.max(1, Math.trunc(count)));
@@ -1802,13 +1833,22 @@ async function apiJson(url, options = {}, timeoutMs = 120000) {
       const text = fallback.body || '';
       let body;
       try { body = JSON.parse(text); } catch { body = { error: { message: text || `HTTP ${fallback.status}` } }; }
-      if (fallback.status < 200 || fallback.status >= 300) throw new Error(body?.error?.message || body?.message || text || `HTTP ${fallback.status}`);
+      if (fallback.status < 200 || fallback.status >= 300) {
+        const error = new Error(body?.error?.message || body?.message || text || `HTTP ${fallback.status}`);
+        error.status = fallback.status;
+        throw error;
+      }
       return body;
     }
     const text = await response.text();
     let body;
     try { body = JSON.parse(text); } catch { body = { error: { message: text || `HTTP ${response.status}` } }; }
-    if (!response.ok) throw new Error(body?.error?.message || body?.message || text || `HTTP ${response.status}`);
+    if (!response.ok) {
+      const error = new Error(body?.error?.message || body?.message || text || `HTTP ${response.status}`);
+      error.status = response.status;
+      error.retryAfterMs = parseRetryAfterMs(response.headers.get('retry-after'));
+      throw error;
+    }
     return body;
   } finally {
     clearTimeout(timer);
@@ -1901,6 +1941,32 @@ function analysisContentToString(content) {
   return '';
 }
 
+function isRetryableAnalysisApiFailure(error) {
+  const status = Number(error?.status) || 0;
+  if ([408, 409, 425, 429].includes(status) || status >= 500) return true;
+  const description = `${error?.name || ''} ${error?.code || ''} ${error?.message || error || ''}`;
+  return /AbortError|fetch failed|network|socket|ECONN|ENOTFOUND|EAI_AGAIN|temporar(?:y|ily) unavailable|upstream service|server is busy|service unavailable|rate limit|too many requests|timeout/i.test(description);
+}
+
+async function adaptiveAnalysisApiJson(url, options = {}, timeoutMs = 120000) {
+  return analysisApiScheduler.schedule(async () => {
+    try {
+      return await apiJson(url, options, timeoutMs);
+    } catch (error) {
+      if (isRetryableAnalysisApiFailure(error)) {
+        const retryable = new RetryableRequestError(error?.message || String(error), {
+          status: error?.status,
+          retryAfterMs: error?.retryAfterMs,
+          code: error?.code
+        });
+        retryable.retryable = true;
+        throw retryable;
+      }
+      throw error;
+    }
+  });
+}
+
 async function analysisApiJson(api, chatPayload, timeoutMs, metadata = null) {
   const wireApi = normalizeAnalysisWireApi(api.analysisWireApi, 'chat_completions');
   const pathName = wireApi === 'responses' ? '/responses' : '/chat/completions';
@@ -1939,10 +2005,20 @@ async function analysisApiJson(api, chatPayload, timeoutMs, metadata = null) {
     },
     body: JSON.stringify(payload)
   };
-  const body = billingMetadata
-    ? await billableLlmJson(apiEndpoint(api.baseUrl, pathName), options, timeoutMs, billingMetadata)
-    : await apiJson(apiEndpoint(api.baseUrl, pathName), options, timeoutMs);
-  return normalizeAnalysisResponse(body, wireApi);
+  const reservation = billingMetadata
+    ? await billing.reserve(currentWorkspaceId(), 'llm', {
+      ...billingMetadata,
+      onceKey: billingMetadata.onceKey || billingMetadata.billingOnceKey || ''
+    })
+    : null;
+  try {
+    const body = await adaptiveAnalysisApiJson(apiEndpoint(api.baseUrl, pathName), options, timeoutMs);
+    if (reservation) await billing.commit(reservation);
+    return normalizeAnalysisResponse(body, wireApi);
+  } catch (error) {
+    if (reservation) await billing.release(reservation).catch(() => {});
+    throw error;
+  }
 }
 
 function randomDelay(minimumMs, maximumMs, signal = null) {
@@ -2917,6 +2993,7 @@ async function analyzeTemplateJob(job, options = {}) {
 async function analyzeTemplateJobWithRetry(job, retries = 3, onProgress = async () => {}, analyzeOptions = {}) {
   const maximumAttempts = Math.max(1, Number(retries) + 1);
   let lastError;
+  let attemptsUsed = 0;
   await writeTemplateAnalysisStatus(job, { status: 'running', attempts: 0, error: '' });
   let imageDataUrl;
   try { imageDataUrl = await imageAsAnalysisDataUrl(job.templatePath); }
@@ -2926,6 +3003,7 @@ async function analyzeTemplateJobWithRetry(job, retries = 3, onProgress = async 
     return { ok: false, relativePath: job.relativePath, attempts: 0, error: message };
   }
   for (let attempt = 1; attempt <= maximumAttempts; attempt += 1) {
+    attemptsUsed = attempt;
     await onProgress({ phase: 'analyzing', relativePath: job.relativePath, attempt, maximumAttempts });
     try {
       const summary = await analyzeTemplateJob(job, { ...analyzeOptions, imageDataUrl });
@@ -2933,6 +3011,9 @@ async function analyzeTemplateJobWithRetry(job, retries = 3, onProgress = async 
       return { ok: true, relativePath: job.relativePath, attempts: attempt, summary };
     } catch (error) {
       lastError = error;
+      // Retryable transport/API errors have already been retried by the shared analysis queue.
+      // Retrying the whole job again would create a second burst after the queue gives up.
+      if (error instanceof RetryableRequestError || error?.retryable === true) break;
       if (attempt < maximumAttempts) {
         await onProgress({ phase: 'retrying', relativePath: job.relativePath, attempt, maximumAttempts, error: error?.message || String(error) });
         await randomDelay(ANALYSIS_RETRY_BASE_MS * attempt, ANALYSIS_RETRY_BASE_MS * 2 * attempt);
@@ -2940,8 +3021,8 @@ async function analyzeTemplateJobWithRetry(job, retries = 3, onProgress = async 
     }
   }
   const message = lastError?.message || String(lastError || 'AI 分析失败');
-  await writeTemplateAnalysisStatus(job, { status: 'failed', source: 'ai', attempts: maximumAttempts, error: message });
-  return { ok: false, relativePath: job.relativePath, attempts: maximumAttempts, error: message };
+  await writeTemplateAnalysisStatus(job, { status: 'failed', source: 'ai', attempts: attemptsUsed, error: message });
+  return { ok: false, relativePath: job.relativePath, attempts: attemptsUsed, error: message };
 }
 
 async function analyzeTemplateItemWithReference(payload = {}, options = {}) {
