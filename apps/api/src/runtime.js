@@ -1,4 +1,4 @@
-const crypto = require('node:crypto');
+ï»¿const crypto = require('node:crypto');
 const { AsyncLocalStorage } = require('node:async_hooks');
 const { execFile } = require('node:child_process');
 const sharp = require('sharp');
@@ -389,4 +389,4405 @@ function apiConcurrencyLimit(total = Infinity) {
   return Math.min(max, Math.max(1, Math.trunc(count)));
 }
 
-function publicApiConcurrencySettië÷æÚ$z{-®éÜj×F—FÆUF6³òæf—'7EF—FÆR’F‡&÷ræWrW'&÷"‚~K»¾Xª{Ë®[	j~š)ûÈÎŠû~XXyIşh‰j~š)‚r“°¢6öç7B–ÖvW2Ò6Æ76–g•Fö&ô–ÖvW2‡&Wf–Wræ¦ö'2ÇÂµÒ“°¢6öç7B–ÖvU6¶vRÒfÆ–FFUFö&ô–ÖvU6¶vR†–ÖvW2“°¢–b‚–ÖvU6¶vRæö²’F‡&÷ræWrW'&÷"†Xù[ˆ>K»¾Xª{Ë®[	G¶–ÖvU6¶vRæÖ—76–æræ¦ö–â‚~8r—Ö“°¢6öç7Bæ÷rÒæWrFFR‚’çFô•4õ7G&–ær‚“°¢6öç7B–BÒFö&õV&Æ—6…F6´–B†föÆFW"Â6FVv÷'”–B“°¢6öç7B7FFRÒv—B&VEFö&õV&Æ—6…7FFR‚“°¢6öç7BW†—7F–æt–æFW‚Ò7FFRçF6·2æf–æD–æFW‚†—FVÒÓâ—FVÒæ–BÓÓÒ–BÇÂF‚ç&W6öÇfR†—FVÒæföÆFW"ÇÂrr’ÓÓÒF‚ç&W6öÇfR†föÆFW"’“°¢6öç7B&V6÷&BÒ°¢–BÀ¢föÆFW"À¢6FVv÷'”–BÀ¢7FGW3¢~zØ[è^hù.K»nhê^iKbrÀ¢f–ÇW&U&V6öã¢rrÀ¢VWVVDC¢æ÷rÀ¢WFFVDC¢æ÷rÀ¢GFV×G3¢W†—7F–æt–æFW‚ãÒòçVÖ&W"‡7FFRçF6·5¶W†—7F–æt–æFW…ÒæGFV×G2ÇÂ’²¢¢Ó°¢–b†W†—7F–æt–æFW‚ãÒ’7FFRçF6·2ç7Æ–6R†W†—7F–æt–æFW‚ÂÂ&V6÷&B“°¢VÇ6R7FFRçF6·2çW6‚‡&V6÷&B“°¢v—Bw&—FUFö&õV&Æ—6…7FFR‡7FFR“°¢&WGW&â†v—BFö&õV&Æ—6„&6UF6·2‚’’æf–æB†—FVÒÓâ—FVÒæ–BÓÓÒ–B’ÇÂ&V6÷&C°§Ğ ¦7–æ2gVæ7F–öâvWEFö&õV&Æ—6…6¶vR†–B’°¢6öç7B7FFRÒv—B&VEFö&õV&Æ—6…7FFR‚“°¢6öç7B&V6÷&BÒ7FFRçF6·2æf–æB†—FVÒÓâ—FVÒæ–BÓÓÒ–B“°¢–b‚&V6÷&B’F‡&÷ræWrW'&÷"‚~Xù[ˆ>K»¾XªKˆŞZÙYÊ‚r“°¢6öç7B6WGF–æw2Òv—BvWEFö&õV&Æ—6…6WGF–æw2‚“°¢6öç7B6FVv÷'’Ò6WGF–æw2æ6FVv÷&–W2æf–æB†—FVÒÓâ—FVÒæ–BÓÓÒ&V6÷&Bæ6FVv÷'”–B“°¢–b‚6FVv÷'’’F‡&÷ræWrW'&÷"‚~Xù[ˆ>{¾yºîKˆŞZÙYÊ‚r“°¢6öç7B&Wf–WrÒ†v—B&Wf–WtföÆFW'2‚’’æf–æB†—FVÒÓâF‚ç&W6öÇfR†—FVÒæföÆFW"’ÓÓÒF‚ç&W6öÇfR‡&V6÷&BæföÆFW"’“°¢–b‚&Wf–WrÇÂ—5&Wf–Wu&VG”f÷%Fö&ò‡&Wf–Wr’’F‡&÷ræWrW'&÷"‚~K»¾XªKˆŞXhŞkº‹k>Xù[ˆ>iÚK»br“°¢6öç7BF—FÆUF6²Ò†v—BÆ—7E&VG•F—FÆUF6·2‚’’æf–æB†—FVÒÓâF‚ç&W6öÇfR†—FVÒæföÆFW"’ÓÓÒF‚ç&W6öÇfR‡&V6÷&BæföÆFW"’“°¢–b‚F—FÆUF6³òæf—'7EF—FÆR’F‡&÷ræWrW'&÷"‚~K»¾Xª{Ë®[	j~š)‚r“°¢6öç7B–ÖvW2Ò6Æ76–g•Fö&ô–ÖvW2‡&Wf–Wræ¦ö'2ÇÂµÒ“°¢6öç7B–ÖvU6¶vRÒfÆ–FFUFö&ô–ÖvU6¶vR†–ÖvW2“°¢–b‚–ÖvU6¶vRæö²’F‡&÷ræWrW'&÷"†Xù[ˆ>K»¾Xª{Ë®[	G¶–ÖvU6¶vRæÖ—76–æræ¦ö–â‚~8r—Ö“°¢&WGW&â°¢–C¢&V6÷&Bæ–BÀ¢föÆFW#¢&V6÷&BæföÆFW"À¢æÖS¢&Wf–WrææÖRÀ¢6FVv÷'”–C¢&V6÷&Bæ6FVv÷'”–BÀ¢6FVv÷'’À¢F—FÆS¢F—FÆUF6²æf—'7EF—FÆRÀ¢–ÖvW2À¢7&VFVDC¢&V6÷&BçVWVVDBÇÂ&V6÷&BçWFFVDBÇÂæWrFFR‚’çFô•4õ7G&–ær‚¢Ó°§Ğ ¦7–æ2gVæ7F–öâ6Æ–ÕFö&õV&Æ—6…F6²‡–ÆöBÒ·Ò’°¢6öç7B6WGF–æw2Òv—BvWEFö&õV&Æ—6…6WGF–æw2‚“°¢–b…7G&–ær‡–ÆöBçFö¶VâÇÂrr’ÓÒ6WGF–æw2çFö¶Vâ’F‡&÷ræWrW'&÷"‚~kyZéŞXù[ˆ>Xªh˜¾KºNx˜ÎiziX‚r“°¢6öç7B7FFRÒv—B&VEFö&õV&Æ—6…7FFR‚“°¢6öç7B&V6÷&BÒ7FFRçF6·2æf–æB†—FVÒÓâ—FVÒç7FGW2ÓÓÒ~zØ[è^hù.K»nhê^iKbr“°¢–b‚&V6÷&B’&WGW&âçVÆÃ°¢6öç7Bæ÷rÒæWrFFR‚’çFô•4õ7G&–ær‚“°¢&V6÷&Bç7FGW2Ò~hù.K»n[{.hê^iKbs°¢&V6÷&BæW‡FVç6–öä–BÒ7G&–ær‡–ÆöBæW‡FVç6–öä–BÇÂrr“°¢&V6÷&BçWFFVDBÒæ÷s°¢v—Bw&—FUFö&õV&Æ—6…7FFR‡7FFR“°¢&WGW&âvWEFö&õV&Æ—6…6¶vR‡&V6÷&Bæ–B“°§Ğ ¦7–æ2gVæ7F–öâWFFUFö&õV&Æ—6…7FGW2†–BÂ–ÆöBÒ·Ò’°¢6öç7B6WGF–æw2Òv—BvWEFö&õV&Æ—6…6WGF–æw2‚“°¢–b‡–ÆöBçFö¶VâÒçVÆÂbb7G&–ær‡–ÆöBçFö¶VâÇÂrr’ÓÒ6WGF–æw2çFö¶Vâ’F‡&÷ræWrW'&÷"‚~kyZéŞXù[ˆ>Xªh˜¾KºNx˜ÎiziX‚r“°¢6öç7BÆÆ÷vVBÒæWr6WB…²~zØ[è^hù.K»nhê^iKbrÂ~hù.K»n[{.hê^iKbrÂ~jÚ>YÊh™>[ÈkyZéŞš^™Ú"rÂ~jÚ>YÊZ¾XiZÙ~jëRrÂ~jÚ>YÊKˆ®KÊY»îx˜rrÂ~jÚ>YÊKùŞZÙˆØz‹òrÂ~[{.KùŞZÙˆØz‹òrÂ~ZK‹JRuÒ“°¢6öç7B7FFRÒv—B&VEFö&õV&Æ—6…7FFR‚“°¢6öç7B&V6÷&BÒ7FFRçF6·2æf–æB†—FVÒÓâ—FVÒæ–BÓÓÒ–B“°¢–b‚&V6÷&B’F‡&÷ræWrW'&÷"‚~Xù[ˆ>K»¾XªKˆŞZÙYÊ‚r“°¢6öç7B7FGW2Ò7G&–ær‡–ÆöBç7FGW2ÇÂ&V6÷&Bç7FGW2“°¢–b†ÆÆ÷vVBæ†2‡7FGW2’’&V6÷&Bç7FGW2Ò7FGW3°¢&V6÷&Bæf–ÇW&U&V6öâÒ7G&–ær‡–ÆöBæf–ÇW&U&V6öâÇÂ–ÆöBæW'&÷"ÇÂrr“°¢&V6÷&BæFWF–ÂÒ–ÆöBæFWF–ÂbbG—Vöb–ÆöBæFWF–ÂÓÓÒvö&¦V7Brò–ÆöBæFWF–Â¢&V6÷&BæFWF–ÂÇÂ·Ó°¢&V6÷&BçWFFVDBÒæWrFFR‚’çFô•4õ7G&–ær‚“°¢v—Bw&—FUFö&õV&Æ—6…7FFR‡7FFR“°¢&WGW&â&V6÷&C°§Ğ ¦7–æ2gVæ7F–öâf–æE&Wf–Wt¦ö"†föÆFW"Â&VÆF—fUF‚’°¢6öç7B6÷W&6RÒv—B&VE6÷W&6TÖWFFF†föÆFW"“°¢–b‚6÷W&6RçFV×ÆFTföÆFW%F‚ÇÂg2æW†—7G57–æ2‡6÷W&6RçFV×ÆFTföÆFW%F‚’’F‡&÷ræWrW'&÷"‚~K»¾Xª{Ë®[	ZY~Y»îih~K»nZK’r“°¢6öç7BvçFVBÒ7G&–ær‡&VÆF—fUF‚ÇÂrr’ç&WÆ6TÆÂ‚uÅÂrÂròr’çFôÆö6ÆTÆ÷vW$66R‚w¦‚Ô4âr“°¢6öç7B6VÆV7FVEF‡2ÒæWr6WB‚‡6÷W&6RçFV×ÆFU&VÆF—fUF‡2ÇÂµÒ’æÖ‡fÇVRÓâ7G&–ær‡fÇVR’ç&WÆ6TÆÂ‚uÅÂrÂròr’çFôÆö6ÆTÆ÷vW$66R‚w¦‚Ô4âr’’“°¢6öç7B¦ö"Ò†v—B'V–ÆEFV×ÆFT¦ö'2‡6÷W&6RçFV×ÆFTföÆFW%F‚ÂföÆFW"’’æf–æB†—FVÒÓâ°¢6öç7Bæ÷&ÖÆ—¦VBÒ—FVÒç&VÆF—fUF‚ç&WÆ6TÆÂ‚uÅÂrÂròr’çFôÆö6ÆTÆ÷vW$66R‚w¦‚Ô4âr“°¢&WGW&âæ÷&ÖÆ—¦VBÓÓÒvçFVBbb‚6VÆV7FVEF‡2ç6—¦RÇÂ6VÆV7FVEF‡2æ†2†æ÷&ÖÆ—¦VB’“°¢Ò“°¢–b‚¦ö"’F‡&÷ræWrW'&÷"†iÊ®h›îX‹ZY~Y»îY»îx˜~ûÉ¢G·&VÆF—fUF‡Ö“°¢&WGW&â¦ö#°§Ğ ¦7–æ2gVæ7F–öâ&W6öÇfU&Wf–Wu&VfW&Væ6U&W7VÇEF‚†föÆFW"Â&VÆF—fUF‚’°¢6öç7BfÇVRÒ7G&–ær‡&VÆF—fUF‚ÇÂrr’çG&–Ò‚“°¢–b‚fÇVR’&WGW&ârs°¢6öç7B&VfW&Væ6T¦ö"Òv—Bf–æE&Wf–Wt¦ö"†föÆFW"ÂfÇVR“°¢–b‚&VfW&Væ6T¦ö"æ÷WGWEF‚ÇÂg2æW†—7G57–æ2‡&VfW&Væ6T¦ö"æ÷WGWEF‚’’°¢F‡&÷ræWrW'&÷"†Xø.ˆ>{¹>iéÎY»î[	®iÊ®yIşh‰ûÉ¢G·&VfW&Væ6T¦ö"ç&VÆF—fUF‡Ö“°¢Ğ¢&WGW&â&VfW&Væ6T¦ö"æ÷WGWEFƒ°§Ğ ¦7–æ2gVæ7F–öâ6WEFV×ÆFTÖçVÅ7FGW2‡–ÆöB’°¢6öç7BföÆFW"Ò7G&–ær‡–ÆöCòæföÆFW"ÇÂrr“°¢–b‚föÆFW"ÇÂg2æW†—7G57–æ2†föÆFW"’’F‡&÷ræWrW'&÷"‚~K»¾Xªih~K»nZKKˆŞZÙYÊ‚r“°¢6öç7B¦ö"Òv—Bf–æE&Wf–Wt¦ö"†föÆFW"Â–ÆöCòç&VÆF—fUF‚“°¢6öç7B7FGW2Ò–ÆöCòç7FGW2ÓÓÒ~K«®[z^KˆŞ˜	®‹ørrò~K«®[z^KˆŞ˜	®‹ørr¢~K«®[z^˜	®‹ørs°¢6öç7BWFFVDBÒæWrFFR‚’çFô•4õ7G&–ær‚“°¢6öç7BF‡2ÒÖWFFFF‡2†föÆFW"Â¦ö"ç&VÆF—fUF‚“°¢v—Bw&—FT§6öäf–ÆR‡F‡2æÖçVÅ&Wf–WrÂFõwdÖçVÅ&Wf–Wu7FFR‡7FGW2ÂWFFVDB’“°¢6öç7B&Wf–WuF‡2ÒÖWFFFF‡2†föÆFW"“°¢6öç7B7W'&VçBÒæ÷&ÖÆ—¦U&Wf–WtÖWFFF†v—B&VD§6öäf–ÆR‡&Wf–WuF‡2æÖ5&Wf–WrÂ·Ò’“°¢6öç7B–ÖvW2Ò7W'&VçBæ–ÖvW2æf–ÇFW"†–ÖvRÓâ–ÖvRç&VÆF—fUF‚ç&WÆ6TÆÂ‚uÅÂrÂròr’çFôÆö6ÆTÆ÷vW$66R‚w¦‚Ô4âr’ÓÒ¦ö"ç&VÆF—fUF‚ç&WÆ6TÆÂ‚uÅÂrÂròr’çFôÆö6ÆTÆ÷vW$66R‚w¦‚Ô4âr’“°¢–ÖvW2çW6‚‡²&VÆF—fUFƒ¢¦ö"ç&VÆF—fUF‚Â÷WGWEFƒ¢¦ö"æ÷WGWEF‚Â÷WGWDW†—7G3¢g2æW†—7G57–æ2†¦ö"æ÷WGWEF‚’ÂÖçVÅ7FGW3¢7FGW2Â&Wf–WvVDC¢WFFVDBÒ“°¢v—Bw&—FT§6öäf–ÆR‡&Wf–WuF‡2æÖ5&Wf–WrÂFôÖ5&Wf–WtÖWFFF†7W'&VçBÂ²–ÖvW2Â&Wf–WvVDC¢WFFVDBÒ’“°¢v—BFD÷W&F–öäÆör†föÆFW"ÂG·7FGW2ÓÓÒ~K«®[z^˜	®‹ørrò~K«®[z^j~Šë˜	®‹ørr¢~K«®[z^j~ŠëKˆŞ˜	®‹ørwŞûÉ¢G¶¦ö"ç&VÆF—fUF‡Ö“°¢&WGW&âG'VS°§Ğ ¦7–æ2gVæ7F–öâ&÷fU&Wf–WtföÆFW"†föÆFW"ÂÆÆ÷u6¶—ÒfÇ6R’°¢–b‚föÆFW"ÇÂg2æW†—7G57–æ2†föÆFW"’’F‡&÷ræWrW'&÷"‚~K»¾Xªih~K»nZKKˆŞZÙYÊ‚r“°¢6öç7B6÷W&6RÒv—B&VE6÷W&6TÖWFFF†föÆFW"“°¢–b‚6÷W&6RçFV×ÆFTföÆFW%F‚ÇÂg2æW†—7G57–æ2‡6÷W&6RçFV×ÆFTföÆFW%F‚’’°¢v—Bw&—FT§6öäf–ÆR†ÖWFFFF‡2†föÆFW"’æÖ5&Wf–WrÂ²7FGW3¢~[{.˜	®‹ørrÂ&Wf–WvVDC¢æWrFFR‚’çFô•4õ7G&–ær‚’Ò“°¢v—BFD÷W&F–öäÆör†föÆFW"Â~K«®[z^˜	®‹ø~K»¾Xªr“°¢&WGW&â²&÷fVC¢G'VRÂ6†ævVC¢Ó°¢Ğ¢6öç7B6VÆV7FVEF‡2ÒæWr6WB‚‡6÷W&6RçFV×ÆFU&VÆF—fUF‡2ÇÂµÒ’æÖ‡fÇVRÓâ7G&–ær‡fÇVR’ç&WÆ6TÆÂ‚uÅÂrÂròr’çFôÆö6ÆTÆ÷vW$66R‚w¦‚Ô4âr’’“°¢6öç7B¦ö'2Ò†v—B'V–ÆEFV×ÆFT¦ö'2‡6÷W&6RçFV×ÆFTföÆFW%F‚ÂföÆFW"’¢æf–ÇFW"†¦ö"Óâ6VÆV7FVEF‡2ç6—¦RÇÂ6VÆV7FVEF‡2æ†2†¦ö"ç&VÆF—fUF‚ç&WÆ6TÆÂ‚uÅÂrÂròr’çFôÆö6ÆTÆ÷vW$66R‚w¦‚Ô4âr’’“°¢6öç7B7F–öæ&ÆT¦ö'2ÒµÓ°¢f÷"†6öç7B¦ö"öb¦ö'2’°¢6öç7B²7VÖÖ'’ÒÒv—BFV×ÆFTæÇ—6—4f÷$¦ö"†¦ö"“°¢–b‡7VÖÖ'’æ7F–öâÓÒw6¶—ö6÷’r’7F–öæ&ÆT¦ö'2çW6‚†¦ö"“°¢Ğ¢6öç7BÖ—76–ærÒ7F–öæ&ÆT¦ö'2æf–ÇFW"†¦ö"Óâg2æW†—7G57–æ2†¦ö"æ÷WGWEF‚’“°¢–b†Ö—76–æræÆVæwF‚’°¢v—BFD÷W&F–öäÆör†föÆFW"Âh›˜xş˜	®‹ø~K»¾XªX‰~ŠûÉ®‹ùiÈ’G¶Ö—76–æræÆVæwF‡Ò[ÊiÊ®yIşh‰ûÈÎiÊ®[Ù.j6“°¢–b†ÆÆ÷u6¶—’&WGW&â²&÷fVC¢fÇ6RÂÖ—76–æs¢Ö—76–æræÆVæwF‚Ó°¢F‡&÷ræWrW'&÷"†‹ùiÈ’G¶Ö—76–æræÆVæwF‡Ò[ÊZY~Y»îiÊ®yIşh‰“°¢Ğ¢6öç7BWFFVDBÒæWrFFR‚’çFô•4õ7G&–ær‚“°¢f÷"†6öç7B¦ö"öb7F–öæ&ÆT¦ö'2’v—Bw&—FT§6öäf–ÆR†ÖWFFFF‡2†föÆFW"Â¦ö"ç&VÆF—fUF‚’æÖçVÅ&Wf–WrÂFõwdÖçVÅ&Wf–Wu7FFR‚~K«®[z^˜	®‹ørrÂWFFVDB’“°¢6öç7B–ÖvW2Ò7F–öæ&ÆT¦ö'2æÖ†¦ö"Óâ‡²&VÆF—fUFƒ¢¦ö"ç&VÆF—fUF‚Â÷WGWEFƒ¢¦ö"æ÷WGWEF‚Â÷WGWDW†—7G3¢G'VRÂÖçVÅ7FGW3¢~K«®[z^˜	®‹ørrÂ&Wf–WvVDC¢WFFVDBÒ’“°¢v—Bw&—FT§6öäf–ÆR†ÖWFFFF‡2†föÆFW"’æÖ5&Wf–WrÂFôÖ5&Wf–WtÖWFFF‡²7FGW3¢~[{.˜	®‹ørrÒÂ²7FGW3¢~[{.˜	®‹ørrÂ&Wf–WvVDC¢WFFVDBÂ–ÖvW2Ò’“°¢v—BFD÷W&F–öäÆör†föÆFW"Âh›˜xş˜	®‹ø~K»¾XªX‰~ŠûÉ®[{.j~ŠëG¶7F–öæ&ÆT¦ö'2æÆVæwF‡Ò[ÊY»îx˜~K‹®˜	®‹ø~ûÈÎ[›n[Ù.j>K»¾Xª“°¢&WGW&â²&÷fVC¢G'VRÂ6†ævVC¢7F–öæ&ÆT¦ö'2æÆVæwF‚Ó°§Ğ ¦7–æ2gVæ7F–öâ&F6„&÷fU&Wf–WtföÆFW'2†föÆFW'2’°¢6öç7B&W7VÇG2ÒµÓ°¢f÷"†6öç7BföÆFW"öb²ââææWr6WB‚†föÆFW'2ÇÂµÒ’æÖ…7G&–ær’•Ò’&W7VÇG2çW6‚‡²föÆFW"Ââââ†v—B&÷fU&Wf–WtföÆFW"†föÆFW"ÂG'VR’’Ò“°¢&WGW&â&W7VÇG3°§Ğ ¦7–æ2gVæ7F–öâFVÆWFU&Wf–WtföÆFW'2†föÆFW'2’°¢6öç7B÷WGWE&ö÷BÒF‚ç&W6öÇfR‚†v—BÆöD6öæf–r‚’’æ÷WGWEF‚ÇÂ7W'&VçDFVfVÇD÷WGWE&ö÷B‚’“°¢6öç7BW†—7F–ærÒ²ââææWr6WB‚†föÆFW'2ÇÂµÒ’æÖ…7G&–ær’•Òæf–ÇFW"†föÆFW"Óâ°¢6öç7B&W6öÇfVBÒF‚ç&W6öÇfR†föÆFW"“°¢&WGW&âg2æW†—7G57–æ2‡&W6öÇfVB’bb&W6öÇfVBÓÒ÷WGWE&ö÷Bbb—56ÖT÷$6†–ÆEF‚†÷WGWE&ö÷BÂ&W6öÇfVB“°¢Ò“°¢ÆWBFVÆWFVBÒ°¢f÷"†6öç7BföÆFW"öbW†—7F–ær’°¢v—Bg7ç&Ò†föÆFW"Â²&V7W'6—fS¢G'VRÂf÷&6S¢G'VRÒ“°¢FVÆWFVB³Ò°¢Ğ¢&WGW&âFVÆWFVC°§Ğ  ¦7–æ2gVæ7F–öâ&W6WD6öæf–r‚’°¢v—Bg7ç&Ò†6öæf–tf–ÆR‚’Â²f÷&6S¢G'VRÒ“°¢&WGW&â6fT6öæf–r†FVfVÇD6öæf–r‚’“°§Ğ ¦7–æ2gVæ7F–öâvVæW&FTg&VR‡–ÆöBÒ·ÒÂ÷F–öç2Ò·Ò’°¢–b‚–ÆöBç6÷W&6UF‚ÇÂg2æW†—7G57–æ2‡–ÆöBç6÷W&6UF‚’’F‡&÷ræWrW'&÷"‚~Šû~˜hºk©Y»îx˜rr“°¢–b‚7G&–ær‡–ÆöBç&ö×BÇÂrr’çG&–Ò‚’’F‡&÷ræWrW'&÷"‚~Šû~‹é>XZ^yIşY»îhùzK®ŠøÒr“°¢6öç7B6öæf–rÒv—BÆöD6öæf–r‚“°¢6öç7BföÆFW"ÒF‚æ¦ö–â†6öæf–ræ÷WGWEF‚ÇÂ7W'&VçDFVfVÇD÷WGWE&ö÷B‚’Â~ˆz®yKyIşY»âr“°¢v—Bg7æÖ¶F—"†föÆFW"Â²&V7W'6—fS¢G'VRÒ“°¢6öç7B÷WGWEF‚ÒF‚æ¦ö–â†föÆFW"Âˆz®yKyIşY»åòG¶Æö6Äf–ÆUF–ÖW7F×‚—Òçæv“°¢v—Bg7çw&—FTf–ÆR†÷WGWEF‚Âv—BvVæW&FT–ÖvR…7G&–ær‡–ÆöBç&ö×B’çG&–Ò‚’Â·–ÆöBç6÷W&6UF…ÒÂ°¢6—¦S¢6öæf–ræ–ÖvU6—¦RÇÂs#Gƒ#BrÀ¢VÆ—G“¢6öæf–ræ–ÖvUVÆ—G’ÇÂvWFòrÀ¢&–ÆÆ–ætFW67&—F–öã¢~ˆz®yKyIşY»ârÀ¢&–ÆÆ–æu&VfW&Væ6S¢F‚æ&6VæÖR‡–ÆöBç6÷W&6UF‚’À¢&–ÆÆ–ætöæ6T¶W“¢&–ÆÆ–ætöæ6T¶W’‚v–ÖvS¦g&VRrÂ–ÆöBç6÷W&6UF‚Â7G&–ær‡–ÆöBç&ö×B’çG&–Ò‚’’À¢6–væÃ¢÷F–öç2ç6–væÀ¢Ò’“°¢&WGW&â²÷WGWEF‚ÂW&Ã¢–ÖvUW&Â†÷WGWEF‚’Ó°§Ğ ¦7–æ2gVæ7F–öâ6fUF—FÆU6WGW‡–ÆöBÒ·Ò’°¢6öç7BÆ–'&'’Òv—BÆöEF—FÆTÆ–'&'’‚“°¢–b‚Æ–'&'’’F‡&÷ræWrW'&÷"‚~Šû~XXZûÎXZ^X[>™JîŠøŞŠ‚r“°¢Æ–'&'’ç&Vf—…&ö÷G2Ò'6UF—FÆU&Vf—…&ö÷G2‡–ÆöBç&Vf—†W2ÇÂrr“°¢Æ–'&'’ç&Vf—…&ö÷BÒÆ–'&'’ç&Vf—…&ö÷G5³ÒÇÂrs°¢Æ–'&'’ç&WV—&VE&ö÷G2Ò'6UF—FÆU&Vf—…&ö÷G2‡–ÆöBç&WV—&VE&ö÷G2ÇÂµÒ“°¢–b‚Æ–'&'’ç&Vf—…&ö÷G2æÆVæwF‚’F‡&÷ræWrW'&÷"‚~ˆ{>[	Z¾XiKˆKŠ®j~š)[ÈZKNŠøŞj’r“°¢v—B6fT6FVv÷'•F—FÆTÆ–'&'’†Æ–'&'’“°¢&WGW&â6fUF—FÆTÆ–'&'’†Æ–'&'’“°§Ğ ¦7–æ2gVæ7F–öâvVæW&FUF—FÆW2‡–ÆöBÒ·Ò’°¢6öç7BÆ–'&'’Òv—BÆöEF—FÆTÆ–'&'’‚“°¢–b‚Æ–'&'’’F‡&÷ræWrW'&÷"‚~Šû~XXZûÎXZ^X[>™JîŠøŞŠ‚r“°¢6öç7B&Vf—…&ö÷G2Ò'6UF—FÆU&Vf—…&ö÷G2‡–ÆöBç&Vf—†W2ÇÂÆ–'&'’ç&Vf—…&ö÷G2ÇÂµÒ“°¢6öç7B&WV—&VE&ö÷G2Ò'6UF—FÆU&Vf—…&ö÷G2‡–ÆöBç&WV—&VE&ö÷G2ÇÂÆ–'&'’ç&WV—&VE&ö÷G2ÇÂµÒ“°¢–b‚&Vf—…&ö÷G2æÆVæwF‚’F‡&÷ræWrW'&÷"‚~Šû~XXZ¾Xiˆ{>[	KˆKŠ®j~š)[ÈZKNŠøŞj’r“°¢Æ–'&'’ç&Vf—…&ö÷G2Ò&Vf—…&ö÷G3°¢Æ–'&'’ç&Vf—…&ö÷BÒ&Vf—…&ö÷G5³Ó°¢Æ–'&'’ç&WV—&VE&ö÷G2Ò&WV—&VE&ö÷G3°¢6öç7BvVæW&F–öå7FFRÒv—BÆöEF—FÆTvVæW&F–öå7FFR‚“°¢vVæW&F–öå7FFRææW‡D–æFW†W2ÇÃÒvVæW&F–öå7FFRäæW‡D–æFW†W2ÇÂ·Ó°¢6öç7B¶W’ÒF—FÆTvVæW&F–öå7FFT¶W’†Æ–'&'’Â&Vf—…&ö÷G2“°¢6öç7B7F'Ef&–çD–æFW‚ÒçVÖ&W"†vVæW&F–öå7FFRææW‡D–æFW†W5¶¶W•Ò’âòçVÖ&W"†vVæW&F–öå7FFRææW‡D–æFW†W5¶¶W•Ò’¢°¢6öç7BvVæW&FVBÒvVæW&FU7FæFÆöæUF—FÆW2‡²Æ–'&'’Â&Vf—…&ö÷G2Â6÷VçC¢–ÆöBæ6÷VçBÂ7F'Ef&–çD–æFW‚Ò“°¢vVæW&F–öå7FFRææW‡D–æFW†W5¶¶W•ÒÒvVæW&FVBææW‡Ef&–çD–æFWƒ°¢v—B6fUF—FÆTvVæW&F–öå7FFR†vVæW&F–öå7FFR“°¢v—B6fT6FVv÷'•F—FÆTÆ–'&'’†Æ–'&'’“°¢v—B6fUF—FÆTÆ–'&'’†Æ–'&'’“°¢&WGW&âvVæW&FVBçF—FÆW3°§Ğ ¦7–æ2gVæ7F–öâW‡÷'EF—FÆW2‡–ÆöBÒ·Ò’°¢6öç7BF—FÆW2Ò‡–ÆöBçF—FÆW2ÇÂµÒ’æÖ…7G&–ær’æf–ÇFW"„&ööÆVâ“°¢–b‚F—FÆW2æÆVæwF‚’F‡&÷ræWrW'&÷"‚~Šû~XX˜hºŠhZûÎX{®y¨Nj~š)‚r“°¢6öç7Bf–ÆTæÖRÒG·6fTf–ÆTæÖR‡–ÆöBæ6FVv÷'’ÇÂ~h›˜xòr—Õşj~š)…òG¶Æö6Äf–ÆUF–ÖW7F×‚—Òç†Ç7†°¢6öç7Bf–ÆRÒF‚æ¦ö–â†ævWEF‚‚vF÷væÆöG2r’Âf–ÆTæÖR“°¢v—Bw&—FUF—FÆW5v÷&¶&öö²†f–ÆRÂ–ÆöBæ6FVv÷'’ÇÂrrÂF—FÆW2“°¢&WGW&âf–ÆS°§Ğ ¦7–æ2gVæ7F–öâ–æ—F–Æ—¦U'VçF–ÖR‚’°¢v—B&öÖ—6RæÆÂ…°¢g7æÖ¶F—"†7W'&VçEW6W$FF&ö÷B‚’Â²&V7W'6—fS¢G'VRÒ’À¢g7æÖ¶F—"†7W'&VçDFVfVÇD÷WGWE&ö÷B‚’Â²&V7W'6—fS¢G'VRÒ’À¢g7æÖ¶F—"‡F‚æ¦ö–â†7W'&VçEv÷&·76U&ö÷B‚’ÂvW‡÷'G2r’Â²&V7W'6—fS¢G'VRÒ¢Ò“°¢v—B&öÖ—6RæÆÂ…¶ÆöD6öæf–r‚’ÂÆöD•6WGF–æw2‚•Ò“°§Ğ ¦6öç7B'VçF–ÖTW‡÷'G2Ò°¢DDõ$ôõBÀ¢æÇ—¦U&öGV7E&öf–ÆRÀ¢æÇ—¦UFV×ÆFT—FVÕv—F…&VfW&Væ6RÀ¢æÇ—¦UFV×ÆFT—FV×2À¢æÇ—¦UFV×ÆFTföÆFW"À¢•6WGF–æw57FGW2À¢&÷fU&Wf–WtföÆFW"À¢&F6„&÷fU&Wf–WtföÆFW'2À¢&–ÆÆ–ærÀ¢FVÆWFUFV×ÆFTföÆFW"À¢FVÆWFU&Wf–WtföÆFW'2À¢W‡÷'EF—FÆW2À¢f–ÆTg&öÕFö¶VâÀ¢f–ÆUFö¶VâÀ¢vVæW&FTg&VRÀ¢vVæW&FUF6²À¢vVæW&FUFV×ÆFUF6´Ö7FW"À¢vVæW&FUFV×ÆFU6WDf÷$föÆFW"À¢vVæW&FUF—FÆTf÷%F6²À¢vVæW&FUF—FÆW2À¢vWEFö&õV&Æ—6…6¶vRÀ¢vWD–ÖvU66†VGVÆW%6æ6†÷BÀ¢vWEFö&õV&Æ—6…6WGF–æw2À¢vWEFV×ÆFU&W&F–öâÀ¢–ÖvUW&ÂÀ¢–×÷'EF—FÆTÆ–'&'’À¢–æ—F–Æ—¦U'VçF–ÖRÀ¢—4÷WGWEF‚À¢—5v÷&·76UF‚À¢Æ—7E&VG•F—FÆUF6·2À¢Æ—7EFö&õV&Æ—6…F6·2À¢ÆöDÖöFVÅ6¶vU6WGF–æw2À¢æ÷&ÖÆ—¦UFö&õV&Æ—6…6WGF–æw2À¢Æ—7EFV×ÆFTföÆFW'2À¢Æ—7EFV×ÆFW2À¢ÆöD•6WGF–æw2À¢ÆöD6öæf–rÀ¢ÆöE&ö×E6WGF–æw2À¢ÆöEFV×ÆFU&öGV7E&öf–ÆRÀ¢ÆöEF—FÆTÆ–'&'’À¢ÆåFV×ÆFT÷WGWD¦ö'2À¢V&Æ–5F—FÆTÆ–'&'’À¢'Våv—F…v÷&·76RÀ¢&W&UFV×ÆFTföÆFW"À¢&W&UFV×ÆFU7G'V7GW&RÀ¢&VvVæW&FTÖ7FW$f÷%&Wf–WtföÆFW"À¢&VvVæW&FU6–ævÆUFV×ÆFRÀ¢&W6WD6öæf–rÀ¢&W6WE&ö×E6WGF–ærÀ¢&Wf–WtföÆFW'2À¢6fT6öæf–rÀ¢6fT•6WGF–æw2À¢6fU6VÆV7FVDÖöFVÅ6¶vRÀ¢V&Æ–4”6öæ7W'&Væ7•6WGF–æw2À¢VWVUFö&õV&Æ—6…F6²À¢6Æ–ÕFö&õV&Æ—6…F6²À¢6fU&ö×E6WGF–ærÀ¢6fUFö&õV&Æ—6…6WGF–æw2À¢6fUF—FÆTf÷%F6²À¢6äFÖ–åf–Wu&ö×E6WGF–æw2À¢6fUFV×ÆFT6öæf–wW&F–öâÀ¢6fUFV×ÆFU&öGV7E&öf–ÆRÀ¢6fUF—FÆU6WGWÀ¢66ä–ÖvW2À¢6WEFV×ÆFTÖçVÅ7FGW2À¢WFFUFö&õV&Æ—6…7FGW2À¢FW7DæÇ—6—4’À¢FW7D•6WGF–æw2À¢fÆ–FFUFV×ÆFT÷WGWDÆ–÷W@§Ó° ¤ö&¦V7BæFVf–æU&÷W'F–W2‡'VçF–ÖTW‡÷'G2Â°¢õUEUEõ$ôõC¢²VçVÖW&&ÆS¢G'VRÂvWC¢7W'&VçDFVfVÇD÷WGWE&ö÷BÒÀ¢U4U%ôDDõ$ôõC¢²VçVÖW&&ÆS¢G'VRÂvWC¢7W'&VçEW6W$FF&ö÷BÒÀ¢tõ$µ54Uô”C¢²VçVÖW&&ÆS¢G'VRÂvWC¢7W'&VçEv÷&·76T–BÒÀ¢tõ$µ54Uõ$ôõC¢²VçVÖW&&ÆS¢G'VRÂvWC¢7W'&VçEv÷&·76U&ö÷BĞ§Ò“° ¦ÖöGVÆRæW‡÷'G2Ò'VçF–ÖTW‡÷'G3° 
+function publicApiConcurrencySettings(value = currentApiSettings()) {
+  return normalizeImageConcurrencySettings(value);
+}
+
+function normalizeAnalysisWireApi(value, fallback = 'chat_completions') {
+  const text = String(value || fallback || 'chat_completions').trim().toLowerCase().replaceAll('-', '_');
+  if (text === 'responses') return 'responses';
+  if (text === 'chat' || text === 'chat_completions') return 'chat_completions';
+  throw new Error('æ–‡å­—æ¥å£åè®®åªæ”¯æŒ Responses API æˆ– Chat Completions');
+}
+
+function apiBaseRoot(baseUrl) {
+  return String(baseUrl || '').replace(/\/+$/, '').replace(/\/v1(?:beta)?$/i, '');
+}
+
+function apiEndpoint(baseUrl, pathName) {
+  const base = String(baseUrl || '').replace(/\/+$/, '');
+  const pathText = String(pathName || '').startsWith('/') ? String(pathName || '') : `/${pathName || ''}`;
+  if (/change2pro\.com/i.test(base)) {
+    const root = apiBaseRoot(base);
+    if (pathText === '/models' || pathText === '/chat/completions' || pathText === '/usage') return `${root}/v1${pathText}`;
+    return `${root}${pathText}`;
+  }
+  return `${base}${pathText}`;
+}
+
+function maskedApiKey(value) {
+  const key = String(value || '');
+  if (!key) return '';
+  if (key.length <= 8) return `${key.slice(0, 2)}â€¢â€¢â€¢â€¢${key.slice(-2)}`;
+  return `${key.slice(0, 4)}â€¢â€¢â€¢â€¢â€¢â€¢${key.slice(-4)}`;
+}
+
+function normalizeModelPackageId(value, fallback) {
+  const text = String(value || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+  return (text || fallback).slice(0, 80);
+}
+
+function normalizeModelPackageText(value, fallback = '', maxLength = 500) {
+  return String(value || fallback || '').normalize('NFKC').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, maxLength);
+}
+
+function normalizeModelPackagePrompt(value, currentValue, fallback = '', maxLength = 10000) {
+  if (value !== undefined) return String(value || '').normalize('NFKC').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, maxLength);
+  if (currentValue !== undefined) return String(currentValue || '').normalize('NFKC').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, maxLength);
+  return String(fallback || '').normalize('NFKC').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, maxLength);
+}
+
+function normalizeModelPackageInteger(value, fallback, min, max) {
+  const number = Number(value ?? fallback);
+  const safe = Number.isFinite(number) ? number : fallback;
+  return Math.min(max, Math.max(min, Math.trunc(safe)));
+}
+
+function normalizeModelPackageMinor(value, fallback = 0) {
+  const number = Number(value ?? fallback);
+  if (!Number.isFinite(number)) return 0;
+  return Math.min(1_000_000_000_000, Math.max(0, Math.round(number)));
+}
+
+function normalizeModelPackageChoice(value, choices, fallback) {
+  const text = String(value || fallback || '').trim();
+  return choices.includes(text) ? text : fallback;
+}
+
+const DEFAULT_PACKAGE_PROMPTS = Object.freeze({
+  basicAnalysis: [
+    'å¥—é¤ç­–ç•¥ï¼šä½ä»·åŸºç¡€èƒ½åŠ›ã€‚åªåšå¿…è¦åˆ¤æ–­ï¼Œä¸åšå¤æ‚å•†ä¸šå¢å¼ºã€‚',
+    'åˆ†ææ—¶åªä¿ç•™èƒ½å†³å®šæ˜¯å¦ç”Ÿæˆã€æ˜¯å¦å¤åˆ¶ã€æ˜¯å¦äººå·¥ç¡®è®¤çš„å…³é”®ä¿¡æ¯ã€‚',
+    'é‡åˆ°å¯æ‰§è¡Œä»»åŠ¡æ—¶ä¿æŒä¿å®ˆï¼Œä¸æ‰©å±•é«˜çº§åœºæ™¯ã€ä¸è¡¥å……å¤æ‚å–ç‚¹ã€‚'
+  ].join('\n'),
+  basicImage: [
+    'å¥—é¤ç­–ç•¥ï¼šä½ä»·åŸºç¡€å‡ºå›¾ï¼Œæ•ˆæœç›®æ ‡çº¦ä¸ºæ——èˆ°ç‰ˆçš„ 30%ã€‚',
+    'åªå®Œæˆæ ¸å¿ƒæ¢å›¾/è¿ç§»ä»»åŠ¡ï¼Œä¸åšé«˜çº§å•†ä¸šè´¨æ„Ÿã€å¤æ‚å…‰å½±ã€æè´¨å¼ºåŒ–ã€ç²¾ä¿®æ°›å›´å’Œé¢å¤–ç»†èŠ‚è¡¥å…¨ã€‚',
+    'ç”»é¢ä¿æŒå¯ç”¨ã€å¹²å‡€ã€ç»“æ„æ­£ç¡®ï¼›ä¸è¦è¿½æ±‚æ——èˆ°ç‰ˆçº§åˆ«çš„é«˜çº§æ£šæ‹ã€ç”µå•†å¤§ç‰‡ã€ç²¾ç»†åå…‰å’Œå¤æ‚åæœŸã€‚',
+    'ä¼˜å…ˆå¿«é€Ÿç¨³å®šå®Œæˆï¼Œä¸è¿›è¡Œé¢å¤–åˆ›æ„å‘æŒ¥ã€‚'
+  ].join('\n'),
+  standardAnalysis: [
+    'å¥—é¤ç­–ç•¥ï¼šæ ‡å‡†ä½ä»·èƒ½åŠ›ã€‚åªåšåŸºç¡€ç†è§£ï¼Œä¸åšæ——èˆ°ç‰ˆæ·±åº¦ä¼˜åŒ–ã€‚',
+    'åˆ†ææ—¶è¾“å‡ºå¿…è¦ JSON å­—æ®µï¼Œå°‘åšå»¶å±•åˆ¤æ–­å’Œå•†ä¸šåŒ…è£…ã€‚'
+  ].join('\n'),
+  standardImage: [
+    'å¥—é¤ç­–ç•¥ï¼šæ ‡å‡†ç‰ˆï¼Œæ•ˆæœç›®æ ‡çº¦ä¸ºæ——èˆ°ç‰ˆçš„ 30%ã€‚',
+    'åªåšåŸºç¡€ç”»é¢æ•´ç†å’Œå¿…è¦ç”Ÿæˆï¼Œä¸åšé«˜çº§å•†ä¸šæµ·æŠ¥è´¨æ„Ÿã€å¤æ‚å…‰å½±ã€æè´¨ç²¾ä¿®ã€ç²¾ç»†æ„å›¾å¢å¼ºå’Œé¢å¤–å–ç‚¹è¡¥å…¨ã€‚',
+    'ä¿æŒä¸»ä½“ç»“æ„ã€å°èŠ±å…³ç³»å’Œé¡µé¢å¯ç”¨æ€§ï¼Œæ•´ä½“æŒ‰æ™®é€šç”µå•†å¯ç”¨å›¾å¤„ç†ã€‚'
+  ].join('\n'),
+  flagshipAnalysis: '',
+  flagshipImage: ''
+});
+
+function defaultPackagePrompt(kind, quality) {
+  const tier = ['basic', 'standard', 'flagship'].includes(String(quality)) ? String(quality) : 'standard';
+  if (kind === 'analysis') return DEFAULT_PACKAGE_PROMPTS[`${tier}Analysis`] || '';
+  return DEFAULT_PACKAGE_PROMPTS[`${tier}Image`] || '';
+}
+
+function normalizeModelPackagesLegacy(value, currentSettings = {}) {
+  const source = Array.isArray(value) ? value : Array.isArray(currentSettings.modelPackages) ? currentSettings.modelPackages : [];
+  if (!source.length && currentSettings.baseUrl && currentSettings.imageModel) {
+    return [{
+      id: 'flagship',
+      name: 'é»˜è®¤æ¨¡å‹',
+      description: 'æ²¿ç”¨ç³»ç»ŸåŸæœ¬çš„ç”Ÿå›¾æ¨¡å‹',
+      enabled: true,
+      default: true,
+      recommended: true,
+      apiBaseUrl: normalizeApiBaseUrl(currentSettings.baseUrl),
+      apiKey: String(currentSettings.imageKey || '').trim(),
+      modelId: normalizeModelName(currentSettings.imageModel, ENV_API.imageModel),
+      analysisApiBaseUrl: normalizeApiBaseUrl(currentSettings.baseUrl),
+      analysisApiKey: String(currentSettings.analysisKey || currentSettings.imageKey || '').trim(),
+      analysisModel: normalizeOptionalModelName(currentSettings.analysisModel || ENV_API.analysisModel),
+      analysisWireApi: normalizeAnalysisWireApi(currentSettings.analysisWireApi, ENV_API.analysisWireApi),
+      maxConcurrency: normalizeModelPackageInteger(currentSettings.imageMaxConcurrency, DEFAULT_IMAGE_API_CONCURRENCY, 1, 50),
+      startIntervalMs: normalizeModelPackageInteger(currentSettings.imageStartIntervalMs, DEFAULT_IMAGE_API_START_INTERVAL_MS, 0, 60000),
+      promptQuality: 'flagship',
+      promptMode: 'full',
+      userPromptPolicy: 'full',
+      hiddenPrompt: '',
+      analysisPrompt: '',
+      imagePrompt: '',
+      imagePriceMinor: 300000,
+      analysisPriceMinor: 0,
+      enableMasterReference: false,
+      queuePriority: 10
+    }];
+  }
+  const currentById = new Map((Array.isArray(currentSettings.modelPackages) ? currentSettings.modelPackages : []).map(item => [String(item.id), item]));
+  const packages = source.slice(0, 20).map((item, index) => {
+    const fallbackId = `model-${index + 1}`;
+    const id = normalizeModelPackageId(item?.id, fallbackId);
+    const current = currentById.get(id) || {};
+    const apiBaseUrl = normalizeApiBaseUrl(item?.apiBaseUrl || current.apiBaseUrl || currentSettings.baseUrl || '');
+    const apiKey = String(item?.apiKey || item?.packageApiKey || '').trim() || current.apiKey || '';
+    const promptQuality = normalizeModelPackageChoice(item?.promptQuality, ['basic', 'standard', 'flagship', 'custom'], current.promptQuality || 'standard');
+    const analysisApiBaseUrl = normalizeApiBaseUrl(item?.analysisApiBaseUrl || current.analysisApiBaseUrl || currentSettings.baseUrl || apiBaseUrl || '');
+    const analysisApiKey = String(item?.analysisApiKey || item?.packageAnalysisApiKey || '').trim() || current.analysisApiKey || '';
+    return {
+      id,
+      name: normalizeModelPackageText(item?.name, `æ¨¡å‹å¥—é¤ ${index + 1}`, 48),
+      description: normalizeModelPackageText(item?.description, '', 160),
+      enabled: item?.enabled !== false,
+      default: item?.default === true,
+      recommended: item?.recommended === true,
+      apiBaseUrl,
+      apiKey,
+      modelId: normalizeModelName(item?.modelId || item?.imageModel || current.modelId || currentSettings.imageModel, currentSettings.imageModel || ENV_API.imageModel),
+      analysisApiBaseUrl,
+      analysisApiKey,
+      analysisModel: normalizeOptionalModelName(item?.analysisModel || current.analysisModel || currentSettings.analysisModel || ENV_API.analysisModel),
+      analysisWireApi: normalizeAnalysisWireApi(item?.analysisWireApi || current.analysisWireApi || currentSettings.analysisWireApi, currentSettings.analysisWireApi || ENV_API.analysisWireApi),
+      maxConcurrency: normalizeModelPackageInteger(item?.maxConcurrency, current.maxConcurrency || 1, 1, 50),
+      startIntervalMs: normalizeModelPackageInteger(item?.startIntervalMs, current.startIntervalMs || 500, 0, 60000),
+      promptQuality,
+      promptMode: normalizeModelPackageChoice(item?.promptMode, ['internal', 'hybrid', 'full'], current.promptMode || 'hybrid'),
+      userPromptPolicy: normalizeModelPackageChoice(item?.userPromptPolicy, ['ignore', 'partial', 'full'], current.userPromptPolicy || 'partial'),
+      hiddenPrompt: normalizeModelPackageText(item?.hiddenPrompt, current.hiddenPrompt || '', 10000),
+      analysisPrompt: normalizeModelPackagePrompt(item?.analysisPrompt, current.analysisPrompt, defaultPackagePrompt('analysis', promptQuality), 10000),
+      imagePrompt: normalizeModelPackagePrompt(item?.imagePrompt ?? item?.hiddenPrompt, current.imagePrompt, defaultPackagePrompt('image', promptQuality), 10000),
+      imagePriceMinor: normalizeModelPackageMinor(item?.imagePriceMinor, current.imagePriceMinor || 0),
+      analysisPriceMinor: normalizeModelPackageMinor(item?.analysisPriceMinor, current.analysisPriceMinor || 0),
+      enableMasterReference: item?.enableMasterReference !== undefined
+        ? item.enableMasterReference === true
+        : current.enableMasterReference === true,
+      queuePriority: normalizeModelPackageInteger(item?.queuePriority, current.queuePriority || 5, 0, 100)
+    };
+  });
+  const seen = new Set();
+  const unique = packages.filter(item => {
+    if (seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
+  });
+  const fallbackDefaultIndex = unique.findIndex(item => item.enabled);
+  const explicitDefaultIndex = unique.findIndex(item => item.enabled && item.default);
+  const defaultIndex = explicitDefaultIndex >= 0 ? explicitDefaultIndex : fallbackDefaultIndex;
+  unique.forEach((item, index) => { item.default = index === defaultIndex; });
+  return unique;
+}
+
+const FIXED_MODEL_PACKAGE_PRESETS = Object.freeze([
+  {
+    id: 'flagship',
+    name: 'æ——èˆ°ç‰ˆ',
+    description: 'ä¸»æ¨å¥—é¤ï¼Œä½¿ç”¨å…¨å±€æ——èˆ°é…ç½®',
+    enabled: true,
+    default: true,
+    recommended: true,
+    maxConcurrency: 30,
+    startIntervalMs: 200,
+    promptQuality: 'flagship',
+    promptMode: 'full',
+    userPromptPolicy: 'full',
+    imagePriceMinMinor: 300000,
+    imagePriceMaxMinor: 300000,
+    analysisPriceMinMinor: 0,
+    analysisPriceMaxMinor: 0,
+    enableMasterReference: false,
+    queuePriority: 10
+  },
+  {
+    id: 'fast',
+    name: 'å¿«é€Ÿç‰ˆ',
+    description: 'ä½ä»·ç•™å®¢ï¼Œæ•ˆæœè´¨é‡ä¸æ ‡å‡†ç‰ˆä¸€è‡´',
+    enabled: true,
+    default: false,
+    recommended: false,
+    maxConcurrency: 2,
+    startIntervalMs: 1200,
+    promptQuality: 'basic',
+    promptMode: 'internal',
+    userPromptPolicy: 'ignore',
+    imagePriceMinMinor: 50000,
+    imagePriceMaxMinor: 50000,
+    analysisPriceMinMinor: 50000,
+    analysisPriceMaxMinor: 50000,
+    queuePriority: 2
+  },
+  {
+    id: 'standard',
+    name: 'æ ‡å‡†ç‰ˆ',
+    description: 'æ•ˆæœè´¨é‡çº¦ä¸ºæ——èˆ°ç‰ˆ30%',
+    enabled: true,
+    default: false,
+    recommended: false,
+    maxConcurrency: 3,
+    startIntervalMs: 1000,
+    promptQuality: 'standard',
+    promptMode: 'hybrid',
+    userPromptPolicy: 'partial',
+    imagePriceMinMinor: 70000,
+    imagePriceMaxMinor: 70000,
+    analysisPriceMinMinor: 70000,
+    analysisPriceMaxMinor: 70000,
+    queuePriority: 5
+  }
+]);
+
+function packageMinorRange(item, current, preset, prefix) {
+  const fixedKey = `${prefix}PriceMinor`;
+  const minKey = `${prefix}PriceMinMinor`;
+  const maxKey = `${prefix}PriceMaxMinor`;
+  const min = normalizeModelPackageMinor(item?.[minKey] ?? item?.[fixedKey] ?? current?.[minKey] ?? current?.[fixedKey] ?? preset[minKey] ?? 0);
+  const max = normalizeModelPackageMinor(item?.[maxKey] ?? item?.[fixedKey] ?? current?.[maxKey] ?? current?.[fixedKey] ?? preset[maxKey] ?? min);
+  return { min, max: Math.max(min, max) };
+}
+
+function normalizeModelPackages(value, currentSettings = {}) {
+  const payloadById = new Map((Array.isArray(value) ? value : []).map(item => [normalizeModelPackageId(item?.id, ''), item]).filter(([id]) => id));
+  const currentById = new Map((Array.isArray(currentSettings.modelPackages) ? currentSettings.modelPackages : []).map(item => [normalizeModelPackageId(item?.id, ''), item]).filter(([id]) => id));
+  return FIXED_MODEL_PACKAGE_PRESETS.map(preset => {
+    const item = payloadById.get(preset.id) || {};
+    const current = currentById.get(preset.id) || {};
+    const promptQuality = normalizeModelPackageChoice(item?.promptQuality, ['basic', 'standard', 'flagship', 'custom'], current.promptQuality || preset.promptQuality);
+    const apiBaseUrl = normalizeApiBaseUrl(item?.apiBaseUrl || current.apiBaseUrl || currentSettings.baseUrl || '');
+    const analysisApiBaseUrl = normalizeApiBaseUrl(item?.analysisApiBaseUrl || current.analysisApiBaseUrl || currentSettings.baseUrl || apiBaseUrl || '');
+    const imageRange = packageMinorRange(item, current, preset, 'image');
+    const analysisRange = packageMinorRange(item, current, preset, 'analysis');
+    return {
+      id: preset.id,
+      name: normalizeModelPackageText(item?.name, current.name || preset.name, 48),
+      description: normalizeModelPackageText(item?.description, current.description || preset.description, 160),
+      enabled: item?.enabled !== undefined ? item.enabled !== false : current.enabled !== undefined ? current.enabled !== false : preset.enabled,
+      default: preset.default,
+      recommended: item?.recommended !== undefined ? item.recommended === true : current.recommended !== undefined ? current.recommended === true : preset.recommended,
+      apiBaseUrl,
+      apiKey: String(item?.apiKey || item?.packageApiKey || '').trim() || current.apiKey || '',
+      modelId: normalizeModelName(item?.modelId || item?.imageModel || current.modelId || currentSettings.imageModel, currentSettings.imageModel || ENV_API.imageModel),
+      analysisApiBaseUrl,
+      analysisApiKey: String(item?.analysisApiKey || item?.packageAnalysisApiKey || '').trim() || current.analysisApiKey || '',
+      analysisModel: normalizeOptionalModelName(item?.analysisModel || current.analysisModel || currentSettings.analysisModel || ENV_API.analysisModel),
+      analysisWireApi: normalizeAnalysisWireApi(item?.analysisWireApi || current.analysisWireApi || currentSettings.analysisWireApi, currentSettings.analysisWireApi || ENV_API.analysisWireApi),
+      maxConcurrency: normalizeModelPackageInteger(item?.maxConcurrency, current.maxConcurrency || preset.maxConcurrency, 1, 50),
+      startIntervalMs: normalizeModelPackageInteger(item?.startIntervalMs, current.startIntervalMs || preset.startIntervalMs, 0, 60000),
+      promptQuality,
+      promptMode: normalizeModelPackageChoice(item?.promptMode, ['internal', 'hybrid', 'full'], current.promptMode || preset.promptMode),
+      userPromptPolicy: normalizeModelPackageChoice(item?.userPromptPolicy, ['ignore', 'partial', 'full'], current.userPromptPolicy || preset.userPromptPolicy),
+      hiddenPrompt: normalizeModelPackageText(item?.hiddenPrompt, current.hiddenPrompt || '', 10000),
+      analysisPrompt: normalizeModelPackagePrompt(item?.analysisPrompt, current.analysisPrompt, defaultPackagePrompt('analysis', promptQuality), 10000),
+      imagePrompt: normalizeModelPackagePrompt(item?.imagePrompt ?? item?.hiddenPrompt, current.imagePrompt, defaultPackagePrompt('image', promptQuality), 10000),
+      imagePriceMinMinor: imageRange.min,
+      imagePriceMaxMinor: imageRange.max,
+      imagePriceMinor: imageRange.max,
+      analysisPriceMinMinor: analysisRange.min,
+      analysisPriceMaxMinor: analysisRange.max,
+      analysisPriceMinor: analysisRange.max,
+      enableMasterReference: preset.id === 'flagship'
+        ? item?.enableMasterReference !== undefined
+          ? item.enableMasterReference === true
+          : current.enableMasterReference !== undefined
+            ? current.enableMasterReference === true
+            : preset.enableMasterReference === true
+        : true,
+      queuePriority: normalizeModelPackageInteger(item?.queuePriority, current.queuePriority || preset.queuePriority, 0, 100)
+    };
+  });
+}
+
+function publicModelPackageForSuperAdmin(item) {
+  const { apiKey, analysisApiKey, ...rest } = item;
+  return {
+    ...rest,
+    apiKeyConfigured: Boolean(apiKey),
+    apiKeyMasked: maskedApiKey(apiKey),
+    analysisApiKeyConfigured: Boolean(analysisApiKey),
+    analysisApiKeyMasked: maskedApiKey(analysisApiKey)
+  };
+}
+
+function publicModelPackageForUser(item) {
+  return {
+    id: item.id,
+    name: item.name,
+    description: item.description,
+    enabled: item.enabled,
+    default: item.default,
+    recommended: item.recommended
+  };
+}
+
+async function readPrivateApiSettings() {
+  const saved = await readGlobalSettingWithLegacy(apiSettingsFile(), 'api-settings.json');
+  const legacyImageKey = String(saved.key || ENV_API.imageKey || ENV_API.key || '').trim();
+  const concurrency = normalizeImageConcurrencySettings(saved);
+  const modelPackageBase = {
+    baseUrl: normalizeApiBaseUrl(saved.baseUrl || ENV_API.baseUrl || ''),
+    imageModel: normalizeModelName(saved.imageModel, ENV_API.imageModel),
+    modelPackages: Array.isArray(saved.modelPackages) ? saved.modelPackages : []
+  };
+  const configuredAnalysisModel = String(saved.analysisModel || '').trim();
+  const next = {
+    version: 2,
+    serviceUrl: String(saved.serviceUrl || ENV_API.serviceUrl || '').trim(),
+    baseUrl: modelPackageBase.baseUrl,
+    imageKey: String(saved.imageKey || legacyImageKey).trim(),
+    analysisKey: String(saved.analysisKey || ENV_API.analysisKey || '').trim(),
+    imageModel: modelPackageBase.imageModel,
+    analysisModel: configuredAnalysisModel ? normalizeModelName(configuredAnalysisModel, '') : '',
+    analysisWireApi: normalizeAnalysisWireApi(saved.analysisWireApi, ENV_API.analysisWireApi),
+    responseFormat: normalizeResponseFormat(saved.responseFormat, ENV_API.responseFormat),
+    requestTimeoutSeconds: normalizeRequestTimeoutSeconds(saved.requestTimeoutSeconds, ENV_API.requestTimeoutSeconds),
+    allowAdminPromptView: saved.allowAdminPromptView === true,
+    ...concurrency,
+    modelPackages: normalizeModelPackages(saved.modelPackages, modelPackageBase)
+  };
+  runtimeApiSettings = next;
+  applyImageSchedulerSettings(next);
+  return next;
+}
+
+function publicApiSettings(value = currentApiSettings()) {
+  const imageConfigured = Boolean(value.baseUrl && value.imageKey);
+  const analysisConfigured = Boolean(value.baseUrl && value.analysisKey);
+  return {
+    version: 2,
+    baseUrl: String(value.baseUrl || ''),
+    imageModel: String(value.imageModel || ENV_API.imageModel),
+    analysisModel: String(value.analysisModel || ENV_API.analysisModel),
+    analysisWireApi: normalizeAnalysisWireApi(value.analysisWireApi, ENV_API.analysisWireApi),
+    responseFormat: normalizeResponseFormat(value.responseFormat, ENV_API.responseFormat),
+    requestTimeoutSeconds: normalizeRequestTimeoutSeconds(value.requestTimeoutSeconds, ENV_API.requestTimeoutSeconds),
+    allowAdminPromptView: value.allowAdminPromptView === true,
+    ...normalizeImageConcurrencySettings(value),
+    imageKeyConfigured: Boolean(value.imageKey),
+    imageKeyMasked: maskedApiKey(value.imageKey),
+    analysisKeyConfigured: Boolean(value.analysisKey),
+    analysisKeyMasked: maskedApiKey(value.analysisKey),
+    imageConfigured,
+    analysisConfigured,
+    configured: imageConfigured && analysisConfigured,
+    modelPackages: normalizeModelPackages(value.modelPackages, value).map(publicModelPackageForSuperAdmin)
+  };
+}
+
+async function loadApiSettings() {
+  return publicApiSettings(await readPrivateApiSettings());
+}
+
+async function saveApiSettings(payload = {}) {
+  const operation = apiSettingsWriteChain.then(async () => {
+    const current = await readPrivateApiSettings();
+    const concurrency = normalizeImageConcurrencySettings(payload, current);
+    const nextAnalysisModel = normalizeModelName(payload.analysisModel, current.analysisModel);
+    const nextImageModel = normalizeModelName(payload.imageModel, current.imageModel);
+    const next = {
+      version: 2,
+      serviceUrl: current.serviceUrl,
+      baseUrl: normalizeApiBaseUrl(payload.baseUrl),
+      imageKey: String(payload.imageApiKey || payload.apiKey || '').trim() || current.imageKey,
+      analysisKey: String(payload.analysisApiKey || '').trim() || current.analysisKey,
+      imageModel: nextImageModel,
+      analysisModel: nextAnalysisModel,
+      analysisWireApi: normalizeAnalysisWireApi(payload.analysisWireApi, current.analysisWireApi),
+      responseFormat: normalizeResponseFormat(payload.responseFormat, current.responseFormat),
+      requestTimeoutSeconds: normalizeRequestTimeoutSeconds(payload.requestTimeoutSeconds, current.requestTimeoutSeconds),
+      allowAdminPromptView: payload.allowAdminPromptView === true,
+      ...concurrency,
+      modelPackages: normalizeModelPackages(payload.modelPackages, {
+        ...current,
+        baseUrl: normalizeApiBaseUrl(payload.baseUrl),
+        imageModel: nextImageModel,
+        analysisModel: nextAnalysisModel
+      })
+    };
+    if (!next.baseUrl) throw new Error('è¯·å¡«å†™ API åœ°å€');
+    if (!next.imageKey && !next.analysisKey) throw new Error('è¯·è‡³å°‘å¡«å†™ä¸€ä¸ª API å¯†é’¥');
+    await fsp.mkdir(path.dirname(apiSettingsFile()), { recursive: true });
+    await fsp.writeFile(apiSettingsFile(), JSON.stringify(next, null, 2), { encoding: 'utf8', mode: 0o600 });
+    runtimeApiSettings = next;
+    applyImageSchedulerSettings(next);
+    return publicApiSettings(next);
+  });
+  apiSettingsWriteChain = operation.catch(() => {});
+  return operation;
+}
+
+function defaultModelPackageId(packages) {
+  return packages.find(item => item.enabled && item.default)?.id || packages.find(item => item.enabled)?.id || '';
+}
+
+async function readSelectedModelPackageId(packages) {
+  const fallback = defaultModelPackageId(packages);
+  try {
+    const saved = JSON.parse(await fsp.readFile(modelPackageSelectionFile(), 'utf8'));
+    const selected = String(saved?.selectedModelPackageId || '').trim();
+    if (packages.some(item => item.enabled && item.id === selected)) return selected;
+  } catch {}
+  return fallback;
+}
+
+async function loadModelPackageSettings(actor = {}) {
+  const settings = await readPrivateApiSettings();
+  const packages = normalizeModelPackages(settings.modelPackages, settings);
+  const selectedModelPackageId = await readSelectedModelPackageId(packages);
+  const isSuperAdminActor = actor?.role === 'superadmin';
+  return {
+    selectedModelPackageId,
+    allowAdminPromptView: settings.allowAdminPromptView === true,
+    modelPackages: packages
+      .filter(item => isSuperAdminActor || item.enabled)
+      .map(isSuperAdminActor ? publicModelPackageForSuperAdmin : publicModelPackageForUser)
+  };
+}
+
+async function saveSelectedModelPackage(selectedModelPackageId) {
+  const settings = await readPrivateApiSettings();
+  const packages = normalizeModelPackages(settings.modelPackages, settings);
+  const selected = String(selectedModelPackageId || '').trim();
+  if (!packages.some(item => item.enabled && item.id === selected)) throw new Error('æ¨¡å‹å¥—é¤ä¸å­˜åœ¨æˆ–æœªå¯ç”¨');
+  const next = { selectedModelPackageId: selected, updatedAt: new Date().toISOString() };
+  await fsp.mkdir(path.dirname(modelPackageSelectionFile()), { recursive: true });
+  await fsp.writeFile(modelPackageSelectionFile(), JSON.stringify(next, null, 2), { encoding: 'utf8', mode: 0o600 });
+  return loadModelPackageSettings({ role: 'member' });
+}
+
+async function activeModelPackage() {
+  const settings = await readPrivateApiSettings();
+  const packages = normalizeModelPackages(settings.modelPackages, settings).filter(item => item.enabled);
+  const selectedId = await readSelectedModelPackageId(packages);
+  return packages.find(item => item.id === selectedId) || packages.find(item => item.default) || packages[0] || null;
+}
+
+async function activeApiConfig(channel = 'image') {
+  const settings = await readPrivateApiSettings();
+  const pack = await activeModelPackage();
+  if (!pack) return requireApiConfig(channel);
+  if (channel === 'analysis') {
+    const api = {
+      ...settings,
+      baseUrl: normalizeApiBaseUrl(pack.analysisApiBaseUrl || pack.apiBaseUrl || settings.baseUrl),
+      analysisKey: String(pack.analysisApiKey || settings.analysisKey || settings.imageKey || '').trim(),
+      // Never fall back to the image model. A chat request sent to gpt-image-* only creates opaque analysis failures.
+      analysisModel: String(pack.analysisModel || settings.analysisModel || '').trim(),
+      analysisWireApi: pack.analysisWireApi || settings.analysisWireApi,
+      activeModelPackage: pack
+    };
+    if (!api.baseUrl) throw new Error('è¯·å…ˆé…ç½®æ–‡å­—åˆ†æ API åœ°å€');
+    if (!api.analysisKey) throw new Error('è¯·å…ˆé…ç½®æ–‡å­—åˆ†æ API å¯†é’¥');
+    return api;
+  }
+  const api = {
+    ...settings,
+    baseUrl: pack.apiBaseUrl || settings.baseUrl,
+    imageKey: pack.apiKey || settings.imageKey,
+    imageModel: pack.modelId || settings.imageModel,
+    activeModelPackage: pack
+  };
+  if (!api.baseUrl) throw new Error('è¯·å…ˆé…ç½®ç”Ÿå›¾ API åœ°å€');
+  if (!api.imageKey) throw new Error('è¯·å…ˆé…ç½®ç”Ÿå›¾ API å¯†é’¥');
+  return api;
+}
+
+function appendPackagePrompt(prompt, packagePrompt) {
+  const extra = String(packagePrompt || '').trim();
+  if (!extra) return String(prompt || '');
+  return `${String(prompt || '').trim()}\n\n${extra}`.trim();
+}
+
+function packagePromptFor(api, kind) {
+  void api;
+  void kind;
+  return '';
+}
+
+function packageIsFlagship(pack) {
+  return String(pack?.promptQuality || '').trim() === 'flagship' || String(pack?.id || '').trim() === 'flagship';
+}
+
+function packageUsesMasterReference(pack) {
+  if (!packageIsFlagship(pack)) return true;
+  return pack?.enableMasterReference === true;
+}
+
+function resolveAnalysisModel(api = {}) {
+  return String(api.analysisModel || api.imageModel || '').trim();
+}
+
+function isComplexTemplatePrintAnalysis(analysis, job = {}) {
+  const text = `${String(analysis || '')}\n${String(job?.relativePath || '')}`.toLowerCase();
+  const signals = [
+    'complex',
+    'chinese title',
+    'text label',
+    'white label',
+    'selling point',
+    'open cabinet',
+    'open door',
+    'internal storage',
+    'multi panel',
+    'multi-panel',
+    'props',
+    'æ–‡å­—',
+    'æ ‡é¢˜',
+    'æ ‡ç­¾',
+    'å–ç‚¹',
+    'å¼€é—¨',
+    'æŸœé—¨',
+    'å†…éƒ¨',
+    'å‚¨ç‰©',
+    'å±‚æ¿',
+    'å¤šæ‰‡',
+    'å¤šé¢æ¿',
+    'é“å…·'
+  ];
+  return signals.some(signal => text.includes(signal));
+}
+
+function flagshipComplexTemplatePrintPrompt() {
+  return [
+    'FLAGSHIP_COMPLEX_TEMPLATE_PRINT_MODE',
+    'Use the first input image as the final layout standard. If only two input images are attached, the second input image is the original print pattern reference. If three input images are attached, the second input image is the master product reference and the third input image is the original print pattern reference.',
+    'For complex ecommerce templates, preserve every Chinese title, page number, white selling-point label, label position, font style, typography hierarchy and layout from the first input image. Do not rewrite, omit, add, translate or deform text.',
+    'Preserve people, open cabinet doors, internal storage, shelves, bottles, cookware, coffee machine, tabletop objects, lamps, curtains, floor, wall, shadows and all props from the first input image.',
+    'Apply the print only to visible cabinet or drawer front surfaces. Never cover cabinet interior, shelves, bottles, cookware, tabletop, wall, floor, legs, handles, black frames, black side panels, door seams, labels or text.',
+    'The print must follow every door panel perspective, opening angle, seam split, occlusion and handle position. It must not look like one flat sticker pasted across the whole cabinet.',
+    'Keep black cabinet frame, black tabletop, black side panels, black bottom edge, legs, handles and all seams crisp and visible above the print.',
+    'Output one realistic finished ecommerce product image only.'
+  ].join('\n');
+}
+
+function detailSliceLayoutProtectionPrompt() {
+  return [
+    'DETAIL_SLICE_LAYOUT_PROTECTION_MODE',
+    'This template may be a sliced ecommerce detail page, a multi-grid detail card, or a cropped partial product close-up from a long page. Treat the first input image as a locked layout canvas.',
+    'ORDERED_DETAIL_SLICE_CONTINUITY_MODE',
+    'This output is one ordered detail-page slice, not a complete long detail page. Keep the original slice width, height, crop window, page background and layout exactly aligned to the first input image so adjacent slices can be uploaded to Taobao in order and visually reconnect.',
+    'Do not perform any out-of-bounds completion: do not inpaint missing cabinets, do not recreate truncated boundaries, and do not infer or extend any geometry that is outside the visible crop of the first input image.',
+    'Keep crop and composition as if coordinates are absolute: the final output must preserve the same left/right/top/bottom crop window and not switch to a different viewport.',
+    'Keep the top edge and bottom edge bands stable: do not change, enlarge, remove or invent objects, text, backgrounds, borders, panel lines, shadows or product surfaces that touch a slice boundary.',
+    'For this slice, keep the original coordinate system of the template: do not shift any text glyph baseline, margins, separators, frame lines, grid cards, icon positions, or white-space bands. If text crosses a boundary, keep it complete with its original x/y offset.',
+    'Do not generate the full detail page, do not merge neighboring slices, do not create a new poster, and do not invent content above or below the current canvas.',
+    'Do not enlarge, crop, move or restyle Chinese text, titles, subtitles, page numbers, badges, icons, separators, paper texture, rounded cards, background bands, margins or decorative borders from the first input image.',
+    'Only migrate the master product appearance onto visible cabinet, drawer-front, door-front or exterior panel surfaces that are already present in the first input image.',
+    'A cropped drawer front or partial cabinet surface is still a valid target when it visibly belongs to the exterior product surface. Process only the visible part inside the current canvas; never invent the missing off-canvas continuation.',
+    'For multi-grid pages, each small panel keeps its original crop, camera angle, text area and card frame. Do not merge panels, swap panel order, resize panels or turn the page into a new poster.',
+    'A valid output keeps all card frames and all panel borders as-is, and must not output a single merged poster or scene that hides the original tile boundaries.',
+    'Keep all non-product details from the first input image unchanged: hands, people, snacks, books, lamps, plants, labels, measurement text, icons, copywriting blocks, shadows, walls, floors and existing empty space.',
+    'If a product surface is ambiguous, preserve that local area rather than expanding the print into text or background.'
+  ].join('\n');
+}
+
+function isMultiGridTemplate(job = {}, analysis = '') {
+  const text = `${String(job?.relativePath || '')}\n${String(job?.sectionName || '')}\n${String(analysis || '')}`.toLowerCase();
+  return ['å¤šå®«æ ¼', 'å¤šå›¾', 'æ‹¼å›¾', 'multi-grid', 'multi panel', 'multi-panel', 'multi_panel', 'grid'].some(signal => text.includes(signal));
+}
+
+function _sampleNormalizedBandDiff(templateImage, outputImage, width, height, region) {
+  const sampleStep = 2;
+  const half = Math.max(1, Math.min(Math.floor(height / 2), 64));
+  let total = 0;
+  let diffSum = 0;
+  if (width <= 0 || height <= 0) return 1;
+
+  const sampleBand = (x, y, limitX, limitY, getOffset) => {
+    const yStart = Math.max(0, y);
+    const yEnd = Math.min(height, limitY);
+    const xStart = Math.max(0, x);
+    const xEnd = Math.min(width, limitX);
+    for (let py = yStart; py < yEnd; py += sampleStep) {
+      for (let px = xStart; px < xEnd; px += sampleStep) {
+        const offset = getOffset(px, py);
+        const r1 = templateImage[offset];
+        const g1 = templateImage[offset + 1];
+        const b1 = templateImage[offset + 2];
+        const r2 = outputImage[offset];
+        const g2 = outputImage[offset + 1];
+        const b2 = outputImage[offset + 2];
+        const row = (Math.abs(r1 - r2) + Math.abs(g1 - g2) + Math.abs(b1 - b2)) / 255 / 3;
+        diffSum += row;
+        total += 1;
+      }
+    }
+  };
+
+  switch (region) {
+    case 'top': {
+      const band = Math.max(1, Math.min(Math.floor(height * 0.08), 56));
+      sampleBand(0, 0, width, band, (x, y) => (y * width + x) * 4);
+      break;
+    }
+    case 'bottom': {
+      const band = Math.max(1, Math.min(Math.floor(height * 0.08), 56));
+      sampleBand(0, height - band, width, height, (x, y) => (y * width + x) * 4);
+      break;
+    }
+    case 'left': {
+      const band = Math.max(1, Math.min(Math.floor(width * 0.08), 56));
+      sampleBand(0, 0, band, height, (x, y) => (y * width + x) * 4);
+      break;
+    }
+    case 'right': {
+      const band = Math.max(1, Math.min(Math.floor(width * 0.08), 56));
+      sampleBand(width - band, 0, width, height, (x, y) => (y * width + x) * 4);
+      break;
+    }
+    default: {
+      return 0;
+    }
+  }
+
+  if (!total) return 0;
+  return diffSum / total;
+}
+
+function _sampleEdgeBlankRatio(image, width, height, region) {
+  const band = Math.max(1, Math.min(Math.floor(height * 0.18), 180));
+  const startY = region === 'top' ? 0 : Math.max(0, height - band);
+  const endY = region === 'top' ? Math.min(height, band) : height;
+  let total = 0;
+  let blank = 0;
+  for (let y = startY; y < endY; y += 2) {
+    for (let x = 0; x < width; x += 2) {
+      const offset = (y * width + x) * 4;
+      const r = image[offset];
+      const g = image[offset + 1];
+      const b = image[offset + 2];
+      const brightest = Math.max(r, g, b);
+      const darkest = Math.min(r, g, b);
+      if (brightest >= 246 && brightest - darkest <= 10) blank += 1;
+      total += 1;
+    }
+  }
+  return total ? blank / total : 0;
+}
+
+async function validateTemplateOutputLayout(job, bytes, analysis = '') {
+  const templatePath = job?.templatePath || '';
+  if (!templatePath || !fs.existsSync(templatePath) || !bytes || bytes.length <= 0) return { passed: false, reason: 'è¾“å‡ºå›¾åƒä¸ºç©ºæˆ–æ¨¡æ¿ç¼ºå¤±' };
+  const templateMeta = await sharp(templatePath).metadata();
+  const targetWidth = Math.max(1, Number(templateMeta.width) || 1);
+  const targetHeight = Math.max(1, Number(templateMeta.height) || 1);
+
+  const templateRaw = await sharp(templatePath)
+    .resize({ width: targetWidth, height: targetHeight, fit: 'fill' })
+    .ensureAlpha()
+    .raw()
+    .toBuffer();
+  const generatedRaw = await sharp(bytes)
+    .resize({ width: targetWidth, height: targetHeight, fit: 'fill' })
+    .ensureAlpha()
+    .raw()
+    .toBuffer();
+
+  const metrics = {
+    top: _sampleNormalizedBandDiff(templateRaw, generatedRaw, targetWidth, targetHeight, 'top'),
+    bottom: _sampleNormalizedBandDiff(templateRaw, generatedRaw, targetWidth, targetHeight, 'bottom'),
+    left: _sampleNormalizedBandDiff(templateRaw, generatedRaw, targetWidth, targetHeight, 'left'),
+    right: _sampleNormalizedBandDiff(templateRaw, generatedRaw, targetWidth, targetHeight, 'right')
+  };
+
+  const isDetailSlice = isDetailSliceTemplate(job, analysis);
+  const isMultiGrid = isMultiGridTemplate(job, analysis);
+  const sideValues = [metrics.top, metrics.bottom, metrics.left, metrics.right];
+  const sideMax = Math.max(...sideValues);
+  const sideAvg = (metrics.top + metrics.bottom + metrics.left + metrics.right) / 4;
+  const sideExceedCount = sideValues.filter(item => item > 0.24).length;
+  // RGB differences at an edge are not proof of geometric drift: a valid
+  // print migration can recolor a cabinet panel that touches that edge.
+  // Reject only catastrophic, page-wide changes spanning at least three
+  // boundaries. Missing bottom content has its own stricter blank check.
+  const heavyBoundaryDrift = isDetailSlice && sideExceedCount >= 3 && sideMax > 0.55 && sideAvg > 0.42;
+  const multiGridDrift = isMultiGrid && isDetailSlice && sideExceedCount >= 3 && sideMax > 0.48 && sideAvg > 0.38;
+  const sourceBottomBlank = _sampleEdgeBlankRatio(templateRaw, targetWidth, targetHeight, 'bottom');
+  const outputBottomBlank = _sampleEdgeBlankRatio(generatedRaw, targetWidth, targetHeight, 'bottom');
+  const replacedByBlank = isDetailSlice && sourceBottomBlank < 0.72 && outputBottomBlank > 0.9;
+
+  if (replacedByBlank) {
+    return {
+      passed: false,
+      reason: `å¸ƒå±€æ ¡éªŒæœªé€šè¿‡ï¼šæ¨¡æ¿åº•éƒ¨ä»æœ‰é¡µé¢å†…å®¹ï¼Œä½†ç”Ÿæˆç»“æœå˜æˆå¤§é¢ç§¯ç©ºç™½ï¼ˆæºå›¾ç©ºç™½æ¯”ä¾‹:${sourceBottomBlank.toFixed(2)}ï¼Œç»“æœ:${outputBottomBlank.toFixed(2)}ï¼‰ã€‚`
+    };
+  }
+  if (heavyBoundaryDrift) {
+    return {
+      passed: false,
+      reason: `å¸ƒå±€æ ¡éªŒæœªé€šè¿‡ï¼šè¾¹ç•Œæ¼‚ç§»è¿‡å¤§ï¼ˆtop:${metrics.top.toFixed(2)} bottom:${metrics.bottom.toFixed(2)} left:${metrics.left.toFixed(2)} right:${metrics.right.toFixed(2)}ï¼‰ã€‚`
+    };
+  }
+  if (multiGridDrift) {
+    return {
+      passed: false,
+      reason: `å¤šå®«æ ¼æ ¡éªŒæœªé€šè¿‡ï¼šè¾¹ç•Œä¸é¡µé¢ç»“æ„åå·®è¿‡å¤§ï¼ˆtop:${metrics.top.toFixed(2)} bottom:${metrics.bottom.toFixed(2)} left:${metrics.left.toFixed(2)} right:${metrics.right.toFixed(2)}ï¼‰ã€‚`
+    };
+  }
+  return { passed: true };
+}
+
+function isDetailSliceTemplate(job = {}, analysis = '') {
+  const text = `${String(job?.relativePath || '')}\n${String(job?.sectionName || '')}\n${String(analysis || '')}`.toLowerCase();
+  const signals = [
+    'è¯¦æƒ…',
+    'detail',
+    'ç»†èŠ‚',
+    'æè´¨',
+    'sku',
+    'å‚æ•°',
+    'å›¾é‰´',
+    'å¤šå®«æ ¼',
+    'å¤šå›¾',
+    'æ‹¼å›¾',
+    'åˆ‡ç‰‡',
+    'è£åˆ‡',
+    'å±€éƒ¨',
+    'æŠ½å±‰',
+    'drawer',
+    'multi-grid',
+    'multi panel',
+    'multi-panel',
+    'sliced ecommerce detail page'
+  ];
+  return signals.some(signal => text.includes(signal));
+}
+
+function applyPackagePrompt(prompt, api, kind) {
+  const pack = api?.activeModelPackage;
+  const packagePrompt = packagePromptFor(api, kind);
+  if (pack && !packageIsFlagship(pack) && packagePrompt) return packagePrompt;
+  return appendPackagePrompt(prompt, packagePrompt);
+}
+
+function packageBillingRange(pack, kind) {
+  if (!pack) return {};
+  const prefix = kind === 'analysis' || kind === 'llm' ? 'analysis' : 'image';
+  const fixed = normalizeModelPackageMinor(pack[`${prefix}PriceMinor`], 0);
+  const min = normalizeModelPackageMinor(pack[`${prefix}PriceMinMinor`], fixed);
+  const max = normalizeModelPackageMinor(pack[`${prefix}PriceMaxMinor`], fixed);
+  return { amountMinMinor: min, amountMaxMinor: Math.max(min, max) };
+}
+
+async function activeApiConcurrencyLimit(total = Infinity) {
+  const max = DEFAULT_ANALYSIS_API_CONCURRENCY;
+  const count = Number(total);
+  if (!Number.isFinite(count)) return max;
+  return Math.min(max, Math.max(1, Math.trunc(count)));
+}
+
+async function testApiSettings(payload = {}) {
+  const current = await readPrivateApiSettings();
+  const channel = payload.channel === 'analysis' ? 'analysis' : 'image';
+  const draft = {
+    baseUrl: normalizeApiBaseUrl(payload.baseUrl || current.baseUrl),
+    key: channel === 'analysis'
+      ? String(payload.analysisApiKey || '').trim() || current.analysisKey
+      : String(payload.imageApiKey || payload.apiKey || '').trim() || current.imageKey,
+    requestTimeoutSeconds: normalizeRequestTimeoutSeconds(payload.requestTimeoutSeconds, current.requestTimeoutSeconds)
+  };
+  if (!draft.baseUrl) throw new Error('è¯·å…ˆå¡«å†™ API åœ°å€');
+  if (!draft.key) throw new Error(channel === 'analysis' ? 'è¯·å…ˆé…ç½®æ–‡å­—åˆ†æ API å¯†é’¥' : 'è¯·å…ˆé…ç½® Image2 ç”Ÿå›¾ API å¯†é’¥');
+  const startedAt = Date.now();
+  const body = await apiJson(apiEndpoint(draft.baseUrl, '/models'), {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${draft.key}`, Accept: 'application/json' }
+  }, Math.min(draft.requestTimeoutSeconds * 1000, 60000));
+  const sourceModels = Array.isArray(body?.data) ? body.data
+    : Array.isArray(body?.models) ? body.models
+      : [];
+  const models = sourceModels.slice(0, 500).map(item => ({
+    id: String(item?.id || item?.name || '').replace(/^models\//, '').trim().slice(0, 200),
+    object: String(item?.object || 'model').trim().slice(0, 80),
+    created: Number.isFinite(Number(item?.created)) ? Number(item.created) : 0,
+    ownedBy: String(item?.owned_by || '').trim().slice(0, 120)
+  })).filter(item => item.id);
+  return { ok: true, channel, latencyMs: Date.now() - startedAt, modelCount: models.length, models };
+}
+
+async function testAnalysisApi(payload = {}) {
+  const current = await readPrivateApiSettings();
+  const activePack = await activeModelPackage();
+  const fallbackBaseUrl = normalizeApiBaseUrl(
+    (activePack?.analysisApiBaseUrl || activePack?.apiBaseUrl || current.analysisApiBaseUrl || current.baseUrl)
+  );
+  const draft = {
+    baseUrl: normalizeApiBaseUrl(payload.baseUrl || fallbackBaseUrl),
+    key: String(payload.analysisApiKey || '').trim() || String(activePack?.analysisApiKey || current.analysisKey || current.imageKey || '').trim(),
+    analysisModel: normalizeModelName(payload.analysisModel || activePack?.analysisModel || activePack?.modelId || current.analysisModel, current.analysisModel),
+    analysisWireApi: normalizeAnalysisWireApi(payload.analysisWireApi, current.analysisWireApi),
+    requestTimeoutSeconds: normalizeRequestTimeoutSeconds(payload.requestTimeoutSeconds, current.requestTimeoutSeconds)
+  };
+  if (!draft.baseUrl) throw new Error('è¯·å…ˆå¡«å†™ API åœ°å€');
+  if (!draft.key) throw new Error('è¯·å…ˆé…ç½®æ–‡å­—åˆ†æ API å¯†é’¥');
+  const modelResult = await testApiSettings({
+    ...payload,
+    channel: 'analysis',
+    baseUrl: draft.baseUrl,
+    analysisApiKey: draft.key,
+    requestTimeoutSeconds: draft.requestTimeoutSeconds
+  });
+  if (!modelResult.models.some(model => model.id === draft.analysisModel)) {
+    const available = modelResult.models.map(model => model.id).join('ã€') || 'æ— ';
+    draft.analysisModel = modelResult.models.length ? modelResult.models[0].id : '';
+    if (!draft.analysisModel) throw new Error(`æ–‡å­—åˆ†æå¯†é’¥ä¸æ”¯æŒæ¨¡å‹ ${normalizeModelName(payload.analysisModel || current.analysisModel, '')}ï¼›å¯ç”¨æ¨¡å‹ï¼š${available}`);
+  }
+  const startedAt = Date.now();
+  const body = await analysisApiJson({
+    ...draft,
+    analysisKey: draft.key
+  }, {
+    model: draft.analysisModel,
+    messages: [{ role: 'user', content: 'ä»…å›å¤ OK' }],
+    stream: false,
+    max_tokens: 8
+  }, Math.min(draft.requestTimeoutSeconds * 1000, 60000));
+  if (!Array.isArray(body?.choices) || !body.choices.length) throw new Error('åˆ†ææ¥å£å“åº”æ ¼å¼ä¸æ­£ç¡®ï¼šç¼ºå°‘ choices');
+  const content = body.choices[0]?.message?.content;
+  return {
+    ok: true,
+    latencyMs: Date.now() - startedAt,
+    model: draft.analysisModel,
+    wireApi: draft.analysisWireApi,
+    responsePreview: typeof content === 'string' ? content.trim().slice(0, 80) : ''
+  };
+}
+
+function apiSettingsStatus() {
+  return publicApiSettings(currentApiSettings());
+}
+
+async function readSavedPromptSettings() {
+  const value = await readGlobalSettingWithLegacy(promptSettingsFile(), 'prompt-settings.json');
+  return value && typeof value === 'object' ? value : {};
+}
+
+async function loadPromptSettings() {
+  return publicPromptSettings(await readSavedPromptSettings());
+}
+
+async function canAdminViewPromptSettings() {
+  return (await readPrivateApiSettings()).allowAdminPromptView === true;
+}
+
+async function getPromptValue(id) {
+  const settings = await loadPromptSettings();
+  const prompt = settings.prompts.find(item => item.id === id);
+  if (!prompt) throw new Error(`æœªçŸ¥æç¤ºè¯ï¼š${id}`);
+  return prompt.value;
+}
+
+async function savePromptSetting(id, value) {
+  const operation = promptSettingsWriteChain.then(async () => {
+    const text = normalizePromptValue(String(id || ''), value);
+    const saved = await readSavedPromptSettings();
+    const next = {
+      prompts: { ...(saved.prompts || {}), [id]: text },
+      updatedAt: new Date().toISOString()
+    };
+    await fsp.mkdir(path.dirname(promptSettingsFile()), { recursive: true });
+    await fsp.writeFile(promptSettingsFile(), JSON.stringify(next, null, 2));
+    return loadPromptSettings();
+  });
+  promptSettingsWriteChain = operation.catch(() => {});
+  return operation;
+}
+
+async function resetPromptSetting(id = '') {
+  const operation = promptSettingsWriteChain.then(async () => {
+    const saved = await readSavedPromptSettings();
+    if (!id) {
+      await fsp.rm(promptSettingsFile(), { force: true });
+      return loadPromptSettings();
+    }
+    if (!promptDefinitionById.has(id)) throw new Error(`æœªçŸ¥æç¤ºè¯ï¼š${id}`);
+    const prompts = { ...(saved.prompts || {}) };
+    delete prompts[id];
+    const next = { prompts, updatedAt: new Date().toISOString() };
+    await fsp.mkdir(path.dirname(promptSettingsFile()), { recursive: true });
+    await fsp.writeFile(promptSettingsFile(), JSON.stringify(next, null, 2));
+    return loadPromptSettings();
+  });
+  promptSettingsWriteChain = operation.catch(() => {});
+  return operation;
+}
+
+function defaultConfig() {
+  return {
+    operatorCode: 'ys',
+    categoriesPath: '',
+    printsPath: '',
+    detailSetsPath: '',
+    outputPath: currentDefaultOutputRoot(),
+    imageSize: '1024x1024',
+    imageQuality: 'auto',
+    auditMode: 'saving'
+  };
+}
+
+async function loadConfig() {
+  try {
+    const config = { ...defaultConfig(), ...JSON.parse(await fsp.readFile(configFile(), 'utf8')) };
+    configuredOutputRoots.set(currentWorkspaceId(), path.resolve(config.outputPath || currentDefaultOutputRoot()));
+    return config;
+  } catch {
+    const config = defaultConfig();
+    await saveConfig(config);
+    return config;
+  }
+}
+
+async function saveConfig(next) {
+  const safe = {
+    ...defaultConfig(),
+    operatorCode: String(next.operatorCode || 'ys').trim().slice(0, 20),
+    categoriesPath: String(next.categoriesPath || '').trim(),
+    printsPath: String(next.printsPath || '').trim(),
+    detailSetsPath: String(next.detailSetsPath || '').trim(),
+    outputPath: String(next.outputPath || currentDefaultOutputRoot()).trim(),
+    imageSize: String(next.imageSize || '1024x1024'),
+    imageQuality: String(next.imageQuality || 'auto'),
+    auditMode: next.auditMode === 'quality' ? 'quality' : 'saving'
+  };
+  await fsp.mkdir(safe.outputPath, { recursive: true });
+  configuredOutputRoots.set(currentWorkspaceId(), path.resolve(safe.outputPath));
+  await fsp.mkdir(path.dirname(configFile()), { recursive: true });
+  await fsp.writeFile(configFile(), JSON.stringify(safe, null, 2));
+  return safe;
+}
+
+function titleLibraryFile() {
+  return path.join(app.getPath('userData'), 'current-title-library.json');
+}
+
+function titleKeywordLibraryRoot() {
+  return path.join(app.getPath('userData'), 'title-keyword-libraries');
+}
+
+function categoryTitleLibraryFile(categoryName) {
+  return path.join(titleKeywordLibraryRoot(), `${safeFileName(categoryName)}.json`);
+}
+
+function titleGenerationStateFile() {
+  return path.join(app.getPath('userData'), 'standalone-title-generation-state.json');
+}
+
+function taobaoPublishSettingsFile() {
+  return path.join(app.getPath('userData'), 'taobao-publish-settings.json');
+}
+
+function taobaoPublishStateFile() {
+  return path.join(app.getPath('userData'), 'taobao-publish-state.json');
+}
+
+function titleGenerationStateKey(library, prefixRoots) {
+  const libraryName = normalizeTitleText(library?.sourceFileName || '');
+  const prefixes = prefixRoots.map(normalizeTitleText).join('|');
+  const required = (library?.requiredRoots || []).map(normalizeTitleText).filter(Boolean).join('|');
+  return `${libraryName}::${prefixes}::${required}`;
+}
+
+async function loadTitleGenerationState() {
+  try {
+    const parsed = JSON.parse(await fsp.readFile(titleGenerationStateFile(), 'utf8'));
+    return parsed && typeof parsed === 'object' ? parsed : { nextIndexes: {} };
+  } catch {
+    return { nextIndexes: {} };
+  }
+}
+
+async function saveTitleGenerationState(state) {
+  await fsp.mkdir(path.dirname(titleGenerationStateFile()), { recursive: true });
+  await fsp.writeFile(titleGenerationStateFile(), JSON.stringify(state, null, 2));
+}
+
+async function loadTitleLibrary() {
+  try {
+    return JSON.parse(await fsp.readFile(titleLibraryFile(), 'utf8'));
+  } catch {
+    const library = createDefaultTitleLibrary();
+    await fsp.mkdir(path.dirname(titleLibraryFile()), { recursive: true });
+    await fsp.writeFile(titleLibraryFile(), JSON.stringify(library, null, 2));
+    await saveCategoryTitleLibrary(library);
+    return library;
+  }
+}
+
+async function saveTitleLibrary(library) {
+  await fsp.mkdir(path.dirname(titleLibraryFile()), { recursive: true });
+  await fsp.writeFile(titleLibraryFile(), JSON.stringify(library, null, 2));
+  return publicTitleLibrary(library);
+}
+
+async function saveCategoryTitleLibrary(library) {
+  if (!library?.categoryName) return;
+  await fsp.mkdir(titleKeywordLibraryRoot(), { recursive: true });
+  await fsp.writeFile(categoryTitleLibraryFile(library.categoryName), JSON.stringify(library, null, 2));
+}
+
+async function loadCategoryTitleLibrary(categoryName) {
+  const category = String(categoryName || '').trim();
+  if (!category) return null;
+  try {
+    return JSON.parse(await fsp.readFile(categoryTitleLibraryFile(category), 'utf8'));
+  } catch {
+    // Earlier Mac builds only stored the currently selected library. Migrate it
+    // lazily so already-imported keyword files also work for approved tasks.
+    const current = await loadTitleLibrary();
+    if (String(current?.categoryName || '').localeCompare(category, 'zh-CN', { sensitivity: 'accent' }) === 0) {
+      await saveCategoryTitleLibrary(current);
+      return current;
+    }
+    return null;
+  }
+}
+
+function titleRootCandidates(library) {
+  return getTitleRootCandidates(library);
+}
+
+function publicTitleLibrary(library) {
+  if (!library) return null;
+  return {
+    categoryName: library.categoryName || '',
+    sourceFileName: library.sourceFileName,
+    recordCount: library.records?.length || 0,
+    prefixRoots: library.prefixRoots || [],
+    requiredRoots: library.requiredRoots || [],
+    rootCandidates: titleRootCandidates(library).slice(0, 80)
+  };
+}
+
+async function importTitleLibrary(fileValue) {
+  const file = path.resolve(String(fileValue || ''));
+  if (!fileValue || !fs.existsSync(file)) throw new Error('è¯·é€‰æ‹© Excel æˆ– CSV å…³é”®è¯è¡¨');
+  const workbook = path.extname(file).toLowerCase() === '.csv'
+    ? XLSX.read(await fsp.readFile(file, 'utf8'), { type: 'string' })
+    : XLSX.readFile(file);
+  const sheetName = workbook.SheetNames[0];
+  const worksheet = sheetName ? workbook.Sheets[sheetName] : null;
+  if (!worksheet) throw new Error('Excel æ²¡æœ‰å·¥ä½œè¡¨');
+  const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false, defval: '' });
+  if (!rows.length) throw new Error('Excel è¡¨ä¸ºç©º');
+  const imported = parseTitleKeywordRows(rows, {
+    fileName: file,
+    sheetName,
+    importedAt: new Date().toISOString()
+  });
+  if (!imported.records.length) throw new Error('å…³é”®è¯åˆ—æ²¡æœ‰æœ‰æ•ˆæ•°æ®');
+  const existing = await loadTitleLibrary();
+  const library = { ...mergeImportedTitleLibrary(imported, existing), sourcePath: file };
+  await saveCategoryTitleLibrary(library);
+  await saveTitleLibrary(library);
+  return publicTitleLibrary(library);
+}
+
+function isWorkspacePath(file) {
+  return isSameOrChildPath(currentWorkspaceRoot(), file);
+}
+
+function isOutputPath(file) {
+  return isSameOrChildPath(configuredOutputRoots.get(currentWorkspaceId()) || currentDefaultOutputRoot(), file);
+}
+
+function isServablePath(file) {
+  return isWorkspacePath(file) || isOutputPath(file);
+}
+
+function fileToken(file) {
+  const resolved = path.resolve(String(file || ''));
+  if (!isServablePath(resolved)) throw new Error('æ–‡ä»¶ä¸å±äºå½“å‰å·¥ä½œåŒºæˆ–æˆå“è¾“å‡ºç›®å½•');
+  const payload = Buffer.from(resolved).toString('base64url');
+  const signature = crypto.createHmac('sha256', FILE_TOKEN_SECRET).update(payload).digest('base64url');
+  return `${payload}.${signature}`;
+}
+
+function fileFromToken(tokenValue) {
+  try {
+    const [payload, signature] = String(tokenValue || '').split('.');
+    if (!payload || !signature) return '';
+    const expected = crypto.createHmac('sha256', FILE_TOKEN_SECRET).update(payload).digest('base64url');
+    const actualBytes = Buffer.from(signature);
+    const expectedBytes = Buffer.from(expected);
+    if (actualBytes.length !== expectedBytes.length || !crypto.timingSafeEqual(actualBytes, expectedBytes)) return '';
+    const file = Buffer.from(payload, 'base64url').toString();
+    return isServablePath(file) ? path.resolve(file) : '';
+  } catch {
+    return '';
+  }
+}
+
+function imageUrl(file) {
+  return `/api/files/${fileToken(file)}`;
+}
+
+function thumbnailUrl(file, width, version) {
+  return `/api/thumbnails/${fileToken(file)}?w=${width}&v=${encodeURIComponent(version)}`;
+}
+
+async function scanImages(root, query = '', limit = 10000) {
+  if (!root) return [];
+  const rootStat = await fsp.stat(root).catch(() => null);
+  if (!rootStat?.isDirectory()) return [];
+  const normalizedQuery = query.trim().toLocaleLowerCase('zh-CN');
+  const files = [];
+
+  async function walk(directory, depth) {
+    if (files.length >= limit || depth > 24) return;
+    let entries = [];
+    try {
+      entries = await fsp.readdir(directory, { withFileTypes: true });
+    } catch { return; }
+    entries.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN', { numeric: true }));
+    for (const entry of entries) {
+      if (files.length >= limit) break;
+      if (entry.name.startsWith('.')) continue;
+      const fullPath = path.join(directory, entry.name);
+      if (entry.isDirectory()) await walk(fullPath, depth + 1);
+      else if (entry.isFile() && isImagePath(fullPath) && (!normalizedQuery || fullPath.toLocaleLowerCase('zh-CN').includes(normalizedQuery))) {
+        const stat = await fsp.stat(fullPath).catch(() => null);
+        const version = stat ? `${Math.trunc(stat.mtimeMs)}-${stat.size}` : '1';
+        files.push({
+          path: fullPath,
+          name: entry.name,
+          folder: path.relative(root, directory) || 'æ ¹ç›®å½•',
+          url: `${imageUrl(fullPath)}?v=${version}`,
+          thumbnailUrl: thumbnailUrl(fullPath, 480, version),
+          previewUrl: thumbnailUrl(fullPath, 1200, version)
+        });
+      }
+    }
+  }
+
+  await walk(root, 0);
+  return files;
+}
+
+function imageMimeType(file) {
+  const extension = path.extname(file).toLowerCase();
+  return extension === '.jpg' || extension === '.jpeg' ? 'image/jpeg'
+    : extension === '.webp' ? 'image/webp'
+      : extension === '.gif' ? 'image/gif'
+        : extension === '.bmp' ? 'image/bmp'
+          : 'image/png';
+}
+
+async function imageAsDataUrl(file) {
+  if (!isImagePath(file)) throw new Error('ä¸æ”¯æŒçš„å›¾ç‰‡æ ¼å¼');
+  const mime = imageMimeType(file);
+  return `data:${mime};base64,${(await fsp.readFile(file)).toString('base64')}`;
+}
+
+async function imageAsAnalysisDataUrl(file) {
+  if (!isImagePath(file)) throw new Error('ä¸æ”¯æŒçš„å›¾ç‰‡æ ¼å¼');
+  const bytes = await sharp(file, { failOn: 'none', animated: false, limitInputPixels: 120_000_000 })
+    .rotate()
+    .resize({ width: 1600, height: 1600, fit: 'inside', withoutEnlargement: true })
+    .flatten({ background: '#ffffff' })
+    .jpeg({ quality: 84, mozjpeg: true })
+    .toBuffer();
+  return `data:image/jpeg;base64,${bytes.toString('base64')}`;
+}
+
+function pixelAverage(data, index) {
+  return (Number(data[index]) + Number(data[index + 1]) + Number(data[index + 2])) / 3;
+}
+
+function pixelSaturation(data, index) {
+  const r = Number(data[index]);
+  const g = Number(data[index + 1]);
+  const b = Number(data[index + 2]);
+  return Math.max(r, g, b) - Math.min(r, g, b);
+}
+
+function countDarkBorderPixels(data, width, height, box) {
+  const x0 = Math.max(0, box.x0 - 2);
+  const y0 = Math.max(0, box.y0 - 2);
+  const x1 = Math.min(width - 1, box.x1 + 2);
+  const y1 = Math.min(height - 1, box.y1 + 2);
+  let dark = 0;
+  let total = 0;
+  for (let x = x0; x <= x1; x += 1) {
+    for (const y of [y0, y1]) {
+      const offset = (y * width + x) * 3;
+      total += 1;
+      if (pixelAverage(data, offset) < 115) dark += 1;
+    }
+  }
+  for (let y = y0 + 1; y < y1; y += 1) {
+    for (const x of [x0, x1]) {
+      const offset = (y * width + x) * 3;
+      total += 1;
+      if (pixelAverage(data, offset) < 115) dark += 1;
+    }
+  }
+  return total ? dark / total : 0;
+}
+
+async function detectTemplateHasLightCabinetPanels(file) {
+  const { data, info } = await sharp(file, { failOn: 'none', animated: false, limitInputPixels: 120_000_000 })
+    .rotate()
+    .resize({ width: 360, height: 360, fit: 'inside', withoutEnlargement: true })
+    .flatten({ background: '#ffffff' })
+    .removeAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const width = info.width;
+  const height = info.height;
+  const totalPixels = width * height;
+  const candidate = new Uint8Array(totalPixels);
+  for (let y = 0; y < height; y += 1) {
+    const yNorm = y / height;
+    if (yNorm < 0.12 || yNorm > 0.9) continue;
+    for (let x = 0; x < width; x += 1) {
+      const index = y * width + x;
+      const offset = index * 3;
+      const average = pixelAverage(data, offset);
+      const saturation = pixelSaturation(data, offset);
+      if (average >= 168 && average <= 240 && saturation <= 42) candidate[index] = 1;
+    }
+  }
+
+  const visited = new Uint8Array(totalPixels);
+  const components = [];
+  const stack = [];
+  for (let start = 0; start < totalPixels; start += 1) {
+    if (!candidate[start] || visited[start]) continue;
+    visited[start] = 1;
+    stack.push(start);
+    let area = 0;
+    let x0 = width;
+    let y0 = height;
+    let x1 = 0;
+    let y1 = 0;
+    let brightness = 0;
+    while (stack.length) {
+      const index = stack.pop();
+      const x = index % width;
+      const y = Math.floor(index / width);
+      const offset = index * 3;
+      area += 1;
+      brightness += pixelAverage(data, offset);
+      x0 = Math.min(x0, x);
+      y0 = Math.min(y0, y);
+      x1 = Math.max(x1, x);
+      y1 = Math.max(y1, y);
+      for (const next of [index - 1, index + 1, index - width, index + width]) {
+        if (next < 0 || next >= totalPixels || visited[next] || !candidate[next]) continue;
+        if ((index % width === 0 && next === index - 1) || (index % width === width - 1 && next === index + 1)) continue;
+        visited[next] = 1;
+        stack.push(next);
+      }
+    }
+    const boxWidth = x1 - x0 + 1;
+    const boxHeight = y1 - y0 + 1;
+    const boxArea = boxWidth * boxHeight;
+    const areaRatio = area / totalPixels;
+    const fillRatio = area / Math.max(1, boxArea);
+    const widthRatio = boxWidth / width;
+    const heightRatio = boxHeight / height;
+    const aspect = boxWidth / Math.max(1, boxHeight);
+    const touchesImageEdge = x0 <= 1 || y0 <= 1 || x1 >= width - 2 || y1 >= height - 2;
+    const darkBorderRatio = countDarkBorderPixels(data, width, height, { x0, y0, x1, y1 });
+    if (
+      !touchesImageEdge
+      && areaRatio >= 0.0018
+      && areaRatio <= 0.16
+      && fillRatio >= 0.45
+      && widthRatio >= 0.035
+      && heightRatio >= 0.04
+      && widthRatio <= 0.75
+      && heightRatio <= 0.65
+      && aspect >= 0.28
+      && aspect <= 5
+      && brightness / Math.max(1, area) <= 236
+      && darkBorderRatio >= 0.015
+    ) {
+      components.push({ x0, y0, x1, y1, area });
+    }
+  }
+
+  return components.length > 0;
+}
+
+async function createVisualFallbackTemplateAnalysis(job, reason) {
+  const hasLightCabinetPanels = await detectTemplateHasLightCabinetPanels(job.templatePath).catch(() => false);
+  if (!hasLightCabinetPanels) return null;
+  const analysis = createManualTemplateAnalysis({
+    action: 'replace_print',
+    reason,
+    replaceArea: 'Auto-detected cabinet product image that should use the master product generation flow',
+    forbiddenArea: 'text, dimension marks, background, frame, seams, handles, legs, shadows and props'
+  });
+  return analysis.action === 'replace_print' ? analysis : null;
+}
+
+function shouldUsePowerShellApiFallback(url, error) {
+  return process.platform === 'win32'
+    && /change2pro\.com/i.test(String(url || ''))
+    && /fetch failed|ECONNRESET|socket|network/i.test(`${error?.message || ''} ${error?.cause?.code || ''}`);
+}
+
+async function powershellJsonRequest(url, options = {}, timeoutMs = 120000) {
+  const method = String(options.method || 'GET').toUpperCase();
+  const headers = options.headers || {};
+  const body = typeof options.body === 'string' ? options.body : '';
+  const payload = JSON.stringify({
+    url,
+    method,
+    headers,
+    body,
+    timeoutSeconds: Math.max(15, Math.ceil(timeoutMs / 1000))
+  });
+  const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'caishen-api-'));
+  const payloadFile = path.join(tempRoot, 'payload.json');
+  const scriptFile = path.join(tempRoot, 'request.ps1');
+  const script = `
+$ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
+$payload = [IO.File]::ReadAllText($args[0], [Text.Encoding]::UTF8) | ConvertFrom-Json
+$headers = @{}
+$contentType = ''
+$payload.headers.PSObject.Properties | ForEach-Object {
+  if ($_.Name -ieq 'Content-Type') { $contentType = [string]$_.Value }
+  else { $headers[$_.Name] = [string]$_.Value }
+}
+$params = @{ Uri = [string]$payload.url; Method = [string]$payload.method; Headers = $headers; TimeoutSec = [int]$payload.timeoutSeconds }
+if ($contentType) { $params.ContentType = $contentType }
+if ([string]$payload.body) { $params.Body = [Text.Encoding]::UTF8.GetBytes([string]$payload.body) }
+try {
+  $response = Invoke-WebRequest @params -UseBasicParsing
+  [Console]::Out.Write((@{ status = [int]$response.StatusCode; body = [string]$response.Content } | ConvertTo-Json -Compress -Depth 5))
+} catch {
+  $status = 0
+  $content = ''
+  if ($_.Exception.Response) {
+    $status = [int]$_.Exception.Response.StatusCode
+    try {
+      $stream = $_.Exception.Response.GetResponseStream()
+      if ($stream) {
+        $reader = New-Object IO.StreamReader($stream)
+        $content = $reader.ReadToEnd()
+      }
+    } catch {}
+  }
+  if (-not $content) { $content = $_.ErrorDetails.Message }
+  if (-not $content) { $content = $_.Exception.Message }
+  [Console]::Out.Write((@{ status = $status; body = [string]$content } | ConvertTo-Json -Compress -Depth 5))
+}
+`;
+  await fsp.writeFile(payloadFile, payload, 'utf8');
+  await fsp.writeFile(scriptFile, script, 'utf8');
+  return new Promise((resolve, reject) => {
+    execFile('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptFile, payloadFile], {
+      timeout: timeoutMs + 5000,
+      windowsHide: true,
+      encoding: 'buffer',
+      maxBuffer: 20 * 1024 * 1024
+    }, (error, stdout, stderr) => {
+      fsp.rm(tempRoot, { recursive: true, force: true }).catch(() => {});
+      const outputText = Buffer.isBuffer(stdout) ? stdout.toString('utf8') : String(stdout || '');
+      const errorText = Buffer.isBuffer(stderr) ? stderr.toString('utf8') : String(stderr || '');
+      if (error) return reject(new Error(errorText || error.message));
+      try { return resolve(JSON.parse(outputText || '{}')); }
+      catch { return reject(new Error(outputText || errorText || 'PowerShell API request failed')); }
+    });
+  });
+}
+
+async function powershellMultipartJsonRequest(url, request = {}, timeoutMs = 120000) {
+  const payload = JSON.stringify({
+    url,
+    headers: request.headers || {},
+    fields: request.fields || [],
+    files: request.files || [],
+    timeoutSeconds: Math.max(15, Math.ceil(timeoutMs / 1000))
+  });
+  const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'caishen-image-api-'));
+  const payloadFile = path.join(tempRoot, 'payload.json');
+  const scriptFile = path.join(tempRoot, 'request.ps1');
+  const script = `
+$ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
+Add-Type -AssemblyName System.Net.Http
+$payload = [IO.File]::ReadAllText($args[0], [Text.Encoding]::UTF8) | ConvertFrom-Json
+$client = [System.Net.Http.HttpClient]::new()
+$client.Timeout = [TimeSpan]::FromSeconds([int]$payload.timeoutSeconds)
+$payload.headers.PSObject.Properties | ForEach-Object {
+  if ($_.Name -ine 'Content-Type') {
+    [void]$client.DefaultRequestHeaders.TryAddWithoutValidation([string]$_.Name, [string]$_.Value)
+  }
+}
+$content = [System.Net.Http.MultipartFormDataContent]::new()
+foreach ($field in @($payload.fields)) {
+  $part = [System.Net.Http.StringContent]::new([string]$field.value, [Text.Encoding]::UTF8)
+  $content.Add($part, [string]$field.name)
+}
+foreach ($file in @($payload.files)) {
+  $bytes = [IO.File]::ReadAllBytes([string]$file.path)
+  $part = [System.Net.Http.ByteArrayContent]::new($bytes)
+  if ([string]$file.contentType) {
+    $part.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::Parse([string]$file.contentType)
+  }
+  $content.Add($part, [string]$file.name, [string]$file.fileName)
+}
+try {
+  $response = $client.PostAsync([string]$payload.url, $content).GetAwaiter().GetResult()
+  $responseBody = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+  [Console]::Out.Write((@{ status = [int]$response.StatusCode; body = [string]$responseBody } | ConvertTo-Json -Compress -Depth 5))
+} catch {
+  $responseBody = $_.Exception.Message
+  [Console]::Out.Write((@{ status = 0; body = [string]$responseBody } | ConvertTo-Json -Compress -Depth 5))
+} finally {
+  if ($content) { $content.Dispose() }
+  if ($client) { $client.Dispose() }
+}
+`;
+  await fsp.writeFile(payloadFile, payload, 'utf8');
+  await fsp.writeFile(scriptFile, script, 'utf8');
+  return new Promise((resolve, reject) => {
+    execFile('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptFile, payloadFile], {
+      timeout: timeoutMs + 5000,
+      windowsHide: true,
+      encoding: 'buffer',
+      maxBuffer: 20 * 1024 * 1024
+    }, (error, stdout, stderr) => {
+      fsp.rm(tempRoot, { recursive: true, force: true }).catch(() => {});
+      const outputText = Buffer.isBuffer(stdout) ? stdout.toString('utf8') : String(stdout || '');
+      const errorText = Buffer.isBuffer(stderr) ? stderr.toString('utf8') : String(stderr || '');
+      if (error) return reject(new Error(errorText || error.message));
+      try { return resolve(JSON.parse(outputText || '{}')); }
+      catch { return reject(new Error(outputText || errorText || 'PowerShell image API request failed')); }
+    });
+  });
+}
+
+async function apiJson(url, options = {}, timeoutMs = 120000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    let response;
+    try {
+      response = await fetch(url, { ...options, signal: controller.signal });
+    } catch (error) {
+      if (!shouldUsePowerShellApiFallback(url, error)) throw error;
+      const fallback = await powershellJsonRequest(url, options, timeoutMs);
+      const text = fallback.body || '';
+      let body;
+      try { body = JSON.parse(text); } catch { body = { error: { message: text || `HTTP ${fallback.status}` } }; }
+      if (fallback.status < 200 || fallback.status >= 300) {
+        const error = new Error(body?.error?.message || body?.message || text || `HTTP ${fallback.status}`);
+        error.status = fallback.status;
+        throw error;
+      }
+      return body;
+    }
+    const text = await response.text();
+    let body;
+    try { body = JSON.parse(text); } catch { body = { error: { message: text || `HTTP ${response.status}` } }; }
+    if (!response.ok) {
+      const error = new Error(body?.error?.message || body?.message || text || `HTTP ${response.status}`);
+      error.status = response.status;
+      error.retryAfterMs = parseRetryAfterMs(response.headers.get('retry-after'));
+      throw error;
+    }
+    return body;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function billableLlmJson(url, options = {}, timeoutMs = 120000, metadata = {}) {
+  const reservation = await billing.reserve(currentWorkspaceId(), 'llm', {
+    ...metadata,
+    onceKey: metadata.onceKey || metadata.billingOnceKey || ''
+  });
+  try {
+    const body = await apiJson(url, options, timeoutMs);
+    await billing.commit(reservation);
+    return body;
+  } catch (error) {
+    await billing.release(reservation).catch(() => {});
+    throw error;
+  }
+}
+
+function chatContentToResponses(content, role = 'user') {
+  const items = Array.isArray(content) ? content : [{ type: 'text', text: String(content || '') }];
+  return items.map(item => {
+    if (item?.type === 'image_url') {
+      const imageUrl = typeof item.image_url === 'string' ? item.image_url : item.image_url?.url;
+      return { type: 'input_image', image_url: String(imageUrl || '') };
+    }
+    const text = item?.text ?? item?.content ?? '';
+    return { type: role === 'assistant' ? 'output_text' : 'input_text', text: String(text) };
+  });
+}
+
+function chatPayloadToResponses(payload = {}) {
+  const next = {
+    model: String(payload.model || ''),
+    input: (payload.messages || []).map(message => ({
+      role: String(message?.role || 'user'),
+      content: chatContentToResponses(message?.content, message?.role)
+    })),
+    store: false,
+    stream: false
+  };
+  const maximumTokens = Number(payload.max_output_tokens ?? payload.max_completion_tokens ?? payload.max_tokens);
+  if (Number.isFinite(maximumTokens) && maximumTokens > 0) next.max_output_tokens = Math.round(maximumTokens);
+  if (Number.isFinite(Number(payload.temperature))) next.temperature = Number(payload.temperature);
+  return next;
+}
+
+function responsesOutputText(body = {}) {
+  if (typeof body.output_text === 'string') return body.output_text.trim();
+  const values = [];
+  for (const output of Array.isArray(body.output) ? body.output : []) {
+    for (const content of Array.isArray(output?.content) ? output.content : []) {
+      const text = typeof content?.text === 'string' ? content.text : content?.text?.value;
+      if (typeof text === 'string' && text.trim()) values.push(text.trim());
+    }
+  }
+  return values.join('\n').trim();
+}
+
+function normalizeAnalysisResponse(body, wireApi) {
+  if (wireApi !== 'responses') return body;
+  return {
+    ...body,
+    choices: [{ message: { content: responsesOutputText(body) } }]
+  };
+}
+
+function analysisContentToString(content) {
+  if (typeof content === 'string') return content.trim();
+  if (content == null) return '';
+  if (Array.isArray(content)) {
+    return content.map(item => analysisContentToString(item)).filter(Boolean).join('\n').trim();
+  }
+  if (typeof content === 'object') {
+    const candidates = [
+      content.text,
+      content.value,
+      content.content,
+      content.message,
+      content.output_text,
+      content?.text?.value
+    ];
+    for (const candidate of candidates) {
+      const value = analysisContentToString(candidate);
+      if (value) return value;
+    }
+  }
+  return '';
+}
+
+function isRetryableAnalysisApiFailure(error) {
+  const status = Number(error?.status) || 0;
+  if ([408, 409, 425, 429].includes(status) || status >= 500) return true;
+  const description = `${error?.name || ''} ${error?.code || ''} ${error?.message || error || ''}`;
+  return /AbortError|fetch failed|network|socket|ECONN|ENOTFOUND|EAI_AGAIN|temporar(?:y|ily) unavailable|upstream service|server is busy|service unavailable|rate limit|too many requests|timeout/i.test(description);
+}
+
+async function adaptiveAnalysisApiJson(url, options = {}, timeoutMs = 120000) {
+  return analysisApiScheduler.schedule(async () => {
+    try {
+      return await apiJson(url, options, timeoutMs);
+    } catch (error) {
+      if (isRetryableAnalysisApiFailure(error)) {
+        const retryable = new RetryableRequestError(error?.message || String(error), {
+          status: error?.status,
+          retryAfterMs: error?.retryAfterMs,
+          code: error?.code
+        });
+        retryable.retryable = true;
+        throw retryable;
+      }
+      throw error;
+    }
+  });
+}
+
+async function analysisApiJson(api, chatPayload, timeoutMs, metadata = null) {
+  const wireApi = normalizeAnalysisWireApi(api.analysisWireApi, 'chat_completions');
+  const pathName = wireApi === 'responses' ? '/responses' : '/chat/completions';
+  const shouldApplyPackagePrompt = false;
+  const sourcePayload = shouldApplyPackagePrompt
+    ? {
+      ...chatPayload,
+      messages: (chatPayload.messages || []).map((message, index) => {
+        if (index !== 0) return message;
+        if (Array.isArray(message.content)) {
+          return {
+            ...message,
+            content: message.content.map((item, itemIndex) => itemIndex === 0 && item?.type === 'text'
+              ? { ...item, text: applyPackagePrompt(item.text, api, 'analysis') }
+              : item)
+          };
+        }
+        return { ...message, content: applyPackagePrompt(message.content, api, 'analysis') };
+      })
+    }
+    : chatPayload;
+  const payload = wireApi === 'responses' ? chatPayloadToResponses(sourcePayload) : sourcePayload;
+  const resolvedModel = String(payload?.model || '').trim();
+  if (!resolvedModel) {
+    throw new Error('åˆ†ææ¨¡å‹æœªé…ç½®ï¼Œè¯·åœ¨æ¨¡å‹å¥—é¤æˆ–æ¨¡å‹è®¾ç½®é‡Œå¡«å†™ analysisModel');
+  }
+  const billingMetadata = metadata && api.activeModelPackage
+    ? { ...packageBillingRange(api.activeModelPackage, 'analysis'), ...metadata }
+    : metadata;
+  const options = {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${api.analysisKey}`,
+      Accept: 'application/json',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  };
+  const reservation = billingMetadata
+    ? await billing.reserve(currentWorkspaceId(), 'llm', {
+      ...billingMetadata,
+      onceKey: billingMetadata.onceKey || billingMetadata.billingOnceKey || ''
+    })
+    : null;
+  try {
+    const body = await adaptiveAnalysisApiJson(apiEndpoint(api.baseUrl, pathName), options, timeoutMs);
+    if (reservation) await billing.commit(reservation);
+    return normalizeAnalysisResponse(body, wireApi);
+  } catch (error) {
+    if (reservation) await billing.release(reservation).catch(() => {});
+    throw error;
+  }
+}
+
+function randomDelay(minimumMs, maximumMs, signal = null) {
+  const minimum = Math.max(0, Math.trunc(minimumMs));
+  const maximum = Math.max(minimum, Math.trunc(maximumMs));
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(new Error('ä»»åŠ¡å·²åœæ­¢'));
+    const timer = setTimeout(resolve, minimum + Math.floor(Math.random() * (maximum - minimum + 1)));
+    signal?.addEventListener?.('abort', () => {
+      clearTimeout(timer);
+      reject(new Error('ä»»åŠ¡å·²åœæ­¢'));
+    }, { once: true });
+  });
+}
+
+function isRetryableImageApiFailure(status, value) {
+  const numericStatus = Number(status) || 0;
+  if ([408, 409, 425, 429].includes(numericStatus) || numericStatus >= 500) return true;
+  const text = typeof value === 'string' ? value : JSON.stringify(value || '');
+  return /system_cpu_overloaded|cpu overloaded|temporar(?:y|ily) unavailable|upstream service|server is busy|service unavailable|rate limit|too many requests|try again|timeout/i.test(text);
+}
+
+function imageApiFailureMessage(status, value) {
+  const text = typeof value === 'string' ? value : JSON.stringify(value || '');
+  return text.trim().slice(0, 500) || `HTTP ${status}`;
+}
+
+async function adaptiveImageApiJsonOnce(url, options, timeoutMs, externalSignal) {
+  const controller = new AbortController();
+  const abortFromExternal = () => controller.abort();
+  if (externalSignal?.aborted) controller.abort();
+  else externalSignal?.addEventListener?.('abort', abortFromExternal, { once: true });
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const { signal: _ignoredSignal, _powershellMultipart, ...fetchOptions } = options || {};
+  try {
+    let response;
+    try {
+      response = await fetch(url, { ...fetchOptions, signal: controller.signal });
+    } catch (error) {
+      if (!_powershellMultipart || !shouldUsePowerShellApiFallback(url, error)) throw error;
+      const fallback = await powershellMultipartJsonRequest(url, {
+        headers: fetchOptions.headers || {},
+        ..._powershellMultipart
+      }, timeoutMs);
+      const fallbackText = fallback.body || '';
+      let fallbackBody;
+      try { fallbackBody = JSON.parse(fallbackText); }
+      catch { fallbackBody = { error: { message: fallbackText || `HTTP ${fallback.status}` } }; }
+      if (fallback.status >= 200 && fallback.status < 300) return fallbackBody;
+      const message = fallbackBody?.error?.message || fallbackBody?.message || imageApiFailureMessage(fallback.status, fallbackText);
+      if (isRetryableImageApiFailure(fallback.status, fallbackText || fallbackBody)) {
+        throw new RetryableRequestError(message, { status: fallback.status });
+      }
+      const failure = new Error(message);
+      failure.status = fallback.status;
+      throw failure;
+    }
+
+    const text = await response.text();
+    let body;
+    try { body = JSON.parse(text); }
+    catch { body = { error: { message: text || `HTTP ${response.status}` } }; }
+    if (response.ok) return body;
+    const message = body?.error?.message || body?.message || imageApiFailureMessage(response.status, text);
+    if (isRetryableImageApiFailure(response.status, text || body)) {
+      throw new RetryableRequestError(message, {
+        status: response.status,
+        retryAfterMs: parseRetryAfterMs(response.headers.get('retry-after'))
+      });
+    }
+    const failure = new Error(message);
+    failure.status = response.status;
+    throw failure;
+  } catch (error) {
+    if (error instanceof RetryableRequestError || externalSignal?.aborted) throw error;
+    const description = `${error?.name || ''} ${error?.message || error}`;
+    if (/AbortError|fetch failed|network|socket|ECONN|ENOTFOUND|EAI_AGAIN|temporar(?:y|ily) unavailable|upstream service|server is busy|service unavailable|rate limit|too many requests|timeout/i.test(description)) {
+      throw new RetryableRequestError(error?.message || String(error), { code: error?.code });
+    }
+    throw error;
+  } finally {
+    externalSignal?.removeEventListener?.('abort', abortFromExternal);
+    clearTimeout(timer);
+  }
+}
+
+async function adaptiveImageApiJson(url, optionsOrFactory = {}, timeoutMs = IMAGE_API_TIMEOUT_MS, scheduling = {}) {
+  return imageApiScheduler.schedule(async ({ attempt, signal }) => {
+    const options = typeof optionsOrFactory === 'function'
+      ? await optionsOrFactory({ attempt, signal })
+      : optionsOrFactory;
+    return adaptiveImageApiJsonOnce(url, options, timeoutMs, signal);
+  }, {
+    signal: scheduling.signal,
+    onState: scheduling.onState
+  });
+}
+
+async function downloadGeneratedImage(url, signal) {
+  let lastError;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const controller = new AbortController();
+    const abortFromExternal = () => controller.abort();
+    if (signal?.aborted) controller.abort();
+    else signal?.addEventListener?.('abort', abortFromExternal, { once: true });
+    const timer = setTimeout(() => controller.abort(), IMAGE_URL_TIMEOUT_MS);
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      if (!response.ok) throw new Error(`Image download failed: HTTP ${response.status}`);
+      return Buffer.from(await response.arrayBuffer());
+    } catch (error) {
+      lastError = error;
+      if (signal?.aborted || attempt >= 3) throw error;
+      await randomDelay(500 * attempt, 1000 * attempt, signal);
+    } finally {
+      signal?.removeEventListener?.('abort', abortFromExternal);
+      clearTimeout(timer);
+    }
+  }
+  throw lastError || new Error('Image download failed');
+}
+
+async function generateImage(prompt, imagePaths, options = {}) {
+  const api = await activeApiConfig('image');
+  const pack = api.activeModelPackage;
+  if (pack) {
+    imageApiScheduler.configure({
+      initialConcurrency: Math.min(Number(pack.maxConcurrency) || 1, Number(pack.maxConcurrency) || 1),
+      maxConcurrency: Number(pack.maxConcurrency) || 1,
+      minStartIntervalMs: Number(pack.startIntervalMs) || 0
+    });
+  }
+  const preparedImages = await Promise.all(imagePaths.map(file => {
+    if (!isImagePath(file)) throw new Error(`Unsupported image format: ${path.basename(file)}`);
+    return imageReferenceCache.prepare(file);
+  }));
+  const maskPath = options.maskPath && fs.existsSync(options.maskPath) ? options.maskPath : '';
+  const preparation = {
+    originalBytes: preparedImages.reduce((total, item) => total + item.originalBytes, 0),
+    preparedBytes: preparedImages.reduce((total, item) => total + item.preparedBytes, 0)
+  };
+  const reservation = options.skipBilling ? null : await billing.reserve(currentWorkspaceId(), 'image', {
+    ...packageBillingRange(pack, 'image'),
+    description: options.billingDescription || 'Image generation',
+    reference: options.billingReference || '',
+    onceKey: options.billingOnceKey || ''
+  });
+  try {
+    const attemptStartedAt = new Map();
+    const body = await adaptiveImageApiJson(apiEndpoint(api.baseUrl, '/images/edits'), async ({ signal }) => {
+      if (signal?.aborted) throw new Error('Task stopped');
+      const fields = [
+        { name: 'model', value: api.imageModel },
+        { name: 'prompt', value: applyPackagePrompt(prompt, api, 'image') },
+        { name: 'n', value: '1' },
+        { name: 'size', value: options.size || '1024x1024' },
+        { name: 'quality', value: options.quality || 'high' },
+        { name: 'response_format', value: api.responseFormat || 'url' }
+      ];
+      const files = [];
+      for (const prepared of preparedImages) {
+        const file = prepared.path;
+        files.push({
+          name: 'image',
+          path: file,
+          fileName: `${path.basename(prepared.sourcePath, path.extname(prepared.sourcePath))}${path.extname(file)}`,
+          contentType: imageMimeType(file)
+        });
+      }
+      if (maskPath) files.push({ name: 'mask', path: maskPath, fileName: 'template-edit-mask.png', contentType: 'image/png' });
+      const form = new FormData();
+      for (const field of fields) form.set(field.name, String(field.value));
+      for (const prepared of preparedImages) {
+        const bytes = await fsp.readFile(prepared.path);
+        const uploadName = `${path.basename(prepared.sourcePath, path.extname(prepared.sourcePath))}${path.extname(prepared.path)}`;
+        form.append('image', new Blob([bytes], { type: imageMimeType(prepared.path) }), uploadName);
+      }
+      if (maskPath) {
+        const maskBytes = await fsp.readFile(maskPath);
+        form.append('mask', new Blob([maskBytes], { type: 'image/png' }), 'template-edit-mask.png');
+      }
+      return {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${api.imageKey}` },
+        body: form,
+        signal,
+        _powershellMultipart: { fields, files }
+      };
+    }, IMAGE_API_TIMEOUT_MS, {
+      signal: options.signal,
+      onState: event => {
+        if (event.state === 'running') attemptStartedAt.set(event.attempt, Date.now());
+        const startedAt = attemptStartedAt.get(event.attempt);
+        options.onRequestState?.({
+          ...event,
+          ...preparation,
+          apiElapsedMs: startedAt ? Math.max(0, Date.now() - startedAt) : 0
+        });
+      }
+    });
+    const result = extractImageResult(body);
+    const downloadStartedAt = Date.now();
+    const bytes = result.type === 'base64'
+      ? Buffer.from(result.value, 'base64')
+      : await downloadGeneratedImage(result.value, options.signal);
+    options.onRequestState?.({
+      state: result.type === 'base64' ? 'decoded' : 'downloaded',
+      attempt: 0,
+      ...getImageSchedulerSnapshot(),
+      ...preparation,
+      downloadElapsedMs: Math.max(0, Date.now() - downloadStartedAt)
+    });
+    const billingEntry = reservation ? await billing.commit(reservation) : null;
+    bytes.billingAmountMinor = Math.abs(Number(billingEntry?.amountMinor) || 0);
+    return bytes;
+  } catch (error) {
+    if (reservation) await billing.release(reservation).catch(() => {});
+    throw error;
+  }
+}
+
+async function nextTaskFolder(config) {
+  const outputRoot = config.outputPath || defaultConfig().outputPath;
+  await fsp.mkdir(outputRoot, { recursive: true });
+  const today = new Date();
+  const prefix = `${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}-`;
+  const entries = await fsp.readdir(outputRoot, { withFileTypes: true }).catch(() => []);
+  let serial = entries
+    .filter(entry => entry.isDirectory() && entry.name.startsWith(prefix))
+    .map(entry => Number(entry.name.slice(prefix.length)) || 0)
+    .reduce((maximum, value) => Math.max(maximum, value), 0) + 1;
+  let folder = path.join(outputRoot, `${prefix}${String(serial).padStart(4, '0')}`);
+  while (true) {
+    try {
+      await fsp.mkdir(folder);
+      break;
+    } catch (error) {
+      if (error?.code !== 'EEXIST') throw error;
+      serial += 1;
+      folder = path.join(outputRoot, `${prefix}${String(serial).padStart(4, '0')}`);
+    }
+  }
+  return folder;
+}
+
+async function readJsonFile(file, fallback = null) {
+  try { return JSON.parse(await fsp.readFile(file, 'utf8')); } catch { return fallback; }
+}
+
+async function writeJsonFile(file, value) {
+  await fsp.mkdir(path.dirname(file), { recursive: true });
+  await fsp.writeFile(file, JSON.stringify(value, null, 2), 'utf8');
+}
+
+async function writeTaskSource(folder, task, generationMode) {
+  const templateRelativePaths = [...new Set((Array.isArray(task.templateRelativePaths)
+    ? task.templateRelativePaths
+    : task.templateRelativePath ? [task.templateRelativePath] : [])
+    .map(value => String(value || '').trim())
+    .filter(Boolean))];
+  const source = {
+    productPath: task.productPath || '',
+    printPath: task.printPath || '',
+    masterImagePath: task.masterImagePath || '',
+    masterReferencePath: task.masterReferencePath || '',
+    templateFolderPath: task.templateFolderPath || '',
+    templateRelativePaths,
+    generationMode: generationMode || task.generationMode || 'master',
+    taskNumber: Number(task.taskNumber || 0),
+    note: task.note || '',
+    createdAt: new Date().toISOString(),
+    status: 'å¾…äººå·¥ç­›å›¾'
+  };
+  const paths = metadataPaths(folder);
+  await Promise.all([
+    writeJsonFile(paths.macSource, toMacSourceMetadata(source, { status: 'å¾…äººå·¥ç­›å›¾', createdAt: source.createdAt })),
+    writeJsonFile(paths.wpfSource, toWpfSourceMetadata(source))
+  ]);
+}
+
+async function readOperationLogs(folder) {
+  const raw = await readJsonFile(metadataPaths(folder).operationLog, []);
+  return normalizeOperationLogs(raw);
+}
+
+async function addOperationLog(folder, message) {
+  const logs = appendOperationLog(await readOperationLogs(folder), { folderName: path.basename(folder), message });
+  await writeJsonFile(metadataPaths(folder).operationLog, toWpfOperationLogs(logs));
+  return logs;
+}
+
+function resolveInside(root, relativePath) {
+  const resolvedRoot = path.resolve(root);
+  const resolved = path.resolve(resolvedRoot, String(relativePath || ''));
+  if (!isSameOrChildPath(resolvedRoot, resolved)) throw new Error('æ¨¡æ¿ç›¸å¯¹è·¯å¾„æ— æ•ˆ');
+  return resolved;
+}
+
+const STRUCTURED_TEMPLATE_SECTIONS = Object.freeze({
+  main: new Set(['ä¸»å›¾', '1-1ä¸»å›¾', '1:1ä¸»å›¾', '1_1ä¸»å›¾', '1/1ä¸»å›¾']),
+  ratio: new Set(['3-4ä¸»å›¾', '3:4ä¸»å›¾', '3_4ä¸»å›¾', '3/4ä¸»å›¾']),
+  sku: new Set(['sku', 'SKU']),
+  detail: new Set(['è¯¦æƒ…é¡µ', 'è¯¦æƒ…'])
+});
+const DETAIL_FULL_FILE_NAMES = new Set(['detail-full', 'detail_full', 'å®Œæ•´è¯¦æƒ…é¡µ', 'è¯¦æƒ…é¡µ']);
+const DETAIL_FULL_SLICE_HEIGHT = Number(process.env.CAISHEN_DETAIL_FULL_SLICE_HEIGHT || 0);
+const DETAIL_FULL_SLICE_HEIGHT_MIN = 700;
+const DETAIL_FULL_SLICE_RATIO = 1.5;
+const DETAIL_FULL_SLICE_OVERLAP = Math.max(0, Number(process.env.CAISHEN_DETAIL_FULL_SLICE_OVERLAP || 0));
+const TEMPLATE_INTERNAL_DIRS = new Set(['.caishen-template-cache', '.caishen-meta']);
+
+function normalizeTemplateRelativePath(value) {
+  return String(value || '').replaceAll('\\', '/');
+}
+
+function templateSectionName(relativePath) {
+  const normalized = normalizeTemplateRelativePath(relativePath);
+  const [section = ''] = normalized.split('/');
+  return section || path.basename(path.dirname(relativePath));
+}
+
+function templateRelativePathParts(templateRoot, filePath) {
+  return normalizeTemplateRelativePath(path.relative(templateRoot, filePath)).split('/').filter(Boolean);
+}
+
+function isStructuredTemplateFolder(templateRoot, imagePaths) {
+  let hasMainOrRatio = false;
+  let hasDetail = false;
+  for (const file of imagePaths) {
+    const [section] = templateRelativePathParts(templateRoot, file);
+    if (STRUCTURED_TEMPLATE_SECTIONS.main.has(section) || STRUCTURED_TEMPLATE_SECTIONS.ratio.has(section)) hasMainOrRatio = true;
+    if (STRUCTURED_TEMPLATE_SECTIONS.detail.has(section)) hasDetail = true;
+    if (hasMainOrRatio && hasDetail) return true;
+  }
+  return false;
+}
+
+function detailFullRelativePath(relativePath) {
+  const parts = normalizeTemplateRelativePath(relativePath).split('/').filter(Boolean);
+  if (parts.length < 2 || !STRUCTURED_TEMPLATE_SECTIONS.detail.has(parts[0])) return false;
+  return DETAIL_FULL_FILE_NAMES.has(path.basename(parts.at(-1), path.extname(parts.at(-1))).toLocaleLowerCase('zh-CN'));
+}
+
+function detailSliceRelativePath(sectionName, index) {
+  return `${sectionName}/${String(index + 1).padStart(2, '0')}.jpg`;
+}
+
+function resolveDetailFullSliceHeight(width) {
+  const explicitHeight = DETAIL_FULL_SLICE_HEIGHT;
+  if (Number.isFinite(explicitHeight) && explicitHeight > 0) {
+    return Math.max(DETAIL_FULL_SLICE_HEIGHT_MIN, Math.floor(explicitHeight));
+  }
+  const safeWidth = Math.max(1, Math.floor(Number(width) || 790));
+  return Math.max(DETAIL_FULL_SLICE_HEIGHT_MIN, Math.round(safeWidth * DETAIL_FULL_SLICE_RATIO));
+}
+
+async function ensureDetailFullSliceSpecs(templateRoot, fullPath) {
+  const sourceRelativePath = normalizeTemplateRelativePath(path.relative(templateRoot, fullPath));
+  const detailSectionName = templateSectionName(sourceRelativePath);
+  const sourceStat = await fsp.stat(fullPath);
+  const metadata = await sharp(fullPath).metadata();
+  const width = Math.max(1, Number(metadata.width) || 1);
+  const height = Math.max(1, Number(metadata.height) || 1);
+  const sliceHeight = resolveDetailFullSliceHeight(width);
+  const sliceCount = Math.max(1, Math.ceil(height / sliceHeight));
+  const effectiveOverlap = Math.max(0, Math.min(Math.floor(DETAIL_FULL_SLICE_OVERLAP), Math.max(0, Math.floor(sliceHeight / 2) - 1)));
+  const cacheKey = crypto.createHash('sha1').update(sourceRelativePath).digest('hex').slice(0, 16);
+  const sliceRoot = path.join(templateRoot, '.caishen-meta', 'detail-full-slices', cacheKey);
+  const manifestFile = path.join(sliceRoot, 'manifest.json');
+  const manifest = {
+    sourceRelativePath,
+    size: sourceStat.size,
+    mtimeMs: Math.trunc(sourceStat.mtimeMs),
+    width,
+    height,
+    sliceHeight,
+    sliceOverlap: effectiveOverlap,
+    sliceCount
+  };
+  const existing = await readJsonFile(manifestFile, null);
+  const sliceFiles = Array.from({ length: sliceCount }, (_, index) => path.join(sliceRoot, `${String(index + 1).padStart(2, '0')}.jpg`));
+  const filesReady = await Promise.all(sliceFiles.map(file => fsp.stat(file).then(stat => stat.isFile(), () => false)));
+  const cacheValid = existing && JSON.stringify(existing) === JSON.stringify(manifest) && filesReady.every(Boolean);
+  if (!cacheValid) {
+    await fsp.rm(sliceRoot, { recursive: true, force: true });
+    await fsp.mkdir(sliceRoot, { recursive: true });
+    for (let index = 0; index < sliceCount; index += 1) {
+      const baseTop = index * sliceHeight;
+      const top = Math.max(0, index === 0 ? baseTop : baseTop - effectiveOverlap);
+      const nextBaseTop = Math.min(height, (index + 1) * sliceHeight);
+      const nextTop = index < sliceCount - 1 ? nextBaseTop + effectiveOverlap : nextBaseTop;
+      const currentSliceHeight = Math.max(1, Math.min(height, nextTop) - top);
+      await sharp(fullPath)
+        .extract({ left: 0, top, width, height: currentSliceHeight })
+        .jpeg({ quality: 95 })
+        .toFile(sliceFiles[index]);
+    }
+    await writeJsonFile(manifestFile, manifest);
+  }
+  const specs = sliceFiles.map((templatePath, index) => {
+    const isFirst = index === 0;
+    const isLast = index === sliceCount - 1;
+    const trimTopPx = isFirst ? 0 : effectiveOverlap;
+    const trimBottomPx = isLast ? 0 : effectiveOverlap;
+    return {
+      templatePath,
+      relativePath: detailSliceRelativePath(detailSectionName, index),
+      sourceRelativePath,
+      sectionName: detailSectionName,
+      trimPixels: {
+        top: trimTopPx,
+        bottom: trimBottomPx
+      }
+    };
+  });
+  for (let index = 0; index < specs.length; index += 1) {
+    specs[index].neighborImages = [
+      index > 0 ? { label: 'previous slice', relativePath: specs[index - 1].relativePath, templatePath: specs[index - 1].templatePath } : null,
+      index < specs.length - 1 ? { label: 'next slice', relativePath: specs[index + 1].relativePath, templatePath: specs[index + 1].templatePath } : null
+    ].filter(Boolean);
+  }
+  return specs;
+}
+
+async function buildStructuredTemplateJobSpecs(templateRoot, imagePaths) {
+  const mainSpecs = [];
+  const ratioSpecs = [];
+  const skuSpecs = [];
+  const detailSpecs = [];
+  const detailFullImages = [];
+  for (const templatePath of imagePaths) {
+    const relativePath = normalizeTemplateRelativePath(path.relative(templateRoot, templatePath));
+    const sectionName = templateSectionName(relativePath);
+    if (STRUCTURED_TEMPLATE_SECTIONS.main.has(sectionName)) {
+      mainSpecs.push({ templatePath, relativePath, sectionName });
+      continue;
+    }
+    if (STRUCTURED_TEMPLATE_SECTIONS.ratio.has(sectionName)) {
+      ratioSpecs.push({ templatePath, relativePath, sectionName });
+      continue;
+    }
+    if (STRUCTURED_TEMPLATE_SECTIONS.sku.has(sectionName)) {
+      skuSpecs.push({ templatePath, relativePath, sectionName });
+      continue;
+    }
+    if (STRUCTURED_TEMPLATE_SECTIONS.detail.has(sectionName)) {
+      if (detailFullRelativePath(relativePath)) detailFullImages.push(templatePath);
+      else detailSpecs.push({ templatePath, relativePath, sectionName });
+    }
+  }
+  detailFullImages.sort((left, right) => normalizeTemplateRelativePath(path.relative(templateRoot, left)).localeCompare(
+    normalizeTemplateRelativePath(path.relative(templateRoot, right)),
+    'zh-CN',
+    { numeric: true }
+  ));
+  for (const detailFullPath of detailFullImages) {
+    detailSpecs.push(...await ensureDetailFullSliceSpecs(templateRoot, detailFullPath));
+  }
+  return [...mainSpecs, ...ratioSpecs, ...skuSpecs, ...detailSpecs];
+}
+
+async function listTemplateImagePaths(templateRoot) {
+  const rootStat = await fsp.stat(templateRoot).catch(() => null);
+  if (!rootStat?.isDirectory()) throw new Error('å¥—å›¾æ–‡ä»¶å¤¹ä¸å­˜åœ¨');
+  const files = [];
+  async function walk(directory) {
+    const entries = await fsp.readdir(directory, { withFileTypes: true }).catch(() => []);
+    entries.sort((left, right) => left.name.localeCompare(right.name, 'zh-CN', { numeric: true }));
+    for (const entry of entries) {
+      if (entry.name.startsWith('.') || TEMPLATE_INTERNAL_DIRS.has(entry.name)) continue;
+      const fullPath = path.join(directory, entry.name);
+      if (entry.isDirectory()) await walk(fullPath);
+      else if (entry.isFile() && isImagePath(fullPath)) files.push(fullPath);
+    }
+  }
+  await walk(templateRoot);
+  return files;
+}
+
+async function buildTemplateJobs(templateRoot, outputRoot = templateRoot) {
+  const imagePaths = await listTemplateImagePaths(templateRoot);
+  const specs = isStructuredTemplateFolder(templateRoot, imagePaths)
+    ? await buildStructuredTemplateJobSpecs(templateRoot, imagePaths)
+    : imagePaths.map(templatePath => ({
+      templatePath,
+      relativePath: normalizeTemplateRelativePath(path.relative(templateRoot, templatePath)),
+      sectionName: templateSectionName(path.relative(templateRoot, templatePath))
+    }));
+  return specs.map(spec => {
+    const relativePath = normalizeTemplateRelativePath(spec.relativePath);
+    return {
+      templateRoot,
+      templatePath: spec.templatePath,
+      relativePath,
+      outputRoot,
+      outputPath: path.join(outputRoot, relativePath),
+      trimPixels: spec.trimPixels || null,
+      sourceRelativePath: spec.sourceRelativePath || relativePath,
+      neighborImages: spec.neighborImages || null,
+      sectionName: spec.sectionName || templateSectionName(relativePath)
+    };
+  });
+}
+
+async function detailSliceNeighborImages(job) {
+  if (Array.isArray(job.neighborImages)) return job.neighborImages;
+  if (!isDetailSliceTemplate(job, '')) return [];
+  const currentPath = path.resolve(job.templatePath);
+  const currentDirectory = path.dirname(currentPath);
+  const images = (await listTemplateImagePaths(job.templateRoot).catch(() => []))
+    .filter(file => path.dirname(path.resolve(file)) === currentDirectory);
+  const currentIndex = images.findIndex(file => path.resolve(file) === currentPath);
+  if (currentIndex < 0) return [];
+  const neighbors = [];
+  if (currentIndex > 0) {
+    const previous = images[currentIndex - 1];
+    neighbors.push({
+      label: 'previous slice',
+      relativePath: path.relative(job.templateRoot, previous),
+      templatePath: previous
+    });
+  }
+  if (currentIndex < images.length - 1) {
+    const next = images[currentIndex + 1];
+    neighbors.push({
+      label: 'next slice',
+      relativePath: path.relative(job.templateRoot, next),
+      templatePath: next
+    });
+  }
+  return neighbors;
+}
+
+function printableSurfaceArea(polygon = []) {
+  let sum = 0;
+  for (let index = 0; index < polygon.length; index += 1) {
+    const current = polygon[index];
+    const next = polygon[(index + 1) % polygon.length];
+    sum += Number(current?.[0] || 0) * Number(next?.[1] || 0) - Number(next?.[0] || 0) * Number(current?.[1] || 0);
+  }
+  return Math.abs(sum) / 2;
+}
+
+async function createTemplateEditMask(job, analysis) {
+  const summary = parseTemplateAnalysisSummary(analysis);
+  if (resolveGenerationAction(analysis) !== 'replace_print') return '';
+  const surfaces = Array.isArray(summary.printableSurfaces) ? summary.printableSurfaces : [];
+  const polygons = surfaces
+    .map(surface => Array.isArray(surface?.polygon) ? surface.polygon : [])
+    .filter(polygon => polygon.length >= 3 && printableSurfaceArea(polygon) >= 0.003 && printableSurfaceArea(polygon) <= 0.72);
+  if (!polygons.length) return '';
+
+  const metadata = await sharp(job.templatePath, { failOn: 'none' }).rotate().metadata();
+  const width = Math.max(1, Number(metadata.width) || 1);
+  const height = Math.max(1, Number(metadata.height) || 1);
+  const points = polygons.map(polygon => polygon
+    .map(([x, y]) => `${Math.round(Math.min(1, Math.max(0, Number(x))) * width)},${Math.round(Math.min(1, Math.max(0, Number(y))) * height)}`)
+    .join(' '));
+  const cache = templateCachePaths(job.templateRoot, job.relativePath);
+  const fingerprint = crypto.createHash('sha1').update(JSON.stringify({ version: 1, width, height, points })).digest('hex').slice(0, 12);
+  const maskPath = path.join(cache.cacheFolder, `${path.basename(cache.analysisFile, '.json')}-${fingerprint}.mask.png`);
+  if (fs.existsSync(maskPath)) return maskPath;
+  await fsp.mkdir(path.dirname(maskPath), { recursive: true });
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#ffffff"/><g fill="#000000" fill-opacity="0">${points.map(value => `<polygon points="${value}"/>`).join('')}</g></svg>`;
+  await sharp(Buffer.from(svg)).png().toFile(maskPath);
+  return maskPath;
+}
+
+async function templateAnalysisForJob(job) {
+  const cache = templateCachePaths(job.templateRoot, job.relativePath);
+  const analysis = await readValidTemplateAnalysisCache({ cacheFile: cache.analysisFile, templateImagePath: job.templatePath });
+  const value = analysis || JSON.stringify(createFallbackTemplateAnalysis());
+  return { cache, analysis: value, summary: parseTemplateAnalysisSummary(value), cached: Boolean(analysis) };
+}
+
+function templateRelativeKey(value) {
+  return String(value || '').replaceAll('\\', '/').toLocaleLowerCase('zh-CN');
+}
+
+async function planTemplateOutputJobs(templateFolderPath, selectedPaths = null) {
+  const jobs = await buildTemplateJobs(templateFolderPath);
+  if (!jobs.length) throw new Error('å¥—å›¾æ–‡ä»¶å¤¹é‡Œæ²¡æœ‰å¯ç”¨å›¾ç‰‡');
+  const selected = new Set((Array.isArray(selectedPaths) ? selectedPaths : [])
+    .map(templateRelativeKey)
+    .filter(Boolean));
+  const planned = [];
+  const excluded = [];
+  const unresolved = [];
+  let matchedSelection = selected.size === 0;
+
+  for (const job of jobs) {
+    const details = await templateAnalysisForJob(job);
+    const action = normalizeTemplateProcessingMode(details.summary.action);
+    const relativeKey = templateRelativeKey(job.relativePath);
+    if (selected.has(relativeKey)) matchedSelection = true;
+    const enriched = { ...job, ...details, action };
+    if (action === 'manual_check') {
+      if (selected.size && !selected.has(relativeKey)) continue;
+      unresolved.push(job.relativePath);
+      continue;
+    }
+    if (action === 'exclude') {
+      excluded.push(enriched);
+      continue;
+    }
+    if (action === 'copy_original') {
+      planned.push(enriched);
+      continue;
+    }
+    if (selected.size && !selected.has(relativeKey)) continue;
+    planned.push(enriched);
+  }
+
+  if (unresolved.length) {
+    throw new Error(`ä»æœ‰å›¾ç‰‡éœ€è¦äººå·¥ç¡®è®¤ï¼š${unresolved.join('ã€')}`);
+  }
+  if (!matchedSelection) throw new Error('é€‰ä¸­çš„å¥—å›¾å›¾ç‰‡ä¸å­˜åœ¨æˆ–å·²è¢«ç§»é™¤');
+  if (!planned.length) throw new Error('æ²¡æœ‰å¯è¾“å‡ºçš„å¥—å›¾å›¾ç‰‡');
+  return {
+    jobs: planned,
+    relativePaths: planned.map(job => job.relativePath),
+    excludedRelativePaths: excluded.map(job => job.relativePath),
+    counts: {
+      replacePrint: planned.filter(job => job.action === 'replace_print').length,
+      copyOriginal: planned.filter(job => job.action === 'copy_original').length,
+      excluded: excluded.length,
+      manualCheck: unresolved.length
+    }
+  };
+}
+
+function templateAnalysisStatusFile(job) {
+  return `${templateCachePaths(job.templateRoot, job.relativePath).analysisFile}.status.json`;
+}
+
+async function writeTemplateAnalysisStatus(job, value) {
+  return writeJsonFile(templateAnalysisStatusFile(job), {
+    relativePath: job.relativePath,
+    updatedAt: new Date().toISOString(),
+    ...value
+  });
+}
+
+async function collectTemplateItems(templateRoot) {
+  const jobs = await buildTemplateJobs(templateRoot);
+  const items = [];
+  for (const job of jobs) {
+    const { cache, summary, cached } = await templateAnalysisForJob(job);
+    const stat = await fsp.stat(job.templatePath).catch(() => null);
+    const version = stat ? `${Math.trunc(stat.mtimeMs)}-${stat.size}` : '1';
+    const recordedStatus = await readJsonFile(templateAnalysisStatusFile(job), {});
+    const analysisStatus = cached
+      ? 'success'
+      : recordedStatus.status === 'failed' || recordedStatus.status === 'running'
+        ? recordedStatus.status
+        : 'idle';
+    const displayFolder = path.dirname(normalizeTemplateRelativePath(job.relativePath));
+    items.push({
+      relativePath: job.relativePath,
+      templatePath: job.templatePath,
+      path: job.templatePath,
+      name: path.basename(job.relativePath),
+      folder: displayFolder && displayFolder !== '.' ? displayFolder : 'æ ¹ç›®å½•',
+      templateUrl: `${imageUrl(job.templatePath)}?v=${version}`,
+      url: `${imageUrl(job.templatePath)}?v=${version}`,
+      thumbnailUrl: thumbnailUrl(job.templatePath, 480, version),
+      previewUrl: thumbnailUrl(job.templatePath, 1200, version),
+      action: summary.action,
+      confidence: summary.confidence,
+      reason: summary.reason,
+      replaceArea: summary.replaceArea,
+      forbiddenArea: summary.forbiddenArea,
+      regions: summary.regions,
+      analysisPending: !cached,
+      analysisStatus,
+      analysisError: analysisStatus === 'failed' ? String(recordedStatus.error || 'AI åˆ†æå¤±è´¥') : '',
+      analysisAttempts: Number(recordedStatus.attempts || 0)
+    });
+  }
+  return { jobs, items };
+}
+
+async function listTemplates(templateRoot) {
+  const { items } = await collectTemplateItems(templateRoot);
+  return items;
+}
+
+async function templateFolderImageSummary(root) {
+  let count = 0;
+  let previewFile = '';
+  async function walk(directory, depth) {
+    if (depth > 24) return;
+    let entries = [];
+    try { entries = await fsp.readdir(directory, { withFileTypes: true }); } catch { return; }
+    entries.sort((left, right) => left.name.localeCompare(right.name, 'zh-CN', { numeric: true }));
+    for (const entry of entries) {
+      if (entry.name.startsWith('.')) continue;
+      const file = path.join(directory, entry.name);
+      if (entry.isDirectory()) await walk(file, depth + 1);
+      else if (entry.isFile() && isImagePath(file)) {
+        count += 1;
+        if (!previewFile) previewFile = file;
+      }
+    }
+  }
+  await walk(root, 0);
+  if (!previewFile) return { count, preview: null };
+  const stat = await fsp.stat(previewFile).catch(() => null);
+  const version = stat ? `${Math.trunc(stat.mtimeMs)}-${stat.size}` : '1';
+  return {
+    count,
+    preview: {
+      name: path.basename(previewFile),
+      thumbnailUrl: thumbnailUrl(previewFile, 480, version),
+      previewUrl: thumbnailUrl(previewFile, 1200, version),
+      url: `${imageUrl(previewFile)}?v=${version}`
+    }
+  };
+}
+
+async function templateFolderJobSummary(root) {
+  const jobs = await buildTemplateJobs(root);
+  const previewJob = jobs[0] || null;
+  if (!previewJob) return { count: 0, preview: null };
+  const stat = await fsp.stat(previewJob.templatePath).catch(() => null);
+  const version = stat ? `${Math.trunc(stat.mtimeMs)}-${stat.size}` : '1';
+  return {
+    count: jobs.length,
+    preview: {
+      name: path.basename(previewJob.templatePath),
+      thumbnailUrl: thumbnailUrl(previewJob.templatePath, 480, version),
+      previewUrl: thumbnailUrl(previewJob.templatePath, 1200, version),
+      url: `${imageUrl(previewJob.templatePath)}?v=${version}`
+    }
+  };
+}
+
+async function prepareTemplateStructure(folderValue) {
+  const folder = String(folderValue || '');
+  if (!folder || !fs.existsSync(folder)) throw new Error('Template folder does not exist');
+  await buildTemplateJobs(folder);
+  return listTemplates(folder);
+}
+
+async function listTemplateFolders() {
+  const libraryRoot = path.join(currentWorkspaceRoot(), 'assets', 'template');
+  let collections = [];
+  try { collections = await fsp.readdir(libraryRoot, { withFileTypes: true }); } catch { return []; }
+  const folders = [];
+  for (const collection of collections) {
+    if (!collection.isDirectory() || collection.name.startsWith('.')) continue;
+    const collectionRoot = path.join(libraryRoot, collection.name);
+    let children = [];
+    try { children = await fsp.readdir(collectionRoot, { withFileTypes: true }); } catch { continue; }
+    for (const child of children) {
+      if (!child.isDirectory() || child.name.startsWith('.')) continue;
+      const folder = path.join(collectionRoot, child.name);
+      const [summary, stat] = await Promise.all([
+        templateFolderJobSummary(folder).catch(() => templateFolderImageSummary(folder)),
+        fsp.stat(folder).catch(() => null)
+      ]);
+      folders.push({
+        id: `${collection.name}/${child.name}`,
+        name: child.name,
+        path: folder,
+        count: summary.count,
+        preview: summary.preview,
+        modifiedAt: stat?.mtimeMs || 0
+      });
+    }
+  }
+  return folders.sort((left, right) => left.name.localeCompare(right.name, 'zh-CN', { numeric: true }) || right.modifiedAt - left.modifiedAt);
+}
+
+async function deleteTemplateFolder(folderValue) {
+  const libraryRoot = path.resolve(currentWorkspaceRoot(), 'assets', 'template');
+  const folder = path.resolve(String(folderValue || ''));
+  const relative = path.relative(libraryRoot, folder);
+  const segments = relative.split(path.sep).filter(Boolean);
+  if (!relative || !isSameOrChildPath(libraryRoot, folder) || segments.length !== 2) {
+    throw new Error('åªèƒ½åˆ é™¤å·²å¯¼å…¥çš„å¥—å›¾æ–‡ä»¶å¤¹');
+  }
+  const stat = await fsp.lstat(folder).catch(() => null);
+  if (!stat?.isDirectory()) throw new Error('å¥—å›¾æ–‡ä»¶å¤¹ä¸å­˜åœ¨æˆ–å·²è¢«åˆ é™¤');
+  const summary = await templateFolderImageSummary(folder);
+  await fsp.rm(folder, { recursive: true, force: true });
+  const collectionRoot = path.dirname(folder);
+  if (!(await fsp.readdir(collectionRoot).catch(() => [])).length) await fsp.rmdir(collectionRoot).catch(() => {});
+  return { path: folder, deleted: true, count: summary.count };
+}
+
+function summarizeTemplatePreparation(folder, items, extra = {}) {
+  const previewItem = items.find(item => item.action === 'replace_print') || items[0] || null;
+  const counts = {
+    replacePrint: items.filter(item => item.action === 'replace_print').length,
+    copyOriginal: items.filter(item => item.action === 'copy_original').length,
+    exclude: items.filter(item => item.action === 'exclude').length,
+    manualCheck: items.filter(item => item.action === 'manual_check').length
+  };
+  counts.copyTemplate = counts.copyOriginal;
+  counts.skipCopy = counts.exclude;
+  const pending = items.filter(item => item.analysisPending).length;
+  return {
+    folder,
+    total: items.length,
+    cached: items.length - pending,
+    pending,
+    ready: items.length > 0 && pending === 0,
+    generationReady: items.length > 0 && pending === 0 && counts.manualCheck === 0,
+    counts,
+    preview: previewItem ? {
+      name: previewItem.name,
+      relativePath: previewItem.relativePath,
+      thumbnailUrl: previewItem.thumbnailUrl,
+      previewUrl: previewItem.previewUrl,
+      url: previewItem.url
+    } : null,
+    ...extra
+  };
+}
+
+async function getTemplatePreparation(folderValue) {
+  const folder = String(folderValue || '');
+  const { items } = await collectTemplateItems(folder);
+  return summarizeTemplatePreparation(folder, items);
+}
+
+async function waitForTemplateWarmup(folder, timeoutMs = 10 * 60 * 1000) {
+  const deadline = Date.now() + timeoutMs;
+  while (warmingTemplateFolders.has(folder) && Date.now() < deadline) await randomDelay(400, 400);
+  if (warmingTemplateFolders.has(folder)) throw new Error('å¥—å›¾è‡ªåŠ¨è¯†åˆ«ä»åœ¨æ‰§è¡Œï¼Œè¯·ç¨åé‡è¯•ã€‚');
+}
+
+async function prepareTemplateFolder(folderValue) {
+  const folder = String(folderValue || '');
+  if (!folder || !fs.existsSync(folder)) throw new Error('å¥—å›¾æ–‡ä»¶å¤¹ä¸å­˜åœ¨');
+  await waitForTemplateWarmup(folder);
+  const { jobs } = await collectTemplateItems(folder);
+  if (!jobs.length) return summarizeTemplatePreparation(folder, [], { analyzed: 0, reused: 0, failed: 0 });
+  const missing = [];
+  for (const job of jobs) {
+    if (!(await templateAnalysisForJob(job)).cached) missing.push(job);
+  }
+  const results = missing.length
+    ? await runWithConcurrency(missing, await activeApiConcurrencyLimit(missing.length), job => analyzeTemplateJobWithRetry(job))
+    : [];
+  const failed = results.filter(result => !result.ok || !result.value?.ok);
+  const { items } = await collectTemplateItems(folder);
+  return summarizeTemplatePreparation(folder, items, {
+    analyzed: results.length - failed.length,
+    reused: jobs.length - missing.length,
+    failed: failed.length,
+    failures: failed.slice(0, 10).map(result => result.value?.error || result.error?.message || String(result.error || 'è¯†åˆ«å¤±è´¥'))
+  });
+}
+
+async function saveTemplateConfiguration(payload) {
+  const folder = String(payload?.folder || '');
+  const jobs = await buildTemplateJobs(folder);
+  const byRelative = new Map(jobs.map(job => [job.relativePath.replaceAll('\\', '/').toLocaleLowerCase('zh-CN'), job]));
+  const pack = await activeModelPackage();
+  for (const item of payload?.items || []) {
+    const key = String(item.relativePath || '').replaceAll('\\', '/').toLocaleLowerCase('zh-CN');
+    const job = byRelative.get(key);
+    if (!job) throw new Error(`æ¨¡æ¿ä¸å­˜åœ¨ï¼š${item.relativePath}`);
+    const analysis = createManualTemplateAnalysis({
+      action: item.action,
+      reason: item.reason,
+      replaceArea: item.replaceArea,
+      forbiddenArea: item.forbiddenArea
+    });
+    const cache = templateCachePaths(folder, job.relativePath);
+    const reservation = packageIsFlagship(pack) ? null : await billing.reserve(currentWorkspaceId(), 'llm', {
+      ...packageBillingRange(pack, 'analysis'),
+      description: 'AI åˆ†æç»“æœäººå·¥é‡è®¾',
+      reference: job.relativePath,
+      onceKey: billingOnceKey('llm:manual-template-analysis', folder, job.relativePath, Date.now(), crypto.randomUUID())
+    });
+    try {
+    await writeTemplateAnalysisCache({
+      cacheFile: cache.analysisFile,
+      templateRoot: folder,
+      templateImagePath: job.templatePath,
+      relativeTemplatePath: job.relativePath,
+      analysis: JSON.stringify(analysis),
+      manualOverride: true
+    });
+    await writeTemplateAnalysisStatus(job, { status: 'success', source: 'manual', attempts: 0, error: '' });
+      if (reservation) await billing.commit(reservation);
+    } catch (error) {
+      if (reservation) await billing.release(reservation).catch(() => {});
+      throw error;
+    }
+  }
+  return listTemplates(folder);
+}
+
+async function analyzeTemplateJob(job, options = {}) {
+  const api = await activeApiConfig('analysis');
+  const prompt = await getPromptValue('templateAnalysis');
+  const messageContent = [{ type: 'text', text: prompt }];
+  if (options.referenceJob) {
+    messageContent.push({
+      type: 'text',
+      text: [
+        'Reference analysis guidance:',
+        `Reference relative path: ${options.referenceJob.relativePath}`,
+        `Reference analysis JSON: ${String(options.referenceAnalysis || '').slice(0, 12000)}`,
+        'Use the reference only to understand how a similar ecommerce cabinet image was interpreted.',
+        'Do not copy reference coordinates, panel count, door count, proportions, or replace areas.',
+        'Analyze the target image independently and only decide whether it should use the master product generation flow.'
+      ].join('\n')
+    });
+    messageContent.push({ type: 'image_url', image_url: { url: options.referenceImageDataUrl || await imageAsAnalysisDataUrl(options.referenceJob.templatePath) } });
+    messageContent.push({ type: 'text', text: `Target image to analyze independently: ${job.relativePath}` });
+  }
+  const neighborImages = options.neighborImages || await detailSliceNeighborImages(job);
+  if (neighborImages.length) {
+    messageContent.push({
+      type: 'text',
+      text: [
+        'Detail page slice context:',
+        `Current target slice: ${job.relativePath}`,
+        'The following neighbor slices are context only. They help identify cabinets, drawer fronts, door fronts or product surfaces that may be cut by the current image edge.',
+        'Do not copy their text, layout, crop, product geometry, scene elements or off-canvas content into the target analysis.',
+        'Analyze and output JSON only for the current target slice.'
+      ].join('\n')
+    });
+    for (const neighbor of neighborImages) {
+      messageContent.push({ type: 'text', text: `${neighbor.label}: ${neighbor.relativePath}` });
+      messageContent.push({
+        type: 'image_url',
+        image_url: { url: neighbor.imageDataUrl || await imageAsAnalysisDataUrl(neighbor.templatePath) }
+      });
+    }
+    messageContent.push({
+      type: 'text',
+      text: [
+        `Target current slice: ${job.relativePath}`,
+        'Neighbor slices are context only. Judge cropped drawer fronts, half cabinet doors and partial exterior cabinet surfaces in this current image as valid replace_print targets when visible.'
+      ].join('\n')
+    });
+  }
+  if (options.forceReplacePrint) {
+    messageContent.push({
+      type: 'text',
+      text: [
+        'Force replace print guidance:',
+        'Treat visible cabinet exterior surfaces as replace_print targets when they are drawer fronts, cabinet doors, side exterior panels, or cropped exterior product panels.',
+        'For open drawers or storage-detail images, replace only visible drawer exterior/front panels and cabinet exterior surfaces.',
+        'Preserve drawer interiors, stored items, rails, handles, seams, text, background, wall, floor, props, people, packaging, and all non-printable internal structure.',
+        'If a cabinet exterior panel is visible even partially, output processingMode/action replace_print and describe the visible exterior printable area.'
+      ].join('\n')
+    });
+  }
+  messageContent.push({ type: 'image_url', image_url: { url: options.imageDataUrl || await imageAsAnalysisDataUrl(job.templatePath) } });
+  const body = await analysisApiJson(api, {
+    model: resolveAnalysisModel(api),
+    messages: [{
+      role: 'user',
+      content: messageContent
+    }],
+    max_tokens: 6000
+  }, (api.requestTimeoutSeconds || 300) * 1000, {
+    description: 'å¥—å›¾æ¨¡æ¿ AI åˆ†æ',
+    reference: job.relativePath,
+    onceKey: billingOnceKey('llm:template-analysis', job.templateRoot, job.relativePath)
+  });
+  const choice = body?.choices?.[0] || {};
+  const content = choice?.message?.content ?? choice?.delta?.content ?? choice?.text ?? body?.output_text ?? body?.content;
+  const analysisText = analysisContentToString(content);
+  if (!analysisText) {
+    const fallbackCache = templateCachePaths(job.templateRoot, job.relativePath);
+    const visualFallback = await createVisualFallbackTemplateAnalysis(job, 'AI returned no readable template analysis; local visual panel detection was used.');
+    const fallback = visualFallback || createManualTemplateAnalysis({
+      action: 'manual_check',
+      reason: 'AI æ¥å£å·²è¿”å›ä½†æ²¡æœ‰å¯è¯»å–çš„åˆ†ææ–‡æœ¬ï¼Œè¯·äººå·¥ç¡®è®¤ã€‚',
+      replaceArea: 'ä¸ç¡®å®š',
+      forbiddenArea: 'èƒŒæ™¯ã€æ–‡å­—ã€å¢™é¢ã€åœ°é¢ã€æŸœè„šã€æŠŠæ‰‹ã€æŠ½å±‰å†…ä¾§ã€æŸœé—¨å†…ä¾§ã€åŒ…è£…ã€ç•™ç™½ç­‰éå¯å°èŠ±é¢æ¿åŒºåŸŸ',
+      regions: []
+    });
+    await writeTemplateAnalysisCache({
+      cacheFile: fallbackCache.analysisFile,
+      templateRoot: job.templateRoot,
+      templateImagePath: job.templatePath,
+      relativeTemplatePath: job.relativePath,
+      analysis: JSON.stringify(fallback),
+      manualOverride: false
+    });
+    return parseTemplateAnalysisSummary(fallback);
+  }
+  const cache = templateCachePaths(job.templateRoot, job.relativePath);
+  let validated = validateTemplateAnalysis(analysisText, { source: 'ai' });
+  if (validated.action === 'manual_check' || validated.action === 'copy_original') {
+    const visualFallback = await createVisualFallbackTemplateAnalysis(
+      job,
+      validated.action === 'copy_original'
+        ? 'AI marked this template as copy_original, but local visual panel detection found executable light cabinet panels.'
+        : 'AI marked this template for manual check; local visual panel detection found executable light cabinet panels.'
+    );
+    if (visualFallback) validated = visualFallback;
+  }
+  const normalizedAnalysis = JSON.stringify(validated);
+  await writeTemplateAnalysisCache({
+    cacheFile: cache.analysisFile,
+    templateRoot: job.templateRoot,
+    templateImagePath: job.templatePath,
+    relativeTemplatePath: job.relativePath,
+    analysis: normalizedAnalysis,
+    manualOverride: false
+  });
+  return parseTemplateAnalysisSummary(normalizedAnalysis);
+}
+
+async function analyzeTemplateJobWithRetry(job, retries = 3, onProgress = async () => {}, analyzeOptions = {}) {
+  const maximumAttempts = Math.max(1, Number(retries) + 1);
+  let lastError;
+  let attemptsUsed = 0;
+  await writeTemplateAnalysisStatus(job, { status: 'running', attempts: 0, error: '' });
+  let imageDataUrl;
+  try { imageDataUrl = await imageAsAnalysisDataUrl(job.templatePath); }
+  catch (error) {
+    const message = `å›¾ç‰‡é¢„å¤„ç†å¤±è´¥ï¼š${error?.message || error}`;
+    await writeTemplateAnalysisStatus(job, { status: 'failed', source: 'ai', attempts: 0, error: message });
+    return { ok: false, relativePath: job.relativePath, attempts: 0, error: message };
+  }
+  for (let attempt = 1; attempt <= maximumAttempts; attempt += 1) {
+    attemptsUsed = attempt;
+    await onProgress({ phase: 'analyzing', relativePath: job.relativePath, attempt, maximumAttempts });
+    try {
+      const summary = await analyzeTemplateJob(job, { ...analyzeOptions, imageDataUrl });
+      await writeTemplateAnalysisStatus(job, { status: 'success', source: 'ai', attempts: attempt, error: '' });
+      return { ok: true, relativePath: job.relativePath, attempts: attempt, summary };
+    } catch (error) {
+      lastError = error;
+      // Retryable transport/API errors have already been retried by the shared analysis queue.
+      // Retrying the whole job again would create a second burst after the queue gives up.
+      if (error instanceof RetryableRequestError || error?.retryable === true) break;
+      if (attempt < maximumAttempts) {
+        await onProgress({ phase: 'retrying', relativePath: job.relativePath, attempt, maximumAttempts, error: error?.message || String(error) });
+        await randomDelay(ANALYSIS_RETRY_BASE_MS * attempt, ANALYSIS_RETRY_BASE_MS * 2 * attempt);
+      }
+    }
+  }
+  const message = lastError?.message || String(lastError || 'AI åˆ†æå¤±è´¥');
+  await writeTemplateAnalysisStatus(job, { status: 'failed', source: 'ai', attempts: attemptsUsed, error: message });
+  return { ok: false, relativePath: job.relativePath, attempts: attemptsUsed, error: message };
+}
+
+async function analyzeTemplateItemWithReference(payload = {}, options = {}) {
+  const folder = String(payload.folder || '');
+  if (!folder || !fs.existsSync(folder)) throw new Error('å¥—å›¾æ–‡ä»¶å¤¹ä¸å­˜åœ¨ã€‚');
+  const relativePath = String(payload.relativePath || '');
+  const referenceRelativePath = String(payload.referenceRelativePath || '');
+  const forceReplacePrint = payload.forceReplacePrint === true;
+  if (!relativePath || (!referenceRelativePath && !forceReplacePrint)) throw new Error('ç¼ºå°‘ç›®æ ‡å›¾æˆ–å‚è€ƒå›¾ã€‚');
+  const byKey = new Map((await buildTemplateJobs(folder)).map(job => [templateRelativeKey(job.relativePath), job]));
+  const job = byKey.get(templateRelativeKey(relativePath));
+  const referenceJob = referenceRelativePath ? byKey.get(templateRelativeKey(referenceRelativePath)) : null;
+  if (!job) throw new Error('æ²¡æœ‰æ‰¾åˆ°ç›®æ ‡å¥—å›¾å›¾ç‰‡ã€‚');
+  if (referenceRelativePath && !referenceJob) throw new Error('æ²¡æœ‰æ‰¾åˆ°å‚è€ƒå¥—å›¾å›¾ç‰‡ã€‚');
+  const referenceDetails = referenceJob ? await templateAnalysisForJob(referenceJob) : null;
+  const report = typeof options.reportProgress === 'function' ? options.reportProgress : async () => {};
+  await report({ phase: 'queued', current: 0, total: 1, failed: 0, concurrency: 1, message: 'å‚è€ƒé‡æå·²æ’é˜Ÿ' });
+  const result = await analyzeTemplateJobWithRetry(job, 3, async progress => {
+    await report({ ...progress, current: 0, total: 1, failed: 0, concurrency: 1, referenceRelativePath: referenceJob?.relativePath || '' });
+  }, {
+    referenceJob,
+    referenceAnalysis: referenceDetails?.analysis || '',
+    referenceImageDataUrl: referenceJob ? await imageAsAnalysisDataUrl(referenceJob.templatePath) : '',
+    forceReplacePrint
+  });
+  await report({
+    phase: 'completed',
+    current: 1,
+    total: 1,
+    failed: result.ok ? 0 : 1,
+    concurrency: 1,
+    completedRelativePath: job.relativePath,
+    completedStatus: result.ok ? 'success' : 'failed',
+    referenceRelativePath: referenceJob?.relativePath || '',
+    message: result.ok ? 'å‚è€ƒé‡æå·²å®Œæˆ' : `å‚è€ƒé‡æå¤±è´¥ï¼š${result.error}`
+  });
+  return {
+    total: 1,
+    completed: 1,
+    failed: result.ok ? 0 : 1,
+    referenceRelativePath: referenceJob?.relativePath || '',
+    failures: result.ok ? [] : [{ relativePath: result.relativePath, error: result.error, attempts: result.attempts }],
+    items: await listTemplates(folder)
+  };
+}
+
+async function analyzeTemplateItems(payload = {}, options = {}) {
+  const folder = String(payload.folder || '');
+  if (!folder || !fs.existsSync(folder)) throw new Error('å¥—å›¾æ–‡ä»¶å¤¹ä¸å­˜åœ¨');
+  const requested = new Set((payload.relativePaths || []).map(value => String(value).replaceAll('\\', '/').toLocaleLowerCase('zh-CN')));
+  if (!requested.size) throw new Error('è¯·å…ˆé€‰æ‹©éœ€è¦ AI åˆ†æçš„å›¾ç‰‡');
+  const jobs = (await buildTemplateJobs(folder)).filter(job => requested.has(job.relativePath.replaceAll('\\', '/').toLocaleLowerCase('zh-CN')));
+  if (!jobs.length) throw new Error('æ²¡æœ‰æ‰¾åˆ°éœ€è¦åˆ†æçš„å¥—å›¾å›¾ç‰‡');
+  const concurrency = await activeApiConcurrencyLimit(jobs.length);
+  let completed = 0;
+  let failed = 0;
+  const report = typeof options.reportProgress === 'function' ? options.reportProgress : async () => {};
+  await report({ phase: 'queued', current: 0, total: jobs.length, failed: 0, concurrency, message: `å·²æ’é˜Ÿ ${jobs.length} å¼ ï¼Œå¹¶å‘ ${concurrency}` });
+  const analyzeJob = job => analyzeTemplateJobWithRetry(job, 3, async progress => {
+    await report({ ...progress, current: completed, total: jobs.length, failed, concurrency, message: progress.phase === 'retrying' ? `åˆ†æå¤±è´¥ï¼Œæ­£åœ¨è‡ªåŠ¨é‡è¯•ï¼š${job.relativePath}` : `æ­£åœ¨åˆ†æï¼š${job.relativePath}` });
+  }).then(async result => {
+    completed += 1;
+    if (!result.ok) failed += 1;
+    await report({
+      phase: completed === jobs.length ? 'completed' : 'analyzing',
+      current: completed,
+      total: jobs.length,
+      failed,
+      concurrency,
+      completedRelativePath: job.relativePath,
+      completedStatus: result.ok ? 'success' : 'failed',
+      message: result.ok ? `å·²å®Œæˆ ${completed}/${jobs.length}` : `åˆ†æå¤±è´¥ï¼š${job.relativePath}`
+    });
+    return result;
+  });
+  const results = await runWithConcurrency(jobs, concurrency, analyzeJob);
+  const values = results.map(result => result.value).filter(Boolean);
+  return {
+    total: jobs.length,
+    completed,
+    failed,
+    concurrency,
+    failures: values.filter(result => !result.ok).map(result => ({ relativePath: result.relativePath, error: result.error, attempts: result.attempts })),
+    items: await listTemplates(folder)
+  };
+}
+
+async function analyzeTemplateFolder(folder) {
+  if (warmingTemplateFolders.has(folder)) throw new Error('å½“å‰å¥—å›¾æ­£åœ¨åå°åˆ†æï¼Œè¯·ç¨åé‡æ–°æ‰“å¼€é…ç½®çª—å£ã€‚');
+  const jobs = await buildTemplateJobs(folder);
+  const results = await runWithConcurrency(jobs, await activeApiConcurrencyLimit(jobs.length), job => analyzeTemplateJobWithRetry(job));
+  const failed = results.filter(result => !result.ok || !result.value?.ok);
+  if (failed.length === jobs.length && jobs.length) throw new Error(failed[0].value?.error || failed[0].error?.message || 'AI åˆ†æå¤±è´¥');
+  return listTemplates(folder);
+}
+
+async function ensureTemplateAnalysisForJob(job) {
+  const current = await templateAnalysisForJob(job);
+  if (current.cached) return current;
+  const result = await analyzeTemplateJobWithRetry(job);
+  if (!result.ok) throw new Error(result.error || 'AI åˆ†æå¤±è´¥');
+  return templateAnalysisForJob(job);
+}
+
+function startTemplateAnalysisWarmup(folder, knownJobs = null) {
+  if (!folder || warmingTemplateFolders.has(folder)) return;
+  warmingTemplateFolders.add(folder);
+  void (async () => {
+    const jobs = knownJobs || await buildTemplateJobs(folder);
+    const missing = [];
+    for (const job of jobs) {
+      if (!(await templateAnalysisForJob(job)).cached) missing.push(job);
+    }
+    if (missing.length) await runWithConcurrency(missing, await activeApiConcurrencyLimit(missing.length), job => analyzeTemplateJobWithRetry(job));
+  })().catch(() => {}).finally(() => warmingTemplateFolders.delete(folder));
+}
+
+async function analyzeProductProfile(productPath) {
+  if (!productPath || !fs.existsSync(productPath)) return normalizeProductProfile({});
+  const api = await activeApiConfig('analysis');
+  const response = await analysisApiJson(api, buildProductProfileAnalysisRequest({
+    model: resolveAnalysisModel(api),
+    imageDataUrl: await imageAsDataUrl(productPath),
+    prompt: await getPromptValue('productProfileAnalysis')
+  }), (api.requestTimeoutSeconds || 300) * 1000, {
+    description: 'å•†å“å›¾ç‰‡ç†è§£',
+    reference: path.basename(productPath),
+    onceKey: billingOnceKey('llm:product-profile', productPath)
+  });
+  return parseProductProfileChatResponse(response);
+}
+
+async function ensureTemplateProductProfile(templateFolderPath, productPath = '') {
+  const file = getTemplateProductProfileFile(templateFolderPath);
+  let profile = await readProductProfileFile(file);
+  if (!profile) {
+    profile = normalizeProductProfile({});
+    await writeProductProfileFile(file, profile);
+  }
+  if (!profile.dimensions && productPath && fs.existsSync(productPath)) {
+    try {
+      const detected = await analyzeProductProfile(productPath);
+      if (detected.dimensions) {
+        profile.dimensions = detected.dimensions;
+        await writeProductProfileFile(file, profile);
+      }
+    } catch {}
+  }
+  return profile;
+}
+
+async function ensureTaskProductProfile(outputRoot, source) {
+  const file = getTaskProductProfileFile(outputRoot);
+  const profileStat = await fsp.stat(file).catch(() => null);
+  const productStat = source.productPath ? await fsp.stat(source.productPath).catch(() => null) : null;
+  if (!shouldRefreshTaskProductProfile({
+    profileExists: Boolean(profileStat),
+    productExists: Boolean(productStat),
+    profileLastWriteMs: profileStat?.mtimeMs,
+    productLastWriteMs: productStat?.mtimeMs
+  })) return readProductProfileFile(file);
+  let profile = normalizeProductProfile({});
+  if (productStat) {
+    try { profile = await analyzeProductProfile(source.productPath); } catch {}
+  }
+  await writeJsonFile(file, createTaskProductProfilePayload(profile, {
+    sourceProductPath: source.productPath,
+    sourceProductLastWriteUtc: productStat?.mtime?.toISOString?.() || '',
+    updatedAt: new Date().toISOString()
+  }));
+  return profile;
+}
+
+async function saveTemplateProductProfile(payload) {
+  const folder = String(payload?.folder || '');
+  if (!folder || !fs.existsSync(folder)) throw new Error('å¥—å›¾æ–‡ä»¶å¤¹ä¸å­˜åœ¨');
+  const profile = normalizeProductProfile(payload?.profile || {});
+  if (!profile.dimensions && !profile.material) throw new Error('è‡³å°‘å¡«å†™å°ºå¯¸æˆ–æè´¨');
+  await writeProductProfileFile(getTemplateProductProfileFile(folder), profile);
+  return profile;
+}
+
+async function templateOutputSize(job) {
+  const metadata = await sharp(job.templatePath, { failOn: 'none' }).metadata();
+  return imageApiSizeForDimensions(metadata.width, metadata.height);
+}
+
+function containsAny(value, candidates) {
+  const text = String(value || '').toLocaleLowerCase('zh-CN');
+  return candidates.some(candidate => text.includes(String(candidate).toLocaleLowerCase('zh-CN')));
+}
+
+function resolveActionWithProductProfile(action, templateAnalysis, productProfile, job) {
+  const pathText = String(job?.relativePath || '');
+  const templateText = `${pathText}\n${String(templateAnalysis || '')}`;
+  const isPureInfoPage = containsAny(templateText, ['åŒ…è£…', 'è¿è¾“', 'ç‰©æµ', 'å®‰è£…', 'å”®å', 'ä¹°å®¶é¡»çŸ¥', 'çº¯æ–‡å­—', 'æœåŠ¡æ‰¿è¯º', 'æ³¨æ„äº‹é¡¹', 'è£…é¥°æ¨ªå¹…', 'å“ç‰Œåº•å›¾']);
+  if (action === 'copy_template') {
+    if (/"needs_master_product"\s*:\s*false/i.test(String(templateAnalysis || ''))) return 'copy_template';
+    if (containsAny(pathText, ['sku', 'å°ºå¯¸', 'å‚æ•°', 'è§„æ ¼'])) return 'generate_dimension_sheet';
+    if (containsAny(pathText, ['ç»†èŠ‚', 'å±€éƒ¨', 'ç‰¹å†™', 'è¾¹è§’', 'å°é¢', 'é—¨æ¿', 'çº¹ç†', 'äº”é‡‘', 'åšåº¦', 'å·¥è‰º'])) return 'generate_detail_showcase';
+    if (containsAny(pathText, ['æè´¨', 'æ¿æ', 'è‰²å¡'])) return 'generate_material_sheet';
+    if (!isPureInfoPage) return 'generate_product_scene';
+  }
+  if (action === 'generate_dimension_sheet' && !normalizeProductProfile(productProfile).dimensions) return 'generate_dimension_sheet';
+  if (action === 'generate_material_sheet' && !normalizeProductProfile(productProfile).material) return 'generate_material_sheet';
+  return action;
+}
+
+async function replaceOutputFile(outputPath, writeNext) {
+  await fsp.mkdir(path.dirname(outputPath), { recursive: true });
+  const extension = path.extname(outputPath);
+  const stem = path.basename(outputPath, extension);
+  const nonce = crypto.randomUUID();
+  const nextPath = path.join(path.dirname(outputPath), `.${stem}.caishen-next-${nonce}${extension}`);
+  const backupPath = path.join(path.dirname(outputPath), `.${stem}.caishen-old-${nonce}.bak`);
+  let backedUp = false;
+  try {
+    await writeNext(nextPath);
+    if (fs.existsSync(outputPath)) {
+      await fsp.rename(outputPath, backupPath);
+      backedUp = true;
+    }
+    await fsp.rename(nextPath, outputPath);
+    if (backedUp) {
+      backedUp = false;
+      await fsp.rm(backupPath, { force: true }).catch(() => {});
+    }
+  } catch (error) {
+    await fsp.rm(nextPath, { force: true }).catch(() => {});
+    if (backedUp && !fs.existsSync(outputPath)) {
+      await fsp.rename(backupPath, outputPath);
+      backedUp = false;
+    }
+    throw error;
+  } finally {
+    if (!backedUp) await fsp.rm(backupPath, { force: true }).catch(() => {});
+  }
+}
+
+async function writeTemplateSizedImage(job, bytes, trimPixels = null) {
+  const metadata = await sharp(job.templatePath).metadata();
+  const width = Number(metadata.width || 0);
+  const height = Number(metadata.height || 0);
+  const trimTop = Math.max(0, Number(trimPixels?.top || 0) | 0);
+  const trimBottom = Math.max(0, Number(trimPixels?.bottom || 0) | 0);
+  let image = sharp(bytes);
+  if (width && height) {
+    image = image.resize({
+      width,
+      height,
+      fit: 'contain',
+      position: 'northwest',
+      background: { r: 255, g: 255, b: 255, alpha: 1 },
+      withoutEnlargement: false
+    });
+  }
+  if (trimTop || trimBottom) {
+    const trimmedHeight = Math.max(1, height - trimTop - trimBottom);
+    image = image.extract({ left: 0, top: trimTop, width, height: trimmedHeight });
+  }
+  const extension = path.extname(job.outputPath).toLowerCase();
+  if (extension === '.jpg' || extension === '.jpeg') image = image.jpeg({ quality: 94 });
+  else image = image.png();
+  await replaceOutputFile(job.outputPath, nextPath => image.toFile(nextPath));
+}
+
+async function readSourceMetadata(folder) {
+  const paths = metadataPaths(folder);
+  const value = await readJsonFile(paths.wpfSource, null) || await readJsonFile(paths.macSource, {});
+  return normalizeSourceMetadata(value);
+}
+
+async function writeTemplateAudit(job, value) {
+  await writeJsonFile(metadataPaths(job.outputRoot, job.relativePath).templateAudit, value);
+}
+
+async function auditGeneratedTemplate(masterImage, job, templateAnalysis) {
+  const api = await activeApiConfig('analysis');
+  const [firstPromptTemplate, recheckPromptTemplate] = await Promise.all([
+    getPromptValue('templateAudit'),
+    getPromptValue('templateAuditRecheck')
+  ]);
+  const common = {
+    templateAnalysis,
+    masterImageDataUrl: await imageAsDataUrl(masterImage),
+    templateImageDataUrl: await imageAsDataUrl(job.templatePath),
+    generatedImageDataUrl: await imageAsDataUrl(job.outputPath)
+  };
+  let first;
+  let rawText = '';
+  try {
+    const response = await analysisApiJson(api,
+      buildTemplateAuditPayload({
+        ...common,
+        model: resolveAnalysisModel(api),
+        fallbackModel: resolveAnalysisModel(api),
+        promptTemplate: firstPromptTemplate
+      }),
+      (api.requestTimeoutSeconds || 300) * 1000,
+      {
+        description: 'ç”Ÿæˆç»“æœ AI è´¨æ£€',
+        reference: job.relativePath,
+        onceKey: billingOnceKey('llm:template-audit', job.outputRoot, job.relativePath)
+      });
+    rawText = String(response?.choices?.[0]?.message?.content || '').trim();
+    first = parseTemplateAuditResult(rawText);
+  } catch (error) {
+    first = { passed: true, reason: 'å®¡æ ¸æ¥å£ä¸å¯ç”¨ï¼Œä¿ç•™ç”Ÿæˆç»“æœã€‚', retryInstruction: '', rawText: JSON.stringify({ passed: true, reason: `å®¡æ ¸æ¥å£ä¸å¯ç”¨ï¼Œä¿ç•™ç”Ÿæˆç»“æœï¼š${error.message}`, retry_instruction: '' }) };
+  }
+  let final = first;
+  if (isInvalidAuditRequestingProductReplacement(first)) {
+    final = { passed: true, reason: 'å®¡æ ¸è¯¯åˆ¤ï¼šå®¡æ ¸æ„è§è¦æ±‚æ›¿æ¢æ¯ç‰ˆå•†å“ï¼Œå·²æŒ‰æ¯ç‰ˆå”¯ä¸€æ ‡å‡†ä¿ç•™ç»“æœã€‚', retryInstruction: '', rawText: JSON.stringify({ passed: true, reason: 'å®¡æ ¸è¯¯åˆ¤ï¼šå®¡æ ¸æ„è§è¦æ±‚æ›¿æ¢æ¯ç‰ˆå•†å“ï¼Œå·²æŒ‰æ¯ç‰ˆå”¯ä¸€æ ‡å‡†ä¿ç•™ç»“æœã€‚', retry_instruction: '' }) };
+  } else if (!first.passed) {
+    try {
+      const response = await analysisApiJson(api,
+        buildTemplateAuditRecheckPayload({
+          ...common,
+          model: resolveAnalysisModel(api),
+          fallbackModel: resolveAnalysisModel(api),
+          firstAudit: first,
+          promptTemplate: recheckPromptTemplate
+        }),
+        (api.requestTimeoutSeconds || 300) * 1000,
+        {
+          description: 'ç”Ÿæˆç»“æœ AI å¤æ ¸',
+          reference: job.relativePath,
+          onceKey: billingOnceKey('llm:template-audit-recheck', job.outputRoot, job.relativePath)
+        });
+      const content = String(response?.choices?.[0]?.message?.content || '').trim();
+      const recheck = parseTemplateAuditResult(content);
+      final = isInvalidAuditRequestingProductReplacement(recheck)
+        ? { passed: true, reason: 'å¤æ ¸é€šè¿‡ï¼šå®¡æ ¸æ„è§è¦æ±‚æ›¿æ¢æ¯ç‰ˆå•†å“ï¼Œå·²æŒ‰æ¯ç‰ˆå”¯ä¸€æ ‡å‡†ä¿ç•™ç»“æœã€‚', retryInstruction: '', rawText: content }
+        : { ...recheck, rawText: content };
+    } catch {
+      final = first;
+    }
+  }
+  const output = final.rawText?.trim() || rawText || JSON.stringify({ passed: final.passed, reason: final.reason, retry_instruction: final.retryInstruction || '' });
+  const auditFile = metadataPaths(job.outputRoot, job.relativePath).templateAudit;
+  await fsp.mkdir(path.dirname(auditFile), { recursive: true });
+  await fsp.writeFile(auditFile, output, 'utf8');
+  return final;
+}
+
+async function generateTemplateJob(job, source, config, options = {}) {
+  const { analysis, cache } = await ensureTemplateAnalysisForJob(job);
+  let action = resolveGenerationAction(analysis);
+  if (source.generationMode === 'template_print') action = normalizeTemplateProcessingMode(action);
+  let profile = null;
+  if (source.generationMode !== 'template_print') {
+    profile = await loadProductProfileForJob({ outputRoot: job.outputRoot, templateFolderPath: source.templateFolderPath });
+    action = resolveActionWithProductProfile(action, analysis, profile, job);
+  }
+  const paths = metadataPaths(job.outputRoot, job.relativePath);
+  await fsp.rm(paths.manualReview, { force: true }).catch(() => {});
+  if (action === 'manual_check') {
+    await writeTemplateAudit(job, { passed: false, reason: 'æ¨¡æ¿åˆ†æéœ€è¦äººå·¥ç¡®è®¤ï¼Œæœªè‡ªåŠ¨ç”Ÿæˆã€‚', retry_instruction: 'è¯·äººå·¥ç¡®è®¤å¯æ›¿æ¢å°èŠ±åŒºåŸŸåå†å•ç‹¬é‡ç”Ÿæˆæ­¤å›¾ã€‚', action });
+    await fsp.mkdir(path.dirname(paths.manualReview), { recursive: true });
+    await fsp.writeFile(paths.manualReview, analysis, 'utf8');
+    throw new Error(`éœ€è¦äººå·¥ç¡®è®¤ï¼š${job.relativePath}`);
+  }
+  if (action === 'exclude') {
+    await writeTemplateAudit(job, { passed: true, reason: 'å·²ç”±è¿è¥æ˜ç¡®æ’é™¤ï¼Œä¸è¿›å…¥æˆå“è¾“å‡ºã€‚', retry_instruction: '', action });
+    return { action, outputPath: '' };
+  }
+  if (action === 'copy_original') {
+    await replaceOutputFile(job.outputPath, nextPath => fsp.copyFile(job.templatePath, nextPath));
+    await writeTemplateAudit(job, { passed: true, reason: 'ä¿ç•™åŸå›¾ï¼šé€å­—èŠ‚å¤åˆ¶å¥—å›¾æºæ–‡ä»¶ï¼Œä¸è°ƒç”¨ç”Ÿå›¾ APIã€‚', retry_instruction: '', action });
+    return { action, outputPath: job.outputPath };
+  }
+  if (action === 'skip_copy') {
+    await writeTemplateAudit(job, { passed: true, reason: 'å·²æŒ‰æ¨¡æ¿é…ç½®è·³è¿‡ï¼Œä¸è‡ªåŠ¨ç”Ÿæˆã€‚', retry_instruction: '', action });
+    return { action, outputPath: '' };
+  }
+  if (action === 'copy_template') {
+    await replaceOutputFile(job.outputPath, nextPath => fsp.copyFile(job.templatePath, nextPath));
+    await writeTemplateAudit(job, { passed: true, reason: source.generationMode === 'template_print' ? 'æ¨¡æ¿æ¢å°èŠ±ç›´æ¥å¤åˆ¶ï¼šcopy_template' : 'å·²æŒ‰æ¨¡æ¿é…ç½®ç›´æ¥å¤åˆ¶ï¼šcopy_template', retry_instruction: '', action });
+    return { action, outputPath: job.outputPath };
+  }
+
+  const activePack = await activeModelPackage();
+  const useMasterReference = source.generationMode === 'template_print' ? packageUsesMasterReference(activePack) : true;
+  if (source.generationMode === 'template_print' && !useMasterReference) source = { ...source, masterImagePath: source.printPath };
+  let prompt;
+  let imagePaths;
+  if (source.generationMode === 'template_print') {
+    if (!source.printPath || !fs.existsSync(source.printPath)) throw new Error('åŸå§‹å°èŠ±å›¾ä¸å­˜åœ¨');
+    if (!source.masterImagePath || !fs.existsSync(source.masterImagePath)) throw new Error('è¯·å…ˆç”Ÿæˆå½“å‰ä»»åŠ¡çš„æ¯ç‰ˆå›¾');
+    prompt = renderPromptTemplate(await getPromptValue('templatePrint'), {
+      templateAnalysis: analysis,
+      templatePath: job.relativePath
+    });
+    prompt += '\n\næœ¬æ¬¡è¾“å…¥å›¾é¡ºåºï¼šç¬¬ä¸€å¼ æ˜¯å½“å‰å¥—å›¾æ¨¡æ¿å›¾ï¼Œç¬¬äºŒå¼ æ˜¯å·²ç”Ÿæˆçš„æ¯ç‰ˆäº§å“å›¾ï¼Œç¬¬ä¸‰å¼ æ˜¯åŸå§‹å°èŠ±å›¾ã€‚æ¯ç‰ˆäº§å“å›¾æ˜¯äº§å“å¤–è§‚ã€æŸœé—¨å›¾æ¡ˆã€é¢œè‰²å’Œå°èŠ±æ•ˆæœçš„æ ‡å‡†ï¼›å½“å‰å¥—å›¾æ¨¡æ¿å›¾åªæä¾›æœ¬é¡µæ„å›¾ã€åœºæ™¯ã€æ–‡å­—ã€å°ºå¯¸æ ‡æ³¨å’Œé€è§†å…³ç³»ï¼›åŸå§‹å°èŠ±å›¾åªç”¨äºæ ¸å¯¹å›¾æ¡ˆï¼Œä¸å…è®¸é‡æ–°è®¾è®¡ã€æ‹¼è´´æˆ–æ›¿æ¢æˆç›¸ä¼¼é£æ ¼ã€‚æœ€ç»ˆç»“æœå¿…é¡»æŠŠæ¯ç‰ˆäº§å“è¿ç§»åˆ°å½“å‰æ¨¡æ¿åœºæ™¯ä¸­ï¼Œå¹¶ä¿æŒå½“å‰æ¨¡æ¿çš„æ–‡å­—å’Œé¡µé¢å¸ƒå±€ã€‚';
+    prompt += '\n\nç¡¬æ€§è´¨é‡è¦æ±‚ï¼šå°èŠ±åªèƒ½è½åœ¨æŸœé—¨æˆ–æŠ½å±‰çš„æ­£é¢å¯æ›¿æ¢é¢æ¿å†…éƒ¨ï¼Œå¿…é¡»å®Œæ•´ä¿ç•™å®¶å…·é»‘è‰²å¤–æ¡†ã€é»‘è‰²é—¨ç¼/åˆ†éš”çº¿ã€é»‘è‰²ä¾§æ¿ã€é»‘è‰²å°é¢ã€é»‘è‰²åº•è¾¹ã€æŸœè„šã€æŠŠæ‰‹ã€é˜´å½±å’Œæ‰€æœ‰åœºæ™¯ç‰©å“ã€‚ä¸å¾—è®©å°èŠ±è·¨è¿‡æˆ–è¦†ç›–ä»»ä½•é»‘è‰²è¾¹æ¡†é»‘è¾¹ï¼Œä¸å¾—æŠŠé»‘æ¡†æŸ“æˆå°èŠ±ï¼Œä¸å¾—å»¶ä¼¸åˆ°åœ°é¢ã€å¢™é¢ã€å°é¢ã€å’–å•¡æœºã€æ¯å­ã€äººç‰©æˆ–å…¶ä»–é“å…·ã€‚';
+    if (isComplexTemplatePrintAnalysis(analysis, job)) {
+      prompt += `\n\n${flagshipComplexTemplatePrintPrompt()}`;
+    }
+    if (isDetailSliceTemplate(job, analysis)) {
+      prompt += `\n\n${detailSliceLayoutProtectionPrompt()}`;
+    }
+    if (options.referenceResultPath && fs.existsSync(options.referenceResultPath)) {
+      prompt += '\n\nç¬¬å››å¼ è¾“å…¥å›¾æ˜¯è¿è¥é€‰å®šçš„åˆæ ¼å‚è€ƒç»“æœå›¾ã€‚åªå‚è€ƒå®ƒå¦‚ä½•ä¿ç•™é»‘è‰²è¾¹æ¡†ã€é»‘è‰²ä¾§æ¿ã€å°é¢ã€æŸœè„šã€é—¨ç¼ä»¥åŠå°èŠ±åœ¨æŸœé—¨é¢æ¿å†…çš„è½ä½æ–¹å¼ï¼›ä¸è¦å¤åˆ¶å®ƒçš„æ„å›¾ã€è§†è§’ã€å®¶å…·å°ºå¯¸ã€åœºæ™¯å…ƒç´ æˆ–å…·ä½“åƒç´ ã€‚å½“å‰ç¬¬ä¸€å¼ å¥—å›¾æ¨¡æ¿ä»ç„¶æ˜¯æœ€ç»ˆæ„å›¾æ ‡å‡†ã€‚';
+    }
+    imagePaths = useMasterReference
+      ? [job.templatePath, source.masterImagePath, source.printPath]
+      : [job.templatePath, source.printPath];
+    if (options.referenceResultPath && fs.existsSync(options.referenceResultPath)) imagePaths.push(options.referenceResultPath);
+  } else {
+    const masterImage = (await fsp.readdir(job.outputRoot).catch(() => [])).map(name => path.join(job.outputRoot, name)).find(file => isImagePath(file) && path.basename(file, path.extname(file)) === 'æ¯ç‰ˆå›¾');
+    if (!masterImage || !fs.existsSync(masterImage)) throw new Error('æ¯ç‰ˆå›¾ä¸å­˜åœ¨');
+    prompt = renderPromptTemplate(await getPromptValue('templateMigration'), {
+      templateAnalysis: analysis,
+      productProfile: toPromptText(profile),
+      action,
+      retryInstruction: options.extraInstruction
+        ? `ä¸Šä¸€æ¬¡ AI å®¡æ ¸æœªé€šè¿‡ï¼Œæœ¬æ¬¡å¿…é¡»ä¿®æ­£ï¼š${String(options.extraInstruction).trim()}`
+        : '',
+      templatePath: job.relativePath
+    });
+    prompt += '\n\næœ¬æ¬¡è¾“å…¥å›¾é¡ºåºï¼šç¬¬ä¸€å¼ è¾“å…¥å›¾æ˜¯å½“å‰å¥—å›¾æ¨¡æ¿å›¾ï¼Œç¬¬äºŒå¼ è¾“å…¥å›¾æ˜¯å·²ç”Ÿæˆçš„æ¯ç‰ˆäº§å“å›¾ï¼Œç¬¬ä¸‰å¼ è¾“å…¥å›¾æ˜¯åŸå§‹å°èŠ±å›¾ã€‚å½“å‰å¥—å›¾æ¨¡æ¿å›¾æ˜¯æœ€ç»ˆç”»å¹…ã€ç‰ˆå¼ã€æ–‡å­—ã€æ ‡ç­¾ã€åœºæ™¯ã€æ„å›¾å’Œé€è§†æ ‡å‡†ï¼›æ¯ç‰ˆäº§å“å›¾æ˜¯å•†å“ç»“æ„ã€æŸœé—¨å›¾æ¡ˆã€é¢œè‰²ã€æè´¨å’Œå°èŠ±è½ä½çš„å”¯ä¸€å•†å“æ ‡å‡†ï¼›åŸå§‹å°èŠ±å›¾åªç”¨äºæ ¸å¯¹å›¾æ¡ˆç»†èŠ‚ã€é¢œè‰²å’Œä¸»ä½“å®Œæ•´æ€§ã€‚æœ€ç»ˆç»“æœå¿…é¡»æŠŠæ¯ç‰ˆäº§å“è¿ç§»åˆ°å½“å‰æ¨¡æ¿å›¾çš„ç‰ˆå¼/åœºæ™¯ä¸­ï¼Œä¸å¾—ç»§æ‰¿æ¨¡æ¿æ—§å•†å“ç»“æ„ã€æ—§å›¾æ¡ˆã€æ—§å°ºå¯¸æˆ–æ—§ SKUã€‚';
+    prompt += '\n\nç¡¬æ€§è´¨é‡è¦æ±‚ï¼šä¿ç•™å½“å‰æ¨¡æ¿å›¾çš„ä¸­æ–‡æ ‡é¢˜ã€å–ç‚¹æ ‡ç­¾ã€SKU æ ‡ç­¾ã€å°ºå¯¸æ ‡æ³¨ã€å›¾æ ‡ã€é¡µé¢ç¼–å·ã€èƒŒæ™¯ã€é“å…·ã€äººç‰©ã€å…‰å½±å’Œæ’ç‰ˆå±‚çº§ï¼›å•†å“æœ¬ä½“å¿…é¡»æ¥è‡ªæ¯ç‰ˆäº§å“å›¾ã€‚å°èŠ±åªèƒ½è½åœ¨æŸœé—¨æˆ–æŠ½å±‰çš„æ­£é¢å¯æ›¿æ¢é¢æ¿å†…éƒ¨ï¼Œå¿…é¡»å®Œæ•´ä¿ç•™å®¶å…·è¾¹æ¡†ã€é—¨ç¼/æŠ½å±‰ç¼ã€ä¾§æ¿ã€å°é¢ã€åº•è¾¹ã€æŸœè„šã€æŠŠæ‰‹ã€é˜´å½±å’Œæ‰€æœ‰åœºæ™¯ç‰©å“ã€‚ä¸å¾—è®©å°èŠ±è¦†ç›–æ–‡å­—ã€æ ‡ç­¾ã€è¾¹æ¡†ã€æŠŠæ‰‹ã€æŸœè„šã€åœ°é¢ã€å¢™é¢ã€äººç‰©æˆ–é“å…·ã€‚';
+    if (isComplexTemplatePrintAnalysis(analysis, job)) {
+      prompt += `\n\n${flagshipComplexTemplatePrintPrompt()}`;
+    }
+    if (isDetailSliceTemplate(job, analysis)) {
+      prompt += `\n\n${detailSliceLayoutProtectionPrompt()}`;
+    }
+    imagePaths = [job.templatePath, masterImage, source.printPath];
+  }
+  if (options.extraInstruction && source.generationMode === 'template_print') prompt += `\n\næœ¬æ¬¡è¿è¥è¡¥å……è¦æ±‚ï¼š${String(options.extraInstruction).trim()}`;
+  if (options.includePreviousResult && fs.existsSync(job.outputPath)) imagePaths.push(job.outputPath);
+  const maskPath = await createTemplateEditMask(job, analysis);
+  if (maskPath) {
+    prompt += '\n\né”å®šç”»å¸ƒæ¨¡å¼ï¼šæœ¬æ¬¡è¯·æ±‚é™„å¸¦é€æ˜ç¼–è¾‘è’™ç‰ˆã€‚åªå…è®¸ä¿®æ”¹è’™ç‰ˆé€æ˜åŒºåŸŸå†…å·²å¯è§çš„æŸœé—¨æˆ–æŠ½å±‰å¤–ä¾§é¢æ¿ï¼›è’™ç‰ˆä¸é€æ˜åŒºåŸŸçš„åƒç´ ã€æ–‡å­—ã€å°ºå¯¸çº¿ã€è¾¹æ¡†ã€é—¨ç¼ã€æŠŠæ‰‹ã€æŸœè„šã€èƒŒæ™¯ã€é“å…·åŠè£åˆ‡è¾¹ç•Œå¿…é¡»ä¸ç¬¬ä¸€å¼ æ¨¡æ¿å›¾ä¿æŒå®Œå…¨ä¸€è‡´ã€‚ä¸å¾—è¡¥å…¨è¢«è£æ‰çš„æŸœä½“ï¼Œä¸å¾—é‡æ„é¡µé¢æˆ–ç”Ÿæˆæ–°çš„æµ·æŠ¥ã€‚';
+  }
+  const isRegeneration = Boolean(options.isRegeneration || options.extraInstruction);
+  const bytes = await generateImage(prompt, imagePaths, {
+    size: await templateOutputSize(job),
+    quality: config.imageQuality || 'high',
+    billingDescription: options.extraInstruction ? 'å¥—å›¾å›¾ç‰‡é‡æ–°ç”Ÿæˆ' : 'å¥—å›¾æ¢å°èŠ±ç”Ÿå›¾',
+    billingReference: job.relativePath,
+    billingOnceKey: isRegeneration
+      ? billingOnceKey('image:template-job-regenerate', job.outputRoot, job.relativePath, Date.now(), crypto.randomUUID())
+      : billingOnceKey('image:template-job', job.outputRoot, job.relativePath, Date.now(), crypto.randomUUID()),
+    skipBilling: isRegeneration && packageIsFlagship(activePack),
+    maskPath,
+    signal: options.signal,
+    onRequestState: options.onRequestState
+  });
+  const billedMinor = Math.max(0, Number(bytes.billingAmountMinor) || 0);
+  const strictLayoutCheck = isDetailSliceTemplate(job, analysis);
+  if (strictLayoutCheck) {
+    const check = await validateTemplateOutputLayout(job, bytes, analysis);
+    if (!check.passed) {
+      await writeTemplateAudit(job, { passed: false, reason: `ç”Ÿæˆç»“æœä¸æ»¡è¶³å›ºå®šç‰ˆå¼çº¦æŸï¼š${check.reason}`, retry_instruction: 'è¯·é‡æ–°ç”Ÿå›¾ï¼›ä¸è¦æ”¹ç‰ˆå¼å’Œè¾¹ç•Œè£åˆ‡ã€‚', action });
+      throw new Error(check.reason);
+    }
+  }
+  await writeTemplateSizedImage(job, bytes, job.trimPixels);
+  await fsp.rm(paths.templateAudit, { force: true }).catch(() => {});
+  return { action, outputPath: job.outputPath, billedMinor };
+}
+
+async function runWithConcurrency(items, limit, worker) {
+  const results = new Array(items.length);
+  let cursor = 0;
+  async function run() {
+    while (cursor < items.length) {
+      const index = cursor++;
+      try { results[index] = { ok: true, value: await worker(items[index], index) }; }
+      catch (error) { results[index] = { ok: false, error }; }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(Math.max(1, limit), Math.max(1, items.length)) }, run));
+  return results;
+}
+
+async function generateTemplateSetForFolder(folder, onlyMissing = true, relativePaths = null, options = {}) {
+  const source = await readSourceMetadata(folder);
+  if (!source.templateFolderPath || !fs.existsSync(source.templateFolderPath)) throw new Error('ä»»åŠ¡ç¼ºå°‘å¥—å›¾æ–‡ä»¶å¤¹');
+  const config = await loadConfig();
+  if (source.generationMode !== 'template_print') await ensureTaskProductProfile(folder, source);
+  let jobs = await buildTemplateJobs(source.templateFolderPath, folder);
+  const selectedPaths = relativePaths?.length ? relativePaths : source.templateRelativePaths;
+  if (selectedPaths?.length) {
+    const wanted = new Set(selectedPaths.map(value => String(value).replaceAll('\\', '/').toLocaleLowerCase('zh-CN')));
+    jobs = jobs.filter(job => wanted.has(job.relativePath.replaceAll('\\', '/').toLocaleLowerCase('zh-CN')));
+    if (!jobs.length) throw new Error('é€‰ä¸­çš„å¥—å›¾å›¾ç‰‡ä¸å­˜åœ¨æˆ–å·²è¢«ç§»é™¤ã€‚');
+  }
+  if (onlyMissing) jobs = jobs.filter(job => !fs.existsSync(job.outputPath));
+  let progressWrite = Promise.resolve();
+  const generationStartedAt = new Date();
+  const generationStartedAtIso = generationStartedAt.toISOString();
+  const publishProgress = progress => {
+    const phase = progress.phase || 'generating';
+    const completedAt = progress.completedAt || (['completed', 'completed_with_errors', 'failed'].includes(phase) ? new Date().toISOString() : '');
+    const elapsedMs = completedAt
+      ? Math.max(0, new Date(completedAt).getTime() - generationStartedAt.getTime())
+      : Math.max(0, Number(progress.elapsedMs) || 0);
+    const next = {
+      folder,
+      phase,
+      current: Math.max(0, Number(progress.current) || 0),
+      total: Math.max(0, Number(progress.total) || jobs.length),
+      percent: Math.max(0, Math.min(100, Number(progress.percent) || 0)),
+      apiGenerated: Math.max(0, Number(progress.apiGenerated) || 0),
+      copied: Math.max(0, Number(progress.copied) || 0),
+      excluded: Math.max(0, Number(progress.excluded) || 0),
+      skipped: Math.max(0, Number(progress.skipped) || 0),
+      failed: Math.max(0, Number(progress.failed) || 0),
+      waitingUpstream: Math.max(0, Number(progress.waitingUpstream) || 0),
+      pending: Math.max(0, Number(progress.pending) || 0),
+      billingCostMinor: Math.max(0, Number(progress.billingCostMinor) || 0),
+      message: String(progress.message || ''),
+      startedAt: String(progress.startedAt || generationStartedAtIso),
+      completedAt,
+      elapsedMs,
+      updatedAt: new Date().toISOString()
+    };
+    progressWrite = progressWrite.then(async () => {
+      await writeJsonFile(metadataPaths(folder).generationProgress, next);
+      if (typeof options.reportProgress === 'function') await options.reportProgress(next);
+    });
+    return progressWrite;
+  };
+  if (!jobs.length) {
+    if (!onlyMissing && !selectedPaths?.length) throw new Error('å¥—å›¾æ–‡ä»¶å¤¹é‡Œæ²¡æœ‰å¯ç”¨å›¾ç‰‡ã€‚');
+    const summary = { total: 0, current: 0, percent: 100, apiGenerated: 0, copied: 0, excluded: Math.max(0, Number(options.excludedCount) || 0), skipped: 0, failed: 0, waitingUpstream: 0, pending: 0, billingCostMinor: 0 };
+    await publishProgress({ ...summary, phase: 'completed', message: 'æ²¡æœ‰éœ€è¦å¤„ç†çš„å›¾ç‰‡' });
+    return { folder, generated: 0, failures: [], summary };
+  }
+  if (options.signal?.aborted) throw new Error('ä»»åŠ¡å·²å–æ¶ˆ');
+  const analysisJobs = [];
+  for (const job of jobs) {
+    const cacheState = await templateAnalysisForJob(job);
+    if (!cacheState.cached) analysisJobs.push(job);
+  }
+  if (analysisJobs.length) {
+    const analysisConcurrency = await activeApiConcurrencyLimit(jobs.length);
+    let analysisCompleted = 0;
+    let analysisFailed = 0;
+    await publishProgress({
+      phase: 'queued',
+      total: analysisJobs.length,
+      current: 0,
+      failed: 0,
+      percent: 0,
+      apiGenerated: 0,
+      copied: 0,
+      excluded: Math.max(0, Number(options.excludedCount) || 0),
+      skipped: 0,
+      waitingUpstream: 0,
+      billingCostMinor: 0,
+      pending: analysisJobs.length,
+      message: `AI åˆ†æå·²æ’é˜Ÿ ${analysisJobs.length} å¼ ï¼ŒæŒ‰æœ€å¤§å¹¶å‘ ${analysisConcurrency} è¿›è¡Œ`
+    });
+    const analyzeWithProgress = (job) => analyzeTemplateJobWithRetry(job, 3, async progress => {
+      await publishProgress({
+        phase: 'analyzing',
+        total: jobs.length,
+        current: analysisCompleted,
+        failed: analysisFailed,
+        percent: Math.round(Math.min(100, analysisCompleted / Math.max(1, jobs.length) * 100)),
+        apiGenerated: 0,
+        copied: 0,
+        excluded: Math.max(0, Number(options.excludedCount) || 0),
+        skipped: 0,
+        waitingUpstream: 0,
+        billingCostMinor: 0,
+        pending: Math.max(0, analysisJobs.length - analysisCompleted),
+        message: progress.phase === 'retrying'
+          ? `AI åˆ†æå¤±è´¥ï¼Œæ­£åœ¨é‡è¯•ï¼š${job.relativePath}`
+          : `æ­£åœ¨åˆ†æï¼š${job.relativePath}`
+      });
+    }).then(async result => {
+      analysisCompleted += 1;
+      if (!result.ok) analysisFailed += 1;
+      await publishProgress({
+        phase: analysisCompleted === analysisJobs.length ? 'analyzing' : 'analyzing',
+        total: jobs.length,
+        current: analysisCompleted,
+        failed: analysisFailed,
+        percent: Math.round(Math.min(100, analysisCompleted / Math.max(1, jobs.length) * 100)),
+        apiGenerated: 0,
+        copied: 0,
+        excluded: Math.max(0, Number(options.excludedCount) || 0),
+        skipped: 0,
+        waitingUpstream: 0,
+        billingCostMinor: 0,
+        pending: Math.max(0, jobs.length - analysisCompleted),
+        message: result.ok ? `AI åˆ†æå®Œæˆ ${analysisCompleted}/${jobs.length}` : `AI åˆ†æå¤±è´¥ï¼š${job.relativePath}`
+      });
+      return result;
+    });
+    await runWithConcurrency(analysisJobs, analysisConcurrency, analyzeWithProgress);
+  }
+  const startLabel = options.initial ? 'å¼€å§‹ç”Ÿæˆå¥—å›¾' : onlyMissing ? 'å¼€å§‹è¡¥ç”Ÿæˆç¼ºå¤±å¥—å›¾' : 'å¼€å§‹é‡æ–°ç”Ÿæˆæ•´å¥—å›¾';
+  await addOperationLog(folder, `${startLabel}ï¼š${jobs.length} å¼ `);
+  const live = { total: jobs.length, current: 0, apiGenerated: 0, copied: 0, excluded: Math.max(0, Number(options.excludedCount) || 0), skipped: 0, failed: 0, waitingUpstream: 0, billingCostMinor: 0 };
+  const liveFailures = [];
+  const isRegeneration = !onlyMissing && !options.initial;
+  await publishProgress({ ...live, pending: jobs.length, phase: 'preparing', message: `å‡†å¤‡å¤„ç† ${jobs.length} å¼ å›¾ç‰‡` });
+  const waitingUpstream = new Set();
+  let imageEventWrite = Promise.resolve();
+  const recordImageRequestState = (job, event) => {
+    if (event.state === 'retrying') waitingUpstream.add(job.relativePath);
+    else if (['running', 'succeeded', 'failed'].includes(event.state)) waitingUpstream.delete(job.relativePath);
+    live.waitingUpstream = waitingUpstream.size;
+    const diagnostic = {
+      at: new Date().toISOString(),
+      relativePath: job.relativePath,
+      attempt: Number(event.attempt) || 0,
+      state: String(event.state || ''),
+      status: Number(event.status) || undefined,
+      error: event.error ? String(event.error).slice(0, 500) : undefined,
+      currentConcurrency: Number(event.currentConcurrency) || 0,
+      maxConcurrency: Number(event.maxConcurrency) || 0,
+      active: Number(event.active) || 0,
+      queued: Number(event.queued) || 0,
+      originalBytes: Number(event.originalBytes) || 0,
+      preparedBytes: Number(event.preparedBytes) || 0,
+      apiElapsedMs: Number(event.apiElapsedMs) || 0,
+      downloadElapsedMs: Number(event.downloadElapsedMs) || 0
+    };
+    imageEventWrite = imageEventWrite.then(async () => {
+      const eventFile = metadataPaths(folder).imageApiEvents;
+      await fsp.mkdir(path.dirname(eventFile), { recursive: true });
+      await fsp.appendFile(eventFile, `${JSON.stringify(diagnostic)}\n`, 'utf8');
+    });
+    void publishProgress({
+      ...live,
+      phase: 'generating',
+      pending: Math.max(0, live.total - live.current),
+      percent: live.total ? Math.round(live.current / live.total * 100) : 0,
+      message: live.waitingUpstream
+        ? `ç”Ÿå›¾æ¥å£ç­‰å¾…é‡è¯• ${live.waitingUpstream} å¼ ï¼Œå·²å®Œæˆ ${live.current}/${live.total}`
+        : `æ­£åœ¨å¤„ç† ${live.current}/${live.total}`
+    }).catch(() => {});
+  };
+  const results = await runWithConcurrency(jobs, await activeApiConcurrencyLimit(jobs.length), async job => {
+    try {
+      if (options.signal?.aborted) throw new Error('ä»»åŠ¡å·²åœæ­¢');
+      const result = await generateTemplateJob(job, source, config, {
+        extraInstruction: options.extraInstruction,
+        isRegeneration,
+        signal: options.signal,
+        onRequestState: event => recordImageRequestState(job, event)
+      });
+      if (result.action === 'exclude' || result.action === 'skip_copy') live.skipped += 1;
+      else if (result.action === 'copy_original' || result.action === 'copy_template') live.copied += 1;
+      else live.apiGenerated += 1;
+      live.billingCostMinor += Math.max(0, Number(result.billedMinor) || 0);
+      return result;
+    } catch (error) {
+      live.failed += 1;
+      liveFailures.push(`${job.relativePath}: ${error?.message || error}`);
+      await writeJsonFile(metadataPaths(folder).generationErrors, {
+        updated_at: new Date().toISOString(),
+        count: liveFailures.length,
+        failures: liveFailures.slice()
+      });
+      throw error;
+    } finally {
+      live.current += 1;
+      await publishProgress({
+        ...live,
+        phase: 'generating',
+        pending: Math.max(0, live.total - live.current),
+        percent: Math.round(live.current / live.total * 100),
+        message: `æ­£åœ¨å¤„ç† ${live.current}/${live.total}ï¼šAPI ç”Ÿæˆ ${live.apiGenerated}ï¼Œç›´æ¥å¤åˆ¶ ${live.copied}ï¼Œè·³è¿‡ ${live.skipped}`
+      });
+    }
+  });
+  await imageEventWrite;
+  const failures = results.map((result, index) => result.ok ? null : `${jobs[index].relativePath}: ${result.error?.message || result.error}`).filter(Boolean);
+  let rejected = 0;
+  if (!failures.length && source.generationMode !== 'template_print' && config.auditMode === 'quality') {
+    const masterImage = (await fsp.readdir(folder).catch(() => [])).map(name => path.join(folder, name)).find(file => isImagePath(file) && path.basename(file, path.extname(file)) === 'æ¯ç‰ˆå›¾');
+    const auditJobs = [];
+    const productProfile = await loadProductProfileForJob({ outputRoot: folder, templateFolderPath: source.templateFolderPath });
+    for (const job of jobs) {
+      if (!fs.existsSync(job.outputPath)) continue;
+      const { analysis } = await templateAnalysisForJob(job);
+      const action = resolveActionWithProductProfile(resolveGenerationAction(analysis), analysis, productProfile, job);
+      if (!['copy_template', 'skip_copy', 'manual_check'].includes(action)) auditJobs.push({ job, analysis });
+    }
+    if (masterImage && auditJobs.length) {
+      await addOperationLog(folder, `å¼€å§‹ AI è´¨æ£€ï¼š${auditJobs.length} å¼ `);
+      await publishProgress({ ...live, phase: 'auditing', percent: 100, message: `å›¾ç‰‡å¤„ç†å®Œæˆï¼Œæ­£åœ¨ AI è´¨æ£€ ${auditJobs.length} å¼ ` });
+      const audits = await runWithConcurrency(auditJobs, await activeApiConcurrencyLimit(auditJobs.length), item => auditGeneratedTemplate(masterImage, item.job, item.analysis));
+      rejected = audits.filter(result => !result.ok || result.value?.passed === false).length;
+    }
+  }
+  if (failures.length) {
+    await writeJsonFile(metadataPaths(folder).generationErrors, { updated_at: new Date().toISOString(), count: failures.length, failures });
+    await addOperationLog(folder, `å¥—å›¾ç”Ÿæˆå®Œæˆï¼Œä½†æœ‰ ${failures.length} å¼ å¤±è´¥ï¼š${failures.slice(0, 3).join('ï¼›')}`);
+  } else {
+    await fsp.rm(metadataPaths(folder).generationErrors, { force: true }).catch(() => {});
+    const breakdown = `API ç”Ÿæˆ ${live.apiGenerated} å¼ ï¼Œç›´æ¥å¤åˆ¶ ${live.copied} å¼ ï¼Œè·³è¿‡ ${live.skipped} å¼ `;
+    await addOperationLog(folder, rejected > 0 ? `å¥—å›¾å¤„ç†å®Œæˆï¼š${breakdown}ï¼ŒAI ä¸é€šè¿‡ ${rejected} å¼ ` : `å¥—å›¾å¤„ç†å®Œæˆï¼š${breakdown}ï¼Œå¾…äººå·¥ç¡®è®¤`);
+  }
+  const summary = {
+    total: live.total,
+    current: live.current,
+    percent: 100,
+    apiGenerated: live.apiGenerated,
+    copied: live.copied,
+    excluded: live.excluded,
+    skipped: live.skipped,
+    failed: live.failed,
+    waitingUpstream: 0,
+    pending: 0,
+    billingCostMinor: live.billingCostMinor
+  };
+  await publishProgress({
+    ...summary,
+    phase: failures.length ? 'completed_with_errors' : 'completed',
+    message: failures.length
+      ? `å¤„ç†å®Œæˆï¼Œ${failures.length} å¼ å¤±è´¥`
+      : `å¤„ç†å®Œæˆï¼šAPI ç”Ÿæˆ ${summary.apiGenerated}ï¼Œç›´æ¥å¤åˆ¶ ${summary.copied}ï¼Œè·³è¿‡ ${summary.skipped}`
+  });
+  return { folder, generated: jobs.length - failures.length, failures, rejected, summary };
+}
+
+async function regenerateSingleTemplate(payload, options = {}) {
+  const folder = String(payload?.folder || '');
+  const source = await readSourceMetadata(folder);
+  const job = await findReviewJob(folder, payload?.relativePath);
+  const config = await loadConfig();
+  if (source.generationMode !== 'template_print') await ensureTaskProductProfile(folder, source);
+  const auditFile = metadataPaths(folder, job.relativePath).templateAudit;
+  const auditText = await fsp.readFile(auditFile, 'utf8').catch(() => '');
+  const audit = parseTemplateAuditResult(auditText);
+  const extraInstruction = String(payload?.extraInstruction || audit.retryInstruction || '').trim();
+  const referenceResultPath = await resolveReviewReferenceResultPath(folder, payload?.referenceResultRelativePath || '');
+  const progressFile = metadataPaths(folder).generationProgress;
+  const startedAt = new Date().toISOString();
+  const publishSingleProgress = async update => {
+    const existing = await readJsonFile(progressFile, {});
+    const total = Math.max(1, Number(existing?.total) || Number(source.templateRelativePaths?.length) || 1);
+    const current = Math.max(0, Number(existing?.current) || total);
+    const next = {
+      ...(existing && typeof existing === 'object' ? existing : {}),
+      folder,
+      total,
+      current,
+      percent: Math.max(0, Math.min(100, Number(existing?.percent) || (total ? Math.round(current / total * 100) : 0))),
+      apiGenerated: Math.max(0, Number(existing?.apiGenerated) || 0),
+      copied: Math.max(0, Number(existing?.copied) || 0),
+      skipped: Math.max(0, Number(existing?.skipped) || 0),
+      failed: Math.max(0, Number(existing?.failed) || 0),
+      billingCostMinor: Math.max(0, Number(existing?.billingCostMinor) || 0),
+      ...(update || {}),
+      message: String(update?.message || `æ­£åœ¨é‡æ–°ç”Ÿæˆå›¾ç‰‡ï¼š${job.relativePath}`),
+      activeRelativePath: job.relativePath,
+      startedAt: existing?.startedAt || startedAt,
+      updatedAt: new Date().toISOString()
+    };
+    await writeJsonFile(progressFile, next);
+    if (typeof options.reportProgress === 'function') await options.reportProgress(next);
+    return next;
+  };
+  await addOperationLog(folder, `å¼€å§‹é‡æ–°ç”Ÿæˆå•å¼ ï¼š${job.relativePath}${extraInstruction ? 'ï¼ˆå«ä¿®æ­£è¦æ±‚ï¼‰' : ''}`);
+  await addOperationLog(folder, `å¼€å§‹é‡æ–°ç”Ÿæˆå›¾ç‰‡ï¼š${job.relativePath}${referenceResultPath ? `ï¼ˆå‚è€ƒç»“æœå›¾ï¼š${path.basename(referenceResultPath)}ï¼‰` : ''}${extraInstruction ? 'ï¼ˆå«ä¿®æ­£è¦æ±‚ï¼‰' : ''}`);
+  await publishSingleProgress({
+    phase: 'generating',
+    pending: 1,
+    message: `æ­£åœ¨é‡æ–°ç”Ÿæˆï¼š${job.relativePath}`
+  });
+  const generated = await generateTemplateJob(job, source, config, {
+    extraInstruction,
+    isRegeneration: true,
+    includePreviousResult: Boolean(payload?.includePreviousResult),
+    referenceResultPath,
+    signal: options.signal,
+    onRequestState: event => {
+      void publishSingleProgress({
+        phase: 'generating',
+        pending: 1,
+        waitingUpstream: event?.state === 'retrying' ? 1 : 0,
+        message: event?.state === 'retrying'
+          ? `ç”Ÿå›¾æ¥å£ç­‰å¾…é‡è¯•ï¼š${job.relativePath}`
+          : `æ­£åœ¨é‡æ–°ç”Ÿæˆï¼š${job.relativePath}`
+      }).catch(() => {});
+    }
+  });
+  if (source.generationMode !== 'template_print'
+      && config.auditMode === 'quality'
+      && generated.outputPath
+      && !['copy_template', 'skip_copy', 'manual_check'].includes(generated.action)) {
+    const masterImage = (await fsp.readdir(folder).catch(() => []))
+      .map(name => path.join(folder, name))
+      .find(file => isImagePath(file) && path.basename(file, path.extname(file)) === 'æ¯ç‰ˆå›¾');
+    if (masterImage) {
+      const { analysis } = await templateAnalysisForJob(job);
+      await auditGeneratedTemplate(masterImage, job, analysis);
+    }
+  }
+  const generationErrorsFile = metadataPaths(folder).generationErrors;
+  const generationErrors = await readJsonFile(generationErrorsFile, {});
+  const failurePrefix = `${job.relativePath}:`;
+  const remainingFailures = (Array.isArray(generationErrors?.failures) ? generationErrors.failures : [])
+    .map(String)
+    .filter(message => !message.startsWith(failurePrefix));
+  if (remainingFailures.length) {
+    await writeJsonFile(generationErrorsFile, { ...generationErrors, updated_at: new Date().toISOString(), count: remainingFailures.length, failures: remainingFailures });
+  } else await fsp.rm(generationErrorsFile, { force: true }).catch(() => {});
+  const billedMinor = Math.max(0, Number(generated.billedMinor) || 0);
+  if (billedMinor > 0) {
+    const progress = await readJsonFile(progressFile, {});
+    await writeJsonFile(progressFile, {
+      ...(progress && typeof progress === 'object' ? progress : {}),
+      billingCostMinor: Math.max(0, Number(progress?.billingCostMinor) || 0) + billedMinor,
+      updatedAt: new Date().toISOString()
+    });
+  }
+  await addOperationLog(folder, `é‡æ–°ç”Ÿæˆå®Œæˆï¼š${job.relativePath}`);
+  await publishSingleProgress({
+    phase: 'completed',
+    pending: 0,
+    waitingUpstream: 0,
+    message: `é‡æ–°ç”Ÿæˆå®Œæˆï¼š${job.relativePath}`,
+    completedAt: new Date().toISOString()
+  });
+  return { folder, relativePath: job.relativePath, outputPath: job.outputPath };
+}
+
+async function regenerateMasterForReviewFolder(folderValue) {
+  const folder = String(folderValue || '');
+  const source = await readSourceMetadata(folder);
+  if (!source.productPath || !fs.existsSync(source.productPath) || !source.printPath || !fs.existsSync(source.printPath)) {
+    throw new Error('å½“å‰æ–‡ä»¶å¤¹æ²¡æœ‰æ‰¾åˆ°åŸå§‹å“ç±»å›¾å’Œå°èŠ±å›¾è®°å½•ã€‚');
+  }
+  await addOperationLog(folder, 'å¼€å§‹é‡æ–°ç”Ÿæˆæ¯ç‰ˆå›¾');
+  const result = await generateMaster({
+    taskNumber: source.taskNumber,
+    productPath: source.productPath,
+    printPath: source.printPath,
+    templateFolderPath: source.templateFolderPath,
+    generationMode: 'master',
+    note: source.note || ''
+  });
+  await addOperationLog(folder, `é‡æ–°ç”Ÿæˆæ¯ç‰ˆå›¾å®Œæˆï¼Œæ–°ä»»åŠ¡ï¼š${path.basename(result.folder)}`);
+  return result;
+}
+
+async function generateDirectTemplateTask(task, options = {}) {
+  const activePack = await activeModelPackage();
+  if (packageIsFlagship(activePack) && !packageUsesMasterReference(activePack)) task = { ...task, masterImagePath: task?.printPath };
+  if (!task?.printPath || !fs.existsSync(task.printPath)) throw new Error('å°èŠ±å›¾ä¸å­˜åœ¨');
+  if (!task?.templateFolderPath || !fs.existsSync(task.templateFolderPath)) throw new Error('å¥—å›¾æ–‡ä»¶å¤¹ä¸å­˜åœ¨');
+  if (!task?.masterImagePath || !fs.existsSync(task.masterImagePath)) throw new Error('è¯·å…ˆç”Ÿæˆå½“å‰ä»»åŠ¡çš„æ¯ç‰ˆå›¾');
+  const requestedPaths = Array.isArray(task.templateRelativePaths)
+    ? task.templateRelativePaths
+    : task.templateRelativePath ? [task.templateRelativePath] : null;
+  const plan = await planTemplateOutputJobs(task.templateFolderPath, requestedPaths);
+  const plannedTask = { ...task, templateRelativePaths: plan.relativePaths };
+  const config = await loadConfig();
+  if (typeof options.reportProgress === 'function') {
+    await options.reportProgress({ phase: 'preparing', current: 0, total: 0, percent: 0, message: 'æ­£åœ¨åˆ›å»ºä»»åŠ¡ç›®å½•â€¦' });
+  }
+  const folder = await nextTaskFolder(config);
+  await fsp.mkdir(folder, { recursive: true });
+  await writeTaskSource(folder, plannedTask, 'template_print');
+  const result = await generateTemplateSetForFolder(folder, false, null, {
+    ...options,
+    initial: true,
+    excludedCount: plan.excludedRelativePaths.length
+  });
+  if (result.failures.length) throw new Error(`æœ‰ ${result.failures.length} å¼ å¤±è´¥ï¼š${result.failures[0]}`);
+  return { folder, outputPath: folder, url: '', summary: result.summary };
+}
+
+async function generateTemplateTaskMaster(task = {}, options = {}) {
+  if (!task?.printPath || !fs.existsSync(task.printPath)) throw new Error('å°èŠ±å›¾ä¸å­˜åœ¨');
+  let referencePath = task.masterReferencePath || task.productPath || task.templateImagePath || '';
+  if ((!referencePath || !fs.existsSync(referencePath)) && task.templateFolderPath && task.masterReferenceRelativePath) {
+    const fallback = resolveTemplateFile(task.templateFolderPath, task.masterReferenceRelativePath);
+    if (fs.existsSync(fallback)) referencePath = fallback;
+  }
+  if (!referencePath || !fs.existsSync(referencePath)) throw new Error('è¯·å…ˆé€‰æ‹©æ¯ç‰ˆå‚è€ƒå›¾');
+  const config = await loadConfig();
+  if (typeof options.reportProgress === 'function') {
+    await options.reportProgress({ phase: 'generating', current: 0, total: 1, percent: 10, message: 'æ­£åœ¨ç”Ÿæˆæ¯ç‰ˆå›¾â€¦' });
+  }
+  const pack = await activeModelPackage();
+  const prompt = String(await getPromptValue('templateMasterGeneration') || '').trim();
+  const bytes = await generateImage(prompt || 'æ ¹æ®ç¬¬ä¸€å¼ äº§å“å‚è€ƒå›¾å’Œç¬¬äºŒå¼ å°èŠ±å›¾ç”Ÿæˆæ ‡å‡†ç”µå•†æ¯ç‰ˆå›¾ã€‚', [referencePath, task.printPath], {
+    size: config.imageSize || '1024x1024',
+    quality: config.imageQuality || 'high',
+    billingDescription: 'å¥—å›¾æ¯ç‰ˆç”Ÿæˆ',
+    billingReference: task.id || path.basename(referencePath),
+    skipBilling: packageIsFlagship(pack),
+    signal: options.signal,
+    onRequestState: options.onRequestState
+  });
+  const masterRoot = path.join(currentWorkspaceRoot(), 'masters', localFileTimestamp());
+  await fsp.mkdir(masterRoot, { recursive: true });
+  const outputPath = path.join(masterRoot, `${safeFileName(task.id || task.printName || 'template-master')}.png`);
+  await fsp.writeFile(outputPath, bytes);
+  const result = {
+    outputPath,
+    url: imageUrl(outputPath),
+    referencePath,
+    referenceName: path.basename(referencePath),
+    billingCostMinor: Math.max(0, Number(bytes.billingAmountMinor) || 0)
+  };
+  if (typeof options.reportProgress === 'function') {
+    await options.reportProgress({ phase: 'completed', current: 1, total: 1, percent: 100, message: 'æ¯ç‰ˆå›¾ç”Ÿæˆå®Œæˆ', billingCostMinor: 0 });
+  }
+  return result;
+}
+
+async function generateTask(task, options = {}) {
+  if (task?.generationMode !== 'template_print') return generateMaster(task, options);
+  if (typeof options.reportProgress === 'function') {
+    await options.reportProgress({ phase: 'queued', current: 0, total: 0, percent: 0, message: 'å·²è¿›å…¥å¥—å›¾å¤„ç†é˜Ÿåˆ—' });
+  }
+  return generateDirectTemplateTask(task, options);
+}
+
+async function generateMaster(task, options = {}) {
+  if (!task?.productPath || !fs.existsSync(task.productPath)) throw new Error('å“ç±»æ¬¾å¼å›¾ä¸å­˜åœ¨');
+  if (!task?.printPath || !fs.existsSync(task.printPath)) throw new Error('å°èŠ±å›¾ä¸å­˜åœ¨');
+  if (!task?.templateFolderPath || !fs.existsSync(task.templateFolderPath)) throw new Error('å¥—å›¾æ–‡ä»¶å¤¹ä¸å­˜åœ¨');
+  const config = await loadConfig();
+  if (typeof options.reportProgress === 'function') {
+    await options.reportProgress({ phase: 'generating', current: 0, total: 1, percent: 10, apiGenerated: 0, copied: 0, skipped: 0, failed: 0, message: 'æ­£åœ¨ç”Ÿæˆæ¯ç‰ˆå›¾â€¦' });
+  }
+  const folder = await nextTaskFolder(config);
+  await fsp.mkdir(folder, { recursive: true });
+  await writeTaskSource(folder, task, 'master');
+  ensureTemplateProductProfile(task.templateFolderPath, task.productPath).catch(() => {});
+  const prompt = applyMasterPromptTemplate(await getPromptValue('masterGeneration'), task, config.categoriesPath);
+  const bytes = await generateImage(prompt, [task.productPath, task.printPath], {
+    size: config.imageSize || '1024x1024',
+    quality: config.imageQuality || 'high',
+    billingDescription: 'æ¯ç‰ˆå›¾ç”Ÿæˆ',
+    billingReference: task.id || path.basename(task.productPath),
+    billingOnceKey: billingOnceKey('image:master', folder),
+    signal: options.signal,
+    onRequestState: options.onRequestState
+  });
+  const outputPath = path.join(folder, 'æ¯ç‰ˆå›¾.png');
+  await fsp.writeFile(outputPath, bytes);
+  await addOperationLog(folder, `ç”Ÿæˆæ¯ç‰ˆå›¾å®Œæˆï¼š${path.basename(outputPath)}`);
+  const summary = { total: 1, current: 1, percent: 100, apiGenerated: 1, copied: 0, skipped: 0, failed: 0, pending: 0 };
+  if (typeof options.reportProgress === 'function') {
+    await options.reportProgress({ ...summary, folder, phase: 'completed', message: 'æ¯ç‰ˆå›¾ç”Ÿæˆå®Œæˆ' });
+  }
+  return { folder, outputPath, url: imageUrl(outputPath), summary };
+}
+
+async function reviewFolders() {
+  const config = await loadConfig();
+  const outputRoot = config.outputPath || defaultConfig().outputPath;
+  const entries = await fsp.readdir(outputRoot, { withFileTypes: true }).catch(() => []);
+  const folders = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+    const folder = path.join(outputRoot, entry.name);
+    const images = await scanImages(folder, '', 80);
+    const source = await readSourceMetadata(folder);
+    const paths = metadataPaths(folder);
+    const review = normalizeReviewMetadata(await readJsonFile(paths.macReview, {}));
+    const legacyReviewImages = new Map(review.images.map(image => [String(image.relativePath || '').replaceAll('\\', '/').toLocaleLowerCase('zh-CN'), image]));
+    const jobs = [];
+    if (source.templateFolderPath && fs.existsSync(source.templateFolderPath)) {
+      const selectedPaths = new Set((source.templateRelativePaths || []).map(value => String(value).replaceAll('\\', '/').toLocaleLowerCase('zh-CN')));
+      const templateJobs = (await buildTemplateJobs(source.templateFolderPath, folder))
+        .filter(job => !selectedPaths.size || selectedPaths.has(job.relativePath.replaceAll('\\', '/').toLocaleLowerCase('zh-CN')));
+      for (const job of templateJobs) {
+        const jobPaths = metadataPaths(folder, job.relativePath);
+        let manualReview = await readJsonFile(jobPaths.manualReview, {});
+        let audit = await readJsonFile(jobPaths.templateAudit, {});
+        const legacyImage = legacyReviewImages.get(job.relativePath.replaceAll('\\', '/').toLocaleLowerCase('zh-CN'));
+        if (!Object.keys(manualReview || {}).length && legacyImage?.manualStatus) manualReview = { status: legacyImage.manualStatus, updatedAt: legacyImage.reviewedAt };
+        if (!Object.keys(audit || {}).length && legacyImage?.auditStatus) audit = { status: legacyImage.auditStatus };
+        const { summary } = await templateAnalysisForJob(job);
+        const record = {
+          relativePath: job.relativePath,
+          templateImagePath: job.templatePath,
+          outputPath: job.outputPath,
+          outputExists: fs.existsSync(job.outputPath),
+          manualReview,
+          audit,
+          generationAction: summary.action
+        };
+        const rawStatus = deriveImageStatus(record, config.auditMode);
+        const status = rawStatus === 'äººå·¥é€šè¿‡' ? 'å·²é€šè¿‡'
+          : rawStatus === 'äººå·¥ä¸é€šè¿‡' || rawStatus === 'å®¡æ ¸ä¸é€šè¿‡' ? 'AIä¸é€šè¿‡'
+            : rawStatus === 'ç›´æ¥å¥—æ¨¡æ¿-è‡ªåŠ¨é€šè¿‡' ? 'ç›´æ¥å¥—æ¨¡æ¿'
+              : rawStatus;
+        const templateStat = await fsp.stat(job.templatePath).catch(() => null);
+        const templateModifiedAt = templateStat?.mtimeMs || 0;
+        const templateVersion = templateStat ? `${Math.trunc(templateStat.mtimeMs)}-${templateStat.size}` : String(templateModifiedAt || 0);
+        const outputModifiedAt = record.outputExists ? (await fsp.stat(job.outputPath).catch(() => null))?.mtimeMs || 0 : 0;
+        jobs.push({
+          ...record,
+          status,
+          action: summary.action,
+          templateUrl: `${imageUrl(job.templatePath)}?v=${encodeURIComponent(templateModifiedAt)}`,
+          templateThumbnailUrl: thumbnailUrl(job.templatePath, 480, templateVersion),
+          templatePreviewUrl: thumbnailUrl(job.templatePath, 1200, templateVersion),
+          outputUrl: record.outputExists ? `${imageUrl(job.outputPath)}?v=${encodeURIComponent(outputModifiedAt)}` : '',
+          outputModifiedAt
+        });
+      }
+    }
+    if (!images.length && !jobs.length) continue;
+    const stat = await fsp.stat(folder);
+    const masterImage = images.find(image => path.basename(image.path, path.extname(image.path)) === 'æ¯ç‰ˆå›¾') || null;
+    const generationErrors = await readJsonFile(paths.generationErrors, {});
+    const generationFailures = Array.isArray(generationErrors?.failures) ? generationErrors.failures.map(String) : [];
+    for (const job of jobs) {
+      const prefix = `${job.relativePath}:`;
+      const failure = generationFailures.find(message => message.startsWith(prefix));
+      job.generationError = failure ? failure.slice(prefix.length).trim() : '';
+      if (job.generationError && !job.outputUrl) job.status = 'ç”Ÿæˆå¤±è´¥';
+    }
+    const storedProgress = await readJsonFile(paths.generationProgress, {});
+    const derivedProgress = summarizeGenerationProgress(jobs, generationErrors?.count || 0);
+    const runningPhases = new Set(['queued', 'preparing', 'generating', 'auditing']);
+    const taskRunning = runningPhases.has(String(storedProgress?.phase || ''));
+    const generationProgress = {
+      ...derivedProgress,
+      ...(storedProgress && typeof storedProgress === 'object' ? storedProgress : {}),
+      total: derivedProgress.total,
+      current: taskRunning ? Math.min(derivedProgress.total, Math.max(0, Number(storedProgress.current) || 0)) : derivedProgress.current,
+      percent: taskRunning ? Math.max(0, Math.min(100, Number(storedProgress.percent) || 0)) : derivedProgress.percent,
+      pending: taskRunning ? Math.max(0, derivedProgress.total - (Number(storedProgress.current) || 0)) : derivedProgress.pending,
+      phase: String(storedProgress?.phase || (derivedProgress.pending || derivedProgress.failed ? 'attention' : 'completed')),
+      message: String(storedProgress?.message || '')
+    };
+    const folderRecord = {
+      folder,
+      name: entry.name,
+      source,
+      review,
+      jobs,
+      images,
+      masterExists: Boolean(masterImage),
+      templateAvailable: Boolean(source.templateFolderPath && fs.existsSync(source.templateFolderPath)),
+      legacyStatus: review.status || source.status,
+      progress: taskRunning ? (generationProgress.message || 'æ­£åœ¨å¤„ç†å¥—å›¾') : '',
+      taskRunning,
+      logs: await readOperationLogs(folder),
+      modifiedAt: stat.mtimeMs
+    };
+    folders.push({
+      folder,
+      name: entry.name,
+      images,
+      jobs,
+      source,
+      logs: folderRecord.logs,
+      masterImage,
+      masterStatus: masterImage ? 'æ¯ç‰ˆå·²ç”Ÿæˆ' : '',
+      status: deriveFolderStatus(folderRecord, config.auditMode),
+      generationProgress,
+      modifiedAt: stat.mtimeMs
+    });
+  }
+  return folders.sort((a, b) => b.modifiedAt - a.modifiedAt);
+}
+
+function titleLibraryRecordCount(library) {
+  const records = library?.records || library?.Records;
+  return Array.isArray(records) ? records.length : 0;
+}
+
+async function readFirstTitleFromWorkbook(file) {
+  const workbook = await readTitleWorkbook(file);
+  return workbook.title;
+}
+
+async function readTitleWorkbook(file) {
+  const empty = { category: '', title: '' };
+  if (!fs.existsSync(file)) return empty;
+  try {
+    const workbook = XLSX.readFile(file);
+    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = worksheet ? XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false, defval: '' }) : [];
+    const header = Array.isArray(rows?.[0]) ? rows[0].map(value => String(value || '').trim()) : [];
+    const categoryIndex = header.findIndex(value => value === 'å“ç±»' || value.toLocaleLowerCase('en-US') === 'category');
+    const titleIndex = header.findIndex(value => value === 'æ ‡é¢˜' || value.toLocaleLowerCase('en-US') === 'title');
+    const firstDataRow = rows.find((row, index) => index > 0 && Array.isArray(row) && row.some(value => String(value || '').trim()));
+    if (!firstDataRow) return empty;
+    return {
+      category: String(firstDataRow[categoryIndex >= 0 ? categoryIndex : 1] || '').trim(),
+      title: String(firstDataRow[titleIndex >= 0 ? titleIndex : 2] || '').trim()
+    };
+  } catch {
+    return empty;
+  }
+}
+
+async function writeTitlesWorkbook(file, category, titles) {
+  await fsp.mkdir(path.dirname(file), { recursive: true });
+  await fsp.rm(file, { force: true });
+  const workbook = XLSX.utils.book_new();
+  const worksheet = XLSX.utils.aoa_to_sheet(createTitleWorkbookRows(category, titles, localDisplayTimestamp()));
+  worksheet['!cols'] = [{ wch: 8 }, { wch: 16 }, { wch: 56 }, { wch: 20 }];
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'æ ‡é¢˜');
+  XLSX.writeFile(workbook, file);
+  return file;
+}
+
+async function listReadyTitleTasks() {
+  const config = await loadConfig();
+  const ready = (await reviewFolders()).filter(isFolderReadyForTitle);
+  const knownCategories = TAOBAO_CATEGORY_TEMPLATES.flatMap(item => [item.product, item.name]);
+  const tasks = [];
+  for (const item of ready) {
+    const titleFile = path.join(item.folder, 'æ ‡é¢˜.xlsx');
+    const hasTitle = fs.existsSync(titleFile);
+    const workbookTitle = hasTitle ? await readTitleWorkbook(titleFile) : { category: '', title: '' };
+    const derivedCategory = getTitleCategoryForReviewFolder({
+      folder: item.folder,
+      templateFolderPath: item.source?.templateFolderPath,
+      detailSetsPath: config.detailSetsPath,
+      knownCategories,
+      directoryExists: candidate => fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()
+    });
+    const category = workbookTitle.category || derivedCategory;
+    const library = await loadCategoryTitleLibrary(category);
+    tasks.push({
+      folder: item.folder,
+      name: item.name,
+      imageCount: item.jobs.length,
+      category,
+      libraryAvailable: titleLibraryRecordCount(library) > 0,
+      libraryRecordCount: titleLibraryRecordCount(library),
+      hasTitle,
+      titleFile,
+      firstTitle: workbookTitle.title,
+      modifiedAt: item.modifiedAt
+    });
+  }
+  return tasks;
+}
+
+async function generateTitleForTask(folderValue) {
+  const payload = folderValue && typeof folderValue === 'object' ? folderValue : { folder: folderValue };
+  const folder = String(payload.folder || '');
+  if (!folder || !fs.existsSync(folder)) throw new Error('ä»»åŠ¡æ–‡ä»¶å¤¹ä¸å­˜åœ¨');
+  const task = (await listReadyTitleTasks()).find(item => path.resolve(item.folder) === path.resolve(folder));
+  if (!task) throw new Error('ä»»åŠ¡å›¾ç‰‡å°šæœªå…¨éƒ¨é€šè¿‡ï¼Œä¸èƒ½ç”Ÿæˆæ ‡é¢˜');
+  const category = String(payload.category || task.category || '').trim();
+  const library = await loadCategoryTitleLibrary(category);
+  if (!library || titleLibraryRecordCount(library) === 0) throw new Error(`ç¼ºå°‘ ${category} å…³é”®è¯åº“ï¼Œè¯·å…ˆå¯¼å…¥ã€‚`);
+
+  const profile = await readProductProfileFile(getTaskProductProfileFile(folder)) || normalizeProductProfile({});
+  const stateFile = path.join(metadataPaths(folder).metadataFolder, 'title-generation-state.json');
+  const nextState = advanceTitleGenerationState(await readJsonFile(stateFile, {}));
+  await writeJsonFile(stateFile, nextState);
+  const title = generateTaobaoTitle(category, library, profile, nextState.Count);
+  await writeTitlesWorkbook(task.titleFile, category, [title]);
+  return { ...task, category, hasTitle: true, firstTitle: title };
+}
+
+function taobaoCategoryForTitleCategory(categoryValue) {
+  const value = String(categoryValue || '').trim();
+  if (!value) return null;
+  return TAOBAO_CATEGORY_TEMPLATES.find(item =>
+    value === item.product
+    || value === item.name
+    || item.name.includes(value)
+    || value.includes(item.product)
+  ) || null;
+}
+
+async function saveTitleForTask(payload = {}) {
+  const folder = String(payload.folder || '');
+  if (!folder || !fs.existsSync(folder)) throw new Error('ä»»åŠ¡æ–‡ä»¶å¤¹ä¸å­˜åœ¨');
+  const task = (await listReadyTitleTasks()).find(item => path.resolve(item.folder) === path.resolve(folder));
+  if (!task) throw new Error('ä»»åŠ¡å›¾ç‰‡å°šæœªå…¨éƒ¨é€šè¿‡ï¼Œä¸èƒ½ä¿å­˜æ ‡é¢˜');
+  const title = normalizeTitleText(payload.title || '').slice(0, 30);
+  if (!title) throw new Error('è¯·è¾“å…¥æ ‡é¢˜');
+  const category = String(payload.category || task.category || '').trim();
+  await writeTitlesWorkbook(task.titleFile, category, [title]);
+  return { ...task, category, hasTitle: true, firstTitle: title };
+}
+
+function defaultTaobaoPublishSettings() {
+  return {
+    version: 1,
+    token: crypto.randomBytes(24).toString('hex'),
+    categories: TAOBAO_CATEGORY_TEMPLATES.map(item => ({ ...item, defaults: { ...item.defaults } }))
+  };
+}
+
+function normalizePlainObject(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
+
+function normalizeTaobaoCustomFields(value = []) {
+  if (!Array.isArray(value)) return [];
+  return value.map(item => ({
+    label: String(item?.label || '').trim(),
+    value: String(item?.value || '').trim(),
+    type: ['select', 'click'].includes(String(item?.type || '').trim()) ? String(item.type).trim() : 'text',
+    selector: String(item?.selector || '').trim()
+  })).filter(item => item.label && item.value);
+}
+
+function normalizeTaobaoPublishDefaults(templateDefaults = {}, savedDefaults = {}) {
+  const saved = normalizePlainObject(savedDefaults);
+  return {
+    ...templateDefaults,
+    ...saved,
+    attributes: {
+      ...normalizePlainObject(templateDefaults.attributes),
+      ...normalizePlainObject(saved.attributes)
+    },
+    selectors: {
+      ...normalizePlainObject(templateDefaults.selectors),
+      ...normalizePlainObject(saved.selectors)
+    },
+    customFields: normalizeTaobaoCustomFields(saved.customFields || templateDefaults.customFields)
+  };
+}
+
+function normalizeTaobaoPublishSettings(value = {}) {
+  const incoming = Array.isArray(value.categories) ? value.categories : [];
+  const byId = new Map(incoming.map(item => [String(item.id || ''), item]));
+  return {
+    version: 1,
+    token: String(value.token || '').trim() || crypto.randomBytes(24).toString('hex'),
+    categories: TAOBAO_CATEGORY_TEMPLATES.map(template => {
+      const saved = byId.get(template.id) || {};
+      return {
+        ...template,
+        ...saved,
+        id: template.id,
+        name: template.name,
+        product: template.product,
+        defaults: normalizeTaobaoPublishDefaults(template.defaults, saved.defaults)
+      };
+    })
+  };
+}
+
+async function getTaobaoPublishSettings() {
+  const existing = await readJsonFile(taobaoPublishSettingsFile(), null);
+  const settings = normalizeTaobaoPublishSettings(existing || defaultTaobaoPublishSettings());
+  if (!existing) await writeJsonFile(taobaoPublishSettingsFile(), settings);
+  return settings;
+}
+
+async function saveTaobaoPublishSettings(payload = {}) {
+  const current = await getTaobaoPublishSettings();
+  const next = normalizeTaobaoPublishSettings({
+    ...current,
+    ...payload,
+    token: payload.token === '' ? current.token : (payload.token || current.token)
+  });
+  await writeJsonFile(taobaoPublishSettingsFile(), next);
+  return next;
+}
+
+async function readTaobaoPublishState() {
+  const state = await readJsonFile(taobaoPublishStateFile(), {});
+  return {
+    version: 1,
+    tasks: Array.isArray(state?.tasks) ? state.tasks : []
+  };
+}
+
+async function writeTaobaoPublishState(state) {
+  const clean = {
+    version: 1,
+    tasks: Array.isArray(state?.tasks) ? state.tasks.slice(-500) : []
+  };
+  await writeJsonFile(taobaoPublishStateFile(), clean);
+  return clean;
+}
+
+function taobaoPublishTaskId(folder, categoryId) {
+  return crypto.createHash('sha1').update(`${path.resolve(folder)}\u0000${categoryId}`).digest('hex').slice(0, 16);
+}
+
+async function taobaoPublishBaseTasks() {
+  const [reviews, readyTitles, settings, state] = await Promise.all([
+    reviewFolders(),
+    listReadyTitleTasks(),
+    getTaobaoPublishSettings(),
+    readTaobaoPublishState()
+  ]);
+  const titlesByFolder = new Map(readyTitles.map(item => [path.resolve(item.folder), item]));
+  const stateByFolder = new Map(state.tasks.map(item => [path.resolve(item.folder), item]));
+  return reviews.filter(review => {
+    if (!isReviewReadyForTaobao(review)) return false;
+    const titleTask = titlesByFolder.get(path.resolve(review.folder)) || null;
+    return Boolean(titleTask?.firstTitle);
+  }).map(review => {
+    const saved = stateByFolder.get(path.resolve(review.folder)) || {};
+    const titleTask = titlesByFolder.get(path.resolve(review.folder)) || null;
+    const inferredCategory = taobaoCategoryForTitleCategory(titleTask?.category);
+    const categoryId = saved.categoryId || inferredCategory?.id || '';
+    const category = settings.categories.find(item => item.id === categoryId) || null;
+    const images = classifyTaobaoImages(review.jobs || []);
+    return {
+      id: saved.id || (categoryId ? taobaoPublishTaskId(review.folder, categoryId) : ''),
+      folder: review.folder,
+      name: review.name,
+      categoryId,
+      categoryName: category?.name || '',
+      status: saved.status || (categoryId ? 'å¾…å‘å¸ƒ' : 'æœªé…ç½®'),
+      failureReason: saved.failureReason || '',
+      detail: saved.detail || {},
+      updatedAt: saved.updatedAt || '',
+      titleReady: Boolean(titleTask?.firstTitle),
+      title: titleTask?.firstTitle || '',
+      imageCount: (review.jobs || []).filter(job => job.outputUrl).length,
+      mainImageCount: images.mainImages.length,
+      ratioImageCount: images.ratioImages.length,
+      detailImageCount: images.detailImages.length,
+      modifiedAt: review.modifiedAt
+    };
+  });
+}
+
+async function taobaoPublishBlockedTasks() {
+  const [reviews, readyTitles] = await Promise.all([
+    reviewFolders(),
+    listReadyTitleTasks()
+  ]);
+  const titlesByFolder = new Map(readyTitles.map(item => [path.resolve(item.folder), item]));
+  return reviews.map(review => {
+    const titleTask = titlesByFolder.get(path.resolve(review.folder)) || null;
+    const images = classifyTaobaoImages(review.jobs || []);
+    const imagePackage = validateTaobaoImagePackage(images);
+    const reasons = [
+      ...taobaoReviewBlockers(review),
+      ...(!titleTask?.firstTitle ? ['ç¼ºå°‘æ·˜å®æ ‡é¢˜'] : []),
+      ...(!imagePackage.ok ? [`ç¼ºå°‘${imagePackage.missing.join('ã€')}`] : [])
+    ];
+    return {
+      folder: review.folder,
+      name: review.name,
+      reasons: [...new Set(reasons)],
+      titleReady: Boolean(titleTask?.firstTitle),
+      imageCount: (review.jobs || []).filter(job => job.outputUrl).length,
+      mainImageCount: images.mainImages.length,
+      ratioImageCount: images.ratioImages.length,
+      detailImageCount: images.detailImages.length,
+      modifiedAt: review.modifiedAt
+    };
+  }).filter(item => item.reasons.length);
+}
+
+async function listTaobaoPublishTasks() {
+  const [settings, tasks, blockedTasks] = await Promise.all([getTaobaoPublishSettings(), taobaoPublishBaseTasks(), taobaoPublishBlockedTasks()]);
+  return {
+    settings,
+    tasks,
+    blockedTasks
+  };
+}
+
+async function queueTaobaoPublishTask(payload = {}) {
+  const folder = String(payload.folder || '');
+  const categoryId = String(payload.categoryId || '');
+  const category = taobaoTemplateById(categoryId);
+  if (!folder || !fs.existsSync(folder)) throw new Error('ä»»åŠ¡æ–‡ä»¶å¤¹ä¸å­˜åœ¨');
+  if (!category) throw new Error('è¯·é€‰æ‹©æ·˜å®å‘å¸ƒç±»ç›®');
+  const review = (await reviewFolders()).find(item => path.resolve(item.folder) === path.resolve(folder));
+  if (!review || !isReviewReadyForTaobao(review)) throw new Error('åªæœ‰äººå·¥ç­›å›¾æ•´å¥—é€šè¿‡çš„ä»»åŠ¡å¯ä»¥å‘å¸ƒåˆ°æ·˜å®');
+  const titleTask = (await listReadyTitleTasks()).find(item => path.resolve(item.folder) === path.resolve(folder));
+  if (!titleTask?.firstTitle) throw new Error('ä»»åŠ¡ç¼ºå°‘æ ‡é¢˜ï¼Œè¯·å…ˆç”Ÿæˆæ ‡é¢˜');
+  const images = classifyTaobaoImages(review.jobs || []);
+  const imagePackage = validateTaobaoImagePackage(images);
+  if (!imagePackage.ok) throw new Error(`å‘å¸ƒä»»åŠ¡ç¼ºå°‘${imagePackage.missing.join('ã€')}`);
+  const now = new Date().toISOString();
+  const id = taobaoPublishTaskId(folder, categoryId);
+  const state = await readTaobaoPublishState();
+  const existingIndex = state.tasks.findIndex(item => item.id === id || path.resolve(item.folder || '') === path.resolve(folder));
+  const record = {
+    id,
+    folder,
+    categoryId,
+    status: 'ç­‰å¾…æ’ä»¶æ¥æ”¶',
+    failureReason: '',
+    queuedAt: now,
+    updatedAt: now,
+    attempts: existingIndex >= 0 ? Number(state.tasks[existingIndex].attempts || 0) + 1 : 1
+  };
+  if (existingIndex >= 0) state.tasks.splice(existingIndex, 1, record);
+  else state.tasks.push(record);
+  await writeTaobaoPublishState(state);
+  return (await taobaoPublishBaseTasks()).find(item => item.id === id) || record;
+}
+
+async function getTaobaoPublishPackage(id) {
+  const state = await readTaobaoPublishState();
+  const record = state.tasks.find(item => item.id === id);
+  if (!record) throw new Error('å‘å¸ƒä»»åŠ¡ä¸å­˜åœ¨');
+  const settings = await getTaobaoPublishSettings();
+  const category = settings.categories.find(item => item.id === record.categoryId);
+  if (!category) throw new Error('å‘å¸ƒç±»ç›®ä¸å­˜åœ¨');
+  const review = (await reviewFolders()).find(item => path.resolve(item.folder) === path.resolve(record.folder));
+  if (!review || !isReviewReadyForTaobao(review)) throw new Error('ä»»åŠ¡ä¸å†æ»¡è¶³å‘å¸ƒæ¡ä»¶');
+  const titleTask = (await listReadyTitleTasks()).find(item => path.resolve(item.folder) === path.resolve(record.folder));
+  if (!titleTask?.firstTitle) throw new Error('ä»»åŠ¡ç¼ºå°‘æ ‡é¢˜');
+  const images = classifyTaobaoImages(review.jobs || []);
+  const imagePackage = validateTaobaoImagePackage(images);
+  if (!imagePackage.ok) throw new Error(`å‘å¸ƒä»»åŠ¡ç¼ºå°‘${imagePackage.missing.join('ã€')}`);
+  return {
+    id: record.id,
+    folder: record.folder,
+    name: review.name,
+    categoryId: record.categoryId,
+    category,
+    title: titleTask.firstTitle,
+    images,
+    createdAt: record.queuedAt || record.updatedAt || new Date().toISOString()
+  };
+}
+
+async function claimTaobaoPublishTask(payload = {}) {
+  const settings = await getTaobaoPublishSettings();
+  if (String(payload.token || '') !== settings.token) throw new Error('æ·˜å®å‘å¸ƒåŠ©æ‰‹ä»¤ç‰Œæ— æ•ˆ');
+  const state = await readTaobaoPublishState();
+  const record = state.tasks.find(item => item.status === 'ç­‰å¾…æ’ä»¶æ¥æ”¶');
+  if (!record) return null;
+  const now = new Date().toISOString();
+  record.status = 'æ’ä»¶å·²æ¥æ”¶';
+  record.extensionId = String(payload.extensionId || '');
+  record.updatedAt = now;
+  await writeTaobaoPublishState(state);
+  return getTaobaoPublishPackage(record.id);
+}
+
+async function updateTaobaoPublishStatus(id, payload = {}) {
+  const settings = await getTaobaoPublishSettings();
+  if (payload.token != null && String(payload.token || '') !== settings.token) throw new Error('æ·˜å®å‘å¸ƒåŠ©æ‰‹ä»¤ç‰Œæ— æ•ˆ');
+  const allowed = new Set(['ç­‰å¾…æ’ä»¶æ¥æ”¶', 'æ’ä»¶å·²æ¥æ”¶', 'æ­£åœ¨æ‰“å¼€æ·˜å®é¡µé¢', 'æ­£åœ¨å¡«å†™å­—æ®µ', 'æ­£åœ¨ä¸Šä¼ å›¾ç‰‡', 'æ­£åœ¨ä¿å­˜è‰ç¨¿', 'å·²ä¿å­˜è‰ç¨¿', 'å¤±è´¥']);
+  const state = await readTaobaoPublishState();
+  const record = state.tasks.find(item => item.id === id);
+  if (!record) throw new Error('å‘å¸ƒä»»åŠ¡ä¸å­˜åœ¨');
+  const status = String(payload.status || record.status);
+  if (allowed.has(status)) record.status = status;
+  record.failureReason = String(payload.failureReason || payload.error || '');
+  record.detail = payload.detail && typeof payload.detail === 'object' ? payload.detail : record.detail || {};
+  record.updatedAt = new Date().toISOString();
+  await writeTaobaoPublishState(state);
+  return record;
+}
+
+async function findReviewJob(folder, relativePath) {
+  const source = await readSourceMetadata(folder);
+  if (!source.templateFolderPath || !fs.existsSync(source.templateFolderPath)) throw new Error('ä»»åŠ¡ç¼ºå°‘å¥—å›¾æ–‡ä»¶å¤¹');
+  const wanted = String(relativePath || '').replaceAll('\\', '/').toLocaleLowerCase('zh-CN');
+  const selectedPaths = new Set((source.templateRelativePaths || []).map(value => String(value).replaceAll('\\', '/').toLocaleLowerCase('zh-CN')));
+  const job = (await buildTemplateJobs(source.templateFolderPath, folder)).find(item => {
+    const normalized = item.relativePath.replaceAll('\\', '/').toLocaleLowerCase('zh-CN');
+    return normalized === wanted && (!selectedPaths.size || selectedPaths.has(normalized));
+  });
+  if (!job) throw new Error(`æœªæ‰¾åˆ°å¥—å›¾å›¾ç‰‡ï¼š${relativePath}`);
+  return job;
+}
+
+async function resolveReviewReferenceResultPath(folder, relativePath) {
+  const value = String(relativePath || '').trim();
+  if (!value) return '';
+  const referenceJob = await findReviewJob(folder, value);
+  if (!referenceJob.outputPath || !fs.existsSync(referenceJob.outputPath)) {
+    throw new Error(`å‚è€ƒç»“æœå›¾å°šæœªç”Ÿæˆï¼š${referenceJob.relativePath}`);
+  }
+  return referenceJob.outputPath;
+}
+
+async function setTemplateManualStatus(payload) {
+  const folder = String(payload?.folder || '');
+  if (!folder || !fs.existsSync(folder)) throw new Error('ä»»åŠ¡æ–‡ä»¶å¤¹ä¸å­˜åœ¨');
+  const job = await findReviewJob(folder, payload?.relativePath);
+  const status = payload?.status === 'äººå·¥ä¸é€šè¿‡' ? 'äººå·¥ä¸é€šè¿‡' : 'äººå·¥é€šè¿‡';
+  const updatedAt = new Date().toISOString();
+  const paths = metadataPaths(folder, job.relativePath);
+  await writeJsonFile(paths.manualReview, toWpfManualReviewState(status, updatedAt));
+  const reviewPaths = metadataPaths(folder);
+  const current = normalizeReviewMetadata(await readJsonFile(reviewPaths.macReview, {}));
+  const images = current.images.filter(image => image.relativePath.replaceAll('\\', '/').toLocaleLowerCase('zh-CN') !== job.relativePath.replaceAll('\\', '/').toLocaleLowerCase('zh-CN'));
+  images.push({ relativePath: job.relativePath, outputPath: job.outputPath, outputExists: fs.existsSync(job.outputPath), manualStatus: status, reviewedAt: updatedAt });
+  await writeJsonFile(reviewPaths.macReview, toMacReviewMetadata(current, { images, reviewedAt: updatedAt }));
+  await addOperationLog(folder, `${status === 'äººå·¥é€šè¿‡' ? 'äººå·¥æ ‡è®°é€šè¿‡' : 'äººå·¥æ ‡è®°ä¸é€šè¿‡'}ï¼š${job.relativePath}`);
+  return true;
+}
+
+async function approveReviewFolder(folder, allowSkip = false) {
+  if (!folder || !fs.existsSync(folder)) throw new Error('ä»»åŠ¡æ–‡ä»¶å¤¹ä¸å­˜åœ¨');
+  const source = await readSourceMetadata(folder);
+  if (!source.templateFolderPath || !fs.existsSync(source.templateFolderPath)) {
+    await writeJsonFile(metadataPaths(folder).macReview, { status: 'å·²é€šè¿‡', reviewedAt: new Date().toISOString() });
+    await addOperationLog(folder, 'äººå·¥é€šè¿‡ä»»åŠ¡');
+    return { approved: true, changed: 0 };
+  }
+  const selectedPaths = new Set((source.templateRelativePaths || []).map(value => String(value).replaceAll('\\', '/').toLocaleLowerCase('zh-CN')));
+  const jobs = (await buildTemplateJobs(source.templateFolderPath, folder))
+    .filter(job => !selectedPaths.size || selectedPaths.has(job.relativePath.replaceAll('\\', '/').toLocaleLowerCase('zh-CN')));
+  const actionableJobs = [];
+  for (const job of jobs) {
+    const { summary } = await templateAnalysisForJob(job);
+    if (summary.action !== 'skip_copy') actionableJobs.push(job);
+  }
+  const missing = actionableJobs.filter(job => !fs.existsSync(job.outputPath));
+  if (missing.length) {
+    await addOperationLog(folder, `æ‰¹é‡é€šè¿‡ä»»åŠ¡åˆ—è¡¨ï¼šè¿˜æœ‰ ${missing.length} å¼ æœªç”Ÿæˆï¼Œæœªå½’æ¡£`);
+    if (allowSkip) return { approved: false, missing: missing.length };
+    throw new Error(`è¿˜æœ‰ ${missing.length} å¼ å¥—å›¾æœªç”Ÿæˆ`);
+  }
+  const updatedAt = new Date().toISOString();
+  for (const job of actionableJobs) await writeJsonFile(metadataPaths(folder, job.relativePath).manualReview, toWpfManualReviewState('äººå·¥é€šè¿‡', updatedAt));
+  const images = actionableJobs.map(job => ({ relativePath: job.relativePath, outputPath: job.outputPath, outputExists: true, manualStatus: 'äººå·¥é€šè¿‡', reviewedAt: updatedAt }));
+  await writeJsonFile(metadataPaths(folder).macReview, toMacReviewMetadata({ status: 'å·²é€šè¿‡' }, { status: 'å·²é€šè¿‡', reviewedAt: updatedAt, images }));
+  await addOperationLog(folder, `æ‰¹é‡é€šè¿‡ä»»åŠ¡åˆ—è¡¨ï¼šå·²æ ‡è®° ${actionableJobs.length} å¼ å›¾ç‰‡ä¸ºé€šè¿‡ï¼Œå¹¶å½’æ¡£ä»»åŠ¡`);
+  return { approved: true, changed: actionableJobs.length };
+}
+
+async function batchApproveReviewFolders(folders) {
+  const results = [];
+  for (const folder of [...new Set((folders || []).map(String))]) results.push({ folder, ...(await approveReviewFolder(folder, true)) });
+  return results;
+}
+
+async function deleteReviewFolders(folders) {
+  const outputRoot = path.resolve((await loadConfig()).outputPath || currentDefaultOutputRoot());
+  const existing = [...new Set((folders || []).map(String))].filter(folder => {
+    const resolved = path.resolve(folder);
+    return fs.existsSync(resolved) && resolved !== outputRoot && isSameOrChildPath(outputRoot, resolved);
+  });
+  let deleted = 0;
+  for (const folder of existing) {
+    await fsp.rm(folder, { recursive: true, force: true });
+    deleted += 1;
+  }
+  return deleted;
+}
+
+
+async function resetConfig() {
+  await fsp.rm(configFile(), { force: true });
+  return saveConfig(defaultConfig());
+}
+
+async function generateFree(payload = {}, options = {}) {
+  if (!payload.sourcePath || !fs.existsSync(payload.sourcePath)) throw new Error('è¯·é€‰æ‹©æºå›¾ç‰‡');
+  if (!String(payload.prompt || '').trim()) throw new Error('è¯·è¾“å…¥ç”Ÿå›¾æç¤ºè¯');
+  const config = await loadConfig();
+  const folder = path.join(config.outputPath || currentDefaultOutputRoot(), 'è‡ªç”±ç”Ÿå›¾');
+  await fsp.mkdir(folder, { recursive: true });
+  const outputPath = path.join(folder, `è‡ªç”±ç”Ÿå›¾_${localFileTimestamp()}.png`);
+  await fsp.writeFile(outputPath, await generateImage(String(payload.prompt).trim(), [payload.sourcePath], {
+    size: config.imageSize || '1024x1024',
+    quality: config.imageQuality || 'auto',
+    billingDescription: 'è‡ªç”±ç”Ÿå›¾',
+    billingReference: path.basename(payload.sourcePath),
+    billingOnceKey: billingOnceKey('image:free', payload.sourcePath, String(payload.prompt).trim()),
+    signal: options.signal
+  }));
+  return { outputPath, url: imageUrl(outputPath) };
+}
+
+async function saveTitleSetup(payload = {}) {
+  const library = await loadTitleLibrary();
+  if (!library) throw new Error('è¯·å…ˆå¯¼å…¥å…³é”®è¯è¡¨');
+  library.prefixRoots = parseTitlePrefixRoots(payload.prefixes || '');
+  library.prefixRoot = library.prefixRoots[0] || '';
+  library.requiredRoots = parseTitlePrefixRoots(payload.requiredRoots || []);
+  if (!library.prefixRoots.length) throw new Error('è‡³å°‘å¡«å†™ä¸€ä¸ªæ ‡é¢˜å¼€å¤´è¯æ ¹');
+  await saveCategoryTitleLibrary(library);
+  return saveTitleLibrary(library);
+}
+
+async function generateTitles(payload = {}) {
+  const library = await loadTitleLibrary();
+  if (!library) throw new Error('è¯·å…ˆå¯¼å…¥å…³é”®è¯è¡¨');
+  const prefixRoots = parseTitlePrefixRoots(payload.prefixes || library.prefixRoots || []);
+  const requiredRoots = parseTitlePrefixRoots(payload.requiredRoots || library.requiredRoots || []);
+  if (!prefixRoots.length) throw new Error('è¯·å…ˆå¡«å†™è‡³å°‘ä¸€ä¸ªæ ‡é¢˜å¼€å¤´è¯æ ¹');
+  library.prefixRoots = prefixRoots;
+  library.prefixRoot = prefixRoots[0];
+  library.requiredRoots = requiredRoots;
+  const generationState = await loadTitleGenerationState();
+  generationState.nextIndexes ||= generationState.NextIndexes || {};
+  const key = titleGenerationStateKey(library, prefixRoots);
+  const startVariantIndex = Number(generationState.nextIndexes[key]) > 0 ? Number(generationState.nextIndexes[key]) : 1;
+  const generated = generateStandaloneTitles({ library, prefixRoots, count: payload.count, startVariantIndex });
+  generationState.nextIndexes[key] = generated.nextVariantIndex;
+  await saveTitleGenerationState(generationState);
+  await saveCategoryTitleLibrary(library);
+  await saveTitleLibrary(library);
+  return generated.titles;
+}
+
+async function exportTitles(payload = {}) {
+  const titles = (payload.titles || []).map(String).filter(Boolean);
+  if (!titles.length) throw new Error('è¯·å…ˆé€‰æ‹©è¦å¯¼å‡ºçš„æ ‡é¢˜');
+  const fileName = `${safeFileName(payload.category || 'æ‰¹é‡')}_æ ‡é¢˜_${localFileTimestamp()}.xlsx`;
+  const file = path.join(app.getPath('downloads'), fileName);
+  await writeTitlesWorkbook(file, payload.category || '', titles);
+  return file;
+}
+
+async function initializeRuntime() {
+  await Promise.all([
+    fsp.mkdir(currentUserDataRoot(), { recursive: true }),
+    fsp.mkdir(currentDefaultOutputRoot(), { recursive: true }),
+    fsp.mkdir(path.join(currentWorkspaceRoot(), 'exports'), { recursive: true })
+  ]);
+  await Promise.all([loadConfig(), loadApiSettings()]);
+}
+
+const runtimeExports = {
+  DATA_ROOT,
+  analyzeProductProfile,
+  analyzeTemplateItemWithReference,
+  analyzeTemplateItems,
+  analyzeTemplateFolder,
+  apiSettingsStatus,
+  approveReviewFolder,
+  batchApproveReviewFolders,
+  billing,
+  deleteTemplateFolder,
+  deleteReviewFolders,
+  exportTitles,
+  fileFromToken,
+  fileToken,
+  generateFree,
+  generateTask,
+  generateTemplateTaskMaster,
+  generateTemplateSetForFolder,
+  generateTitleForTask,
+  generateTitles,
+  getTaobaoPublishPackage,
+  getImageSchedulerSnapshot,
+  getTaobaoPublishSettings,
+  getTemplatePreparation,
+  imageUrl,
+  importTitleLibrary,
+  initializeRuntime,
+  isOutputPath,
+  isWorkspacePath,
+  listReadyTitleTasks,
+  listTaobaoPublishTasks,
+  loadModelPackageSettings,
+  normalizeTaobaoPublishSettings,
+  listTemplateFolders,
+  listTemplates,
+  loadApiSettings,
+  loadConfig,
+  loadPromptSettings,
+  loadTemplateProductProfile,
+  loadTitleLibrary,
+  planTemplateOutputJobs,
+  publicTitleLibrary,
+  runWithWorkspace,
+  prepareTemplateFolder,
+  prepareTemplateStructure,
+  regenerateMasterForReviewFolder,
+  regenerateSingleTemplate,
+  resetConfig,
+  resetPromptSetting,
+  reviewFolders,
+  saveConfig,
+  saveApiSettings,
+  saveSelectedModelPackage,
+  publicApiConcurrencySettings,
+  queueTaobaoPublishTask,
+  claimTaobaoPublishTask,
+  savePromptSetting,
+  saveTaobaoPublishSettings,
+  saveTitleForTask,
+  canAdminViewPromptSettings,
+  saveTemplateConfiguration,
+  saveTemplateProductProfile,
+  saveTitleSetup,
+  scanImages,
+  setTemplateManualStatus,
+  updateTaobaoPublishStatus,
+  testAnalysisApi,
+  testApiSettings,
+  validateTemplateOutputLayout
+};
+
+Object.defineProperties(runtimeExports, {
+  OUTPUT_ROOT: { enumerable: true, get: currentDefaultOutputRoot },
+  USER_DATA_ROOT: { enumerable: true, get: currentUserDataRoot },
+  WORKSPACE_ID: { enumerable: true, get: currentWorkspaceId },
+  WORKSPACE_ROOT: { enumerable: true, get: currentWorkspaceRoot }
+});
+
+module.exports = runtimeExports;
