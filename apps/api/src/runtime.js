@@ -1627,7 +1627,10 @@ async function detectTemplateLightCabinetPanels(file) {
   const candidate = new Uint8Array(totalPixels);
   for (let y = 0; y < height; y += 1) {
     const yNorm = y / height;
-    if (yNorm < 0.12 || yNorm > 0.9) continue;
+    // Cropped detail shots often contain valid drawer fronts touching the top
+    // or bottom of the slice. Keep only a tiny outer guard instead of dropping
+    // the first/last tenth of the image.
+    if (yNorm < 0.01 || yNorm > 0.99) continue;
     for (let x = 0; x < width; x += 1) {
       const index = y * width + x;
       const offset = index * 3;
@@ -1676,17 +1679,15 @@ async function detectTemplateLightCabinetPanels(file) {
     const widthRatio = boxWidth / width;
     const heightRatio = boxHeight / height;
     const aspect = boxWidth / Math.max(1, boxHeight);
-    const touchesImageEdge = x0 <= 1 || y0 <= 1 || x1 >= width - 2 || y1 >= height - 2;
     const darkBorderRatio = countDarkBorderPixels(data, width, height, { x0, y0, x1, y1 });
     if (
-      !touchesImageEdge
-      && areaRatio >= 0.0018
-      && areaRatio <= 0.16
+      areaRatio >= 0.0018
+      && areaRatio <= 0.55
       && fillRatio >= 0.45
       && widthRatio >= 0.035
       && heightRatio >= 0.04
-      && widthRatio <= 0.75
-      && heightRatio <= 0.65
+      && widthRatio <= 0.92
+      && heightRatio <= 0.88
       && aspect >= 0.28
       && aspect <= 5
       && brightness / Math.max(1, area) <= 236
@@ -1696,14 +1697,19 @@ async function detectTemplateLightCabinetPanels(file) {
     }
   }
 
+  const normalizedEdge = (value, total, upper = false) => {
+    if (!upper && value <= Math.max(3, total * 0.02)) return 0;
+    if (upper && value >= total - Math.max(3, total * 0.02)) return 1;
+    return value / total;
+  };
   return components.map((box, index) => ({
     id: `local-panel-${index + 1}`,
     label: `本地检测柜门/抽屉面板 ${index + 1}`,
     polygon: [
-      [box.x0 / width, box.y0 / height],
-      [(box.x1 + 1) / width, box.y0 / height],
-      [(box.x1 + 1) / width, (box.y1 + 1) / height],
-      [box.x0 / width, (box.y1 + 1) / height]
+      [normalizedEdge(box.x0, width), normalizedEdge(box.y0, height)],
+      [normalizedEdge(box.x1 + 1, width, true), normalizedEdge(box.y0, height)],
+      [normalizedEdge(box.x1 + 1, width, true), normalizedEdge(box.y1 + 1, height, true)],
+      [normalizedEdge(box.x0, width), normalizedEdge(box.y1 + 1, height, true)]
     ],
     surfaceState: '外侧可见'
   }));
@@ -2615,7 +2621,11 @@ function insetPrintablePolygon(polygon, width, height, insetPixels = 3) {
     const dy = (centerY - y) * height;
     const distance = Math.hypot(dx, dy);
     const ratio = distance > 0 ? Math.min(1, insetPixels / distance) : 0;
-    return [x + (centerX - x) * ratio, y + (centerY - y) * ratio];
+    const insetX = x + (centerX - x) * ratio;
+    const insetY = y + (centerY - y) * ratio;
+    // A surface cut by the source crop must remain editable through that crop
+    // edge, otherwise a visible strip of the old blank panel is left behind.
+    return [x <= 0.005 || x >= 0.995 ? x : insetX, y <= 0.005 || y >= 0.995 ? y : insetY];
   });
 }
 
@@ -4812,6 +4822,7 @@ const runtimeExports = {
   compositeTemplateEditResult,
   createTemplateEditMask,
   deleteTemplateFolder,
+  detectTemplateLightCabinetPanels,
   deleteReviewFolders,
   exportTitles,
   fileFromToken,
