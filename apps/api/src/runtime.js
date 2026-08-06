@@ -2633,6 +2633,12 @@ async function createTemplateEditMask(job, analysis) {
   const summary = parseTemplateAnalysisSummary(analysis);
   if (resolveGenerationAction(analysis) !== 'replace_print') return '';
   const surfaces = Array.isArray(summary.printableSurfaces) ? summary.printableSurfaces : [];
+  // Local colour/component detection is useful for recognizing that a cabinet
+  // exists, but it cannot prove that every open drawer, cropped face or
+  // multi-grid instance was found. A partial mask makes image-2 leave obvious
+  // blank panels. Only semantic/AI polygons are precise enough to constrain
+  // the edit request; local surfaces fall back to locked-canvas generation.
+  if (surfaces.length && surfaces.every(surface => String(surface?.id || '').startsWith('local-panel-'))) return '';
   const polygons = surfaces
     .map(surface => Array.isArray(surface?.polygon) ? surface.polygon : [])
     .filter(polygon => polygon.length >= 3 && printableSurfaceArea(polygon) >= 0.003 && printableSurfaceArea(polygon) <= 0.72);
@@ -3588,6 +3594,7 @@ async function generateTemplateJob(job, source, config, options = {}) {
     prompt += '\n\n本次输入图顺序：第一张是不可重构的当前套图模板图，第二张母版产品图仅用于参考印花在面板上的外观与落位，第三张原始印花图用于核对图案细节。不得迁移母版的柜体结构、尺寸、比例、视角或场景；不得替换或重新生成第一张图中的家具。最终结果只允许修改第一张图现有柜门或抽屉正面蒙版内的表面纹理，其余画布必须保持原图。';
     prompt += '\n\n硬性质量要求：印花只能落在柜门或抽屉的正面可替换面板内部，必须完整保留家具黑色外框、黑色门缝/分隔线、黑色侧板、黑色台面、黑色底边、柜脚、把手、阴影和所有场景物品。不得让印花跨过或覆盖任何黑色边框黑边，不得把黑框染成印花，不得延伸到地面、墙面、台面、咖啡机、杯子、人物或其他道具。';
     prompt += '\n\nPIXEL_LOCKED_SURFACE_EDIT: The first image is the immutable final canvas, not a scene to recreate. Do not transplant, replace, resize, reshape, move or regenerate the cabinet or any object. Keep the exact original cabinet silhouette, dimensions, perspective, drawer count, panel seams, crop and coordinates. The master image is only a reference for print appearance and placement; it is never a source of furniture geometry. Edit only the already-visible front-panel surface inside the transparent mask. Every pixel outside the transparent mask is out of scope and must remain identical to the first image. Never add canvas, padding, white space, or outpaint beyond the original frame.';
+    prompt += '\n\nCOMPLETE_VISIBLE_FACE_COVERAGE: Apply the print to every visible exterior drawer front and cabinet-door face in the first image, including narrow fronts of open drawers, partially cropped faces, panels split by slice boundaries, and every separate cabinet occurrence inside a multi-grid page. Cover each visible face from edge to edge while preserving seams, frames, handles, perspective and occlusion. Do not leave any original blank/white front panel unchanged merely because the cabinet is open, cropped, repeated, small, or divided across cards.';
     if (isComplexTemplatePrintAnalysis(analysis, job)) {
       prompt += `\n\n${flagshipComplexTemplatePrintPrompt()}`;
     }
