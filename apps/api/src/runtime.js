@@ -1613,7 +1613,7 @@ function countDarkBorderPixels(data, width, height, box) {
   return total ? dark / total : 0;
 }
 
-async function detectTemplateHasLightCabinetPanels(file) {
+async function detectTemplateLightCabinetPanels(file) {
   const { data, info } = await sharp(file, { failOn: 'none', animated: false, limitInputPixels: 120_000_000 })
     .rotate()
     .resize({ width: 360, height: 360, fit: 'inside', withoutEnlargement: true })
@@ -1696,19 +1696,29 @@ async function detectTemplateHasLightCabinetPanels(file) {
     }
   }
 
-  return components.length > 0;
+  return components.map((box, index) => ({
+    id: `local-panel-${index + 1}`,
+    label: `本地检测柜门/抽屉面板 ${index + 1}`,
+    polygon: [
+      [box.x0 / width, box.y0 / height],
+      [(box.x1 + 1) / width, box.y0 / height],
+      [(box.x1 + 1) / width, (box.y1 + 1) / height],
+      [box.x0 / width, (box.y1 + 1) / height]
+    ],
+    surfaceState: '外侧可见'
+  }));
 }
 
 async function createVisualFallbackTemplateAnalysis(job, reason) {
-  const hasLightCabinetPanels = await detectTemplateHasLightCabinetPanels(job.templatePath).catch(() => false);
-  if (!hasLightCabinetPanels) return null;
+  const printableSurfaces = await detectTemplateLightCabinetPanels(job.templatePath).catch(() => []);
+  if (!printableSurfaces.length) return null;
   const analysis = createManualTemplateAnalysis({
     action: 'replace_print',
     reason,
     replaceArea: 'Auto-detected cabinet product image that should use the master product generation flow',
     forbiddenArea: 'text, dimension marks, background, frame, seams, handles, legs, shadows and props'
   });
-  return analysis.action === 'replace_print' ? analysis : null;
+  return analysis.action === 'replace_print' ? { ...analysis, printableSurfaces } : null;
 }
 
 function shouldUsePowerShellApiFallback(url, error) {
@@ -3089,12 +3099,14 @@ async function analyzeTemplateJob(job, options = {}) {
   }
   const cache = templateCachePaths(job.templateRoot, job.relativePath);
   let validated = validateTemplateAnalysis(analysisText, { source: 'ai' });
-  if (validated.action === 'manual_check' || validated.action === 'copy_original') {
+  if (validated.action === 'manual_check' || validated.action === 'copy_original' || (validated.action === 'replace_print' && !validated.printableSurfaces?.length)) {
     const visualFallback = await createVisualFallbackTemplateAnalysis(
       job,
       validated.action === 'copy_original'
         ? 'AI marked this template as copy_original, but local visual panel detection found executable light cabinet panels.'
-        : 'AI marked this template for manual check; local visual panel detection found executable light cabinet panels.'
+        : validated.action === 'replace_print'
+          ? 'AI selected replace_print without panel coordinates; local visual panel detection supplied conservative editable polygons.'
+          : 'AI marked this template for manual check; local visual panel detection found executable light cabinet panels.'
     );
     if (visualFallback) validated = visualFallback;
   }
@@ -3245,14 +3257,30 @@ async function ensureTemplateAnalysisForJob(job) {
     && resolveGenerationAction(current.analysis) === 'replace_print'
     && !current.summary.printableSurfaces?.length;
   if (current.cached && !needsEditableSurfaces) return current;
-  const result = await analyzeTemplateJobWithRetry(job, 3, async () => {}, {
-    forceReplacePrint: needsEditableSurfaces
-  });
+  if (needsEditableSurfaces) {
+    const localFallback = await createVisualFallbackTemplateAnalysis(
+      job,
+      'Existing replace_print analysis omitted panel coordinates; local visual detection supplied conservative editable polygons.'
+    );
+    if (localFallback?.printableSurfaces?.length) {
+      await writeTemplateAnalysisCache({
+        cacheFile: current.cache.analysisFile,
+        templateRoot: job.templateRoot,
+        templateImagePath: job.templatePath,
+        relativeTemplatePath: job.relativePath,
+        analysis: JSON.stringify(localFallback),
+        manualOverride: false
+      });
+      return templateAnalysisForJob(job);
+    }
+    // Missing polygons must never block an otherwise executable generation.
+    // The locked-canvas prompt still applies; only deterministic mask
+    // compositing is skipped for this image.
+    return current;
+  }
+  const result = await analyzeTemplateJobWithRetry(job);
   if (!result.ok) throw new Error(result.error || 'AI 分析失败');
   const refreshed = await templateAnalysisForJob(job);
-  if (resolveGenerationAction(refreshed.analysis) === 'replace_print' && !refreshed.summary.printableSurfaces?.length) {
-    throw new Error(`无法获得可靠的柜门/抽屉面板编辑区域：${job.relativePath}`);
-  }
   return refreshed;
 }
 
