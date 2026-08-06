@@ -64,3 +64,20 @@ test('local panel detection keeps cabinet surfaces cropped by an image edge', as
   assert.ok(surfaces.length >= 1);
   assert.equal(surfaces.some(surface => surface.polygon.some(([, y]) => y === 1)), true);
 });
+
+test('partial local detections never constrain open, cropped or multi-grid generation', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'caishen-local-mask-bypass-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const templatePath = path.join(root, 'open-drawers.png');
+  await sharp({ create: { width: 100, height: 120, channels: 3, background: '#ddd8cf' } }).png().toFile(templatePath);
+  const analysis = JSON.stringify({
+    version: 11,
+    processingMode: 'replace_print',
+    printableSurfaces: [{
+      id: 'local-panel-1',
+      label: 'only one detected drawer front',
+      polygon: [[0.3, 0.2], [0.7, 0.2], [0.7, 0.35], [0.3, 0.35]]
+    }]
+  });
+  assert.equal(await runtime.createTemplateEditMask({ templatePath, templateRoot: root, relativePath: '详情/open.png' }, analysis), '');
+});
