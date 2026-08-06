@@ -189,6 +189,21 @@ function analysisText(root, ...names) {
   return '';
 }
 
+function inferAiFallbackProcessingMode({ understanding = '', imageRole = '', surfaces = [] } = {}) {
+  const semanticText = `${understanding} ${imageRole}`.trim().toLowerCase();
+  const genuinelyUnreadable = /图像损坏|图片损坏|无法辨认|无法判断|完全不可判断|主体不可见|严重模糊|没有可读取|无可读取|未提供可靠|分析失败|corrupt|unreadable|no readable|cannot determine|impossible to identify/.test(semanticText);
+  if (genuinelyUnreadable || !semanticText) return 'manual_check';
+  const explicitlyNoCabinet = /无家具|没有家具|无商品|没有商品|无柜体|没有柜体|无家具实物|没有家具实物|no (?:cabinet|furniture|product)|without (?:a )?(?:cabinet|furniture|product)/.test(semanticText);
+  if (explicitlyNoCabinet) return 'copy_original';
+  if (surfaces.length || /柜|抽屉|门板|面板|斗柜|衣橱|衣柜|cabinet|drawer|sideboard|dresser|wardrobe|cupboard/.test(semanticText)) {
+    return 'replace_print';
+  }
+  // A readable page without a cabinet/product surface still belongs in the
+  // output set. Keeping the original is safer and executable; it should not
+  // be sent to operators merely because the model chose an uncertain flag.
+  return 'copy_original';
+}
+
 function validateTemplateAnalysis(value, options = {}) {
   let root;
   try {
@@ -209,8 +224,17 @@ function validateTemplateAnalysis(value, options = {}) {
   if (source === 'ai' && sourceVersion !== TEMPLATE_CACHE_VERSION) {
     processingMode = 'manual_check';
     reason = `AI 分析契约版本无效，需要 V${TEMPLATE_CACHE_VERSION}，请人工确认。`;
+  } else if (source === 'ai' && processingMode === 'manual_check') {
+    processingMode = inferAiFallbackProcessingMode({
+      understanding,
+      imageRole: analysisText(root, 'imageRole', 'image_role', 'category'),
+      surfaces
+    });
   }
-  if (root.needs_manual_check === true) processingMode = 'manual_check';
+  // `needs_manual_check` is advisory for AI responses. It must not override
+  // an executable action or contradict the model's own readable description.
+  // Manual/operator-authored results keep their explicit override semantics.
+  if (source !== 'ai' && root.needs_manual_check === true) processingMode = 'manual_check';
   const includeInOutput = processingMode !== 'exclude';
   const replaceArea = processingMode === 'replace_print'
     ? analysisText(root, 'printableArea', 'printable_area', 'replace_area') || surfaces.map(surface => surface.label).join('、') || '使用母版商品生成当前套图页面'
@@ -490,7 +514,10 @@ async function readTemplateAnalysisCache({ cacheFile, templateImagePath }) {
   if (version < TEMPLATE_CACHE_VERSION && !manualOverride) {
     return { valid: false, analysis: '', reason: 'unsupported-cache-version', cache };
   }
-  return { valid: true, analysis, reason: 'ok', cache };
+  const effectiveAnalysis = manualOverride
+    ? analysis
+    : serializeTemplateAnalysis(validateTemplateAnalysis(analysis, { source: 'ai' }));
+  return { valid: true, analysis: effectiveAnalysis, reason: 'ok', cache };
 }
 
 async function readValidTemplateAnalysisCache(options) {

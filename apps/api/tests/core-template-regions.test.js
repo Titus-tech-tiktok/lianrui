@@ -98,7 +98,7 @@ test('AI 不能自动排除图片且无可印花表面时默认保留原图', ()
   assert.equal(excluded.preserveAreas, '整张原图');
 });
 
-test('AI 缺失动作和旧版本仍需人工确认，旧矩形区域不再驱动换印花', () => {
+test('AI 缺失或未知动作时按图片理解归类，旧版本仍需人工确认', () => {
   const surface = {
     id: 'front',
     label: '正面白色柜门',
@@ -117,13 +117,13 @@ test('AI 缺失动作和旧版本仍需人工确认，旧矩形区域不再驱�
   };
 
   const missingAction = validateTemplateAnalysis(base, { source: 'ai' });
-  assert.equal(missingAction.action, 'manual_check');
+  assert.equal(missingAction.action, 'replace_print');
 
   const unknownAction = validateTemplateAnalysis({
     ...base,
     processingMode: 'decorate_cabinet'
   }, { source: 'ai' });
-  assert.equal(unknownAction.action, 'manual_check');
+  assert.equal(unknownAction.action, 'replace_print');
 
   const oldVersion = validateTemplateAnalysis({
     ...base,
@@ -142,6 +142,50 @@ test('AI 缺失动作和旧版本仍需人工确认，旧矩形区域不再驱�
   assert.equal(legacyRectangle.action, 'replace_print');
   assert.equal(legacyRectangle.printableSurfaces.length, 0);
   assert.equal(legacyRectangle.replace_regions.length, 0);
+});
+
+test('AI 已识别柜体时不允许 uncertain 标志覆盖为人工确认', () => {
+  const result = validateTemplateAnalysis({
+    version: TEMPLATE_CACHE_VERSION,
+    imageRole: '场景图',
+    processingMode: 'manual_check',
+    needs_manual_check: true,
+    confidence: 0.91,
+    imageUnderstanding: '室内场景中的五斗抽屉柜，多个抽屉半开，画面主体是商品展示并带促销文字。',
+    printableSurfaces: [],
+    preserveAreas: '文字、地毯、窗帘、抽屉内收纳物、柜体开合结构和背景'
+  }, { source: 'ai' });
+  assert.equal(result.action, 'replace_print');
+  assert.equal(result.needs_manual_check, false);
+});
+
+test('AI 已识别纯文字说明页时从人工确认收敛为保留原图', () => {
+  const result = validateTemplateAnalysis({
+    version: TEMPLATE_CACHE_VERSION,
+    imageRole: '纯文字页',
+    processingMode: 'manual_check',
+    needs_manual_check: true,
+    confidence: 0.9,
+    imageUnderstanding: '整页为售前服务说明与承诺文案，无家具实物展示，也无可印花柜门或面板。',
+    printableSurfaces: [],
+    preserveAreas: '标题文字、信息卡片、背景纸纹和图标'
+  }, { source: 'ai' });
+  assert.equal(result.action, 'copy_original');
+  assert.equal(result.needs_manual_check, false);
+  assert.equal(result.preserveAreas, '整张原图');
+});
+
+test('只有图片确实损坏或主体不可判断时保留人工确认', () => {
+  const result = validateTemplateAnalysis({
+    version: TEMPLATE_CACHE_VERSION,
+    imageRole: '不确定',
+    processingMode: 'manual_check',
+    needs_manual_check: true,
+    imageUnderstanding: '图片严重损坏，主体完全不可判断。',
+    printableSurfaces: []
+  }, { source: 'ai' });
+  assert.equal(result.action, 'manual_check');
+  assert.equal(result.needs_manual_check, true);
 });
 
 test('AI 可执行结果缺少说明字段时保留生产动作并补默认值', () => {
@@ -291,4 +335,33 @@ test('旧版本缓存仅在人工覆盖标记存在时有效', async (t) => {
   old.manualOverride = true;
   await fs.writeFile(cacheFile, JSON.stringify(old));
   assert.equal((await readTemplateAnalysisCache({ cacheFile, templateImagePath })).valid, true);
+});
+
+test('读取现有 AI 缓存时立即纠正柜体和纯文字页误判', async (t) => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'caishen-template-cache-reclassify-'));
+  t.after(() => fs.rm(temp, { recursive: true, force: true }));
+  const templateImagePath = path.join(temp, 'a.jpg');
+  const cacheFile = path.join(temp, 'a.json');
+  await fs.writeFile(templateImagePath, 'image');
+  const signature = await getTemplateFileSignature(templateImagePath);
+  const writeCachedAnalysis = async imageUnderstanding => {
+    const payload = buildTemplateAnalysisCache({
+      relativeTemplatePath: 'a.jpg',
+      signature,
+      analysis: JSON.stringify({
+        version: TEMPLATE_CACHE_VERSION,
+        imageRole: '详情页',
+        processingMode: 'manual_check',
+        needs_manual_check: true,
+        imageUnderstanding,
+        printableSurfaces: []
+      }),
+      manualOverride: false
+    });
+    await fs.writeFile(cacheFile, JSON.stringify(payload));
+    return JSON.parse((await readTemplateAnalysisCache({ cacheFile, templateImagePath })).analysis);
+  };
+
+  assert.equal((await writeCachedAnalysis('五斗抽屉柜半开，主体商品清晰可见。')).action, 'replace_print');
+  assert.equal((await writeCachedAnalysis('纯售前服务文字页，无家具实物展示。')).action, 'copy_original');
 });
