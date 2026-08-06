@@ -1033,6 +1033,27 @@ function _sampleNormalizedBandDiff(templateImage, outputImage, width, height, re
   return diffSum / total;
 }
 
+function _sampleEdgeBlankRatio(image, width, height, region) {
+  const band = Math.max(1, Math.min(Math.floor(height * 0.18), 180));
+  const startY = region === 'top' ? 0 : Math.max(0, height - band);
+  const endY = region === 'top' ? Math.min(height, band) : height;
+  let total = 0;
+  let blank = 0;
+  for (let y = startY; y < endY; y += 2) {
+    for (let x = 0; x < width; x += 2) {
+      const offset = (y * width + x) * 4;
+      const r = image[offset];
+      const g = image[offset + 1];
+      const b = image[offset + 2];
+      const brightest = Math.max(r, g, b);
+      const darkest = Math.min(r, g, b);
+      if (brightest >= 246 && brightest - darkest <= 10) blank += 1;
+      total += 1;
+    }
+  }
+  return total ? blank / total : 0;
+}
+
 async function validateTemplateOutputLayout(job, bytes, analysis = '') {
   const templatePath = job?.templatePath || '';
   if (!templatePath || !fs.existsSync(templatePath) || !bytes || bytes.length <= 0) return { passed: false, reason: '输出图像为空或模板缺失' };
@@ -1068,7 +1089,16 @@ async function validateTemplateOutputLayout(job, bytes, analysis = '') {
   const sideBelowMinorThreshold = sideValues.filter(item => item <= 0.2).length;
   const singleDominantEdge = sideMax > 0.28 && sideExceedCount === 1 && sideBelowMinorThreshold >= 3;
   const multiGridDrift = isMultiGrid && isDetailSlice && !singleDominantEdge && (sideMax > 0.5 || (sideExceedCount >= 2 && sideAvg > 0.18));
+  const sourceBottomBlank = _sampleEdgeBlankRatio(templateRaw, targetWidth, targetHeight, 'bottom');
+  const outputBottomBlank = _sampleEdgeBlankRatio(generatedRaw, targetWidth, targetHeight, 'bottom');
+  const replacedByBlank = isDetailSlice && sourceBottomBlank < 0.72 && outputBottomBlank > 0.9;
 
+  if (replacedByBlank) {
+    return {
+      passed: false,
+      reason: `布局校验未通过：模板底部仍有页面内容，但生成结果变成大面积空白（源图空白比例:${sourceBottomBlank.toFixed(2)}，结果:${outputBottomBlank.toFixed(2)}）。`
+    };
+  }
   if (heavyBoundaryDrift) {
     return {
       passed: false,
@@ -1081,7 +1111,6 @@ async function validateTemplateOutputLayout(job, bytes, analysis = '') {
       reason: `多宫格校验未通过：边界与页面结构偏差过大（top:${metrics.top.toFixed(2)} bottom:${metrics.bottom.toFixed(2)} left:${metrics.left.toFixed(2)} right:${metrics.right.toFixed(2)}）。`
     };
   }
-
   return { passed: true };
 }
 
@@ -2155,6 +2184,7 @@ async function generateImage(prompt, imagePaths, options = {}) {
     if (!isImagePath(file)) throw new Error(`Unsupported image format: ${path.basename(file)}`);
     return imageReferenceCache.prepare(file);
   }));
+  const maskPath = options.maskPath && fs.existsSync(options.maskPath) ? options.maskPath : '';
   const preparation = {
     originalBytes: preparedImages.reduce((total, item) => total + item.originalBytes, 0),
     preparedBytes: preparedImages.reduce((total, item) => total + item.preparedBytes, 0)
@@ -2187,12 +2217,17 @@ async function generateImage(prompt, imagePaths, options = {}) {
           contentType: imageMimeType(file)
         });
       }
+      if (maskPath) files.push({ name: 'mask', path: maskPath, fileName: 'template-edit-mask.png', contentType: 'image/png' });
       const form = new FormData();
       for (const field of fields) form.set(field.name, String(field.value));
       for (const prepared of preparedImages) {
         const bytes = await fsp.readFile(prepared.path);
         const uploadName = `${path.basename(prepared.sourcePath, path.extname(prepared.sourcePath))}${path.extname(prepared.path)}`;
         form.append('image', new Blob([bytes], { type: imageMimeType(prepared.path) }), uploadName);
+      }
+      if (maskPath) {
+        const maskBytes = await fsp.readFile(maskPath);
+        form.append('mask', new Blob([maskBytes], { type: 'image/png' }), 'template-edit-mask.png');
       }
       return {
         method: 'POST',
@@ -2546,6 +2581,41 @@ async function detailSliceNeighborImages(job) {
   return neighbors;
 }
 
+function printableSurfaceArea(polygon = []) {
+  let sum = 0;
+  for (let index = 0; index < polygon.length; index += 1) {
+    const current = polygon[index];
+    const next = polygon[(index + 1) % polygon.length];
+    sum += Number(current?.[0] || 0) * Number(next?.[1] || 0) - Number(next?.[0] || 0) * Number(current?.[1] || 0);
+  }
+  return Math.abs(sum) / 2;
+}
+
+async function createTemplateEditMask(job, analysis) {
+  const summary = parseTemplateAnalysisSummary(analysis);
+  if (resolveGenerationAction(analysis) !== 'replace_print') return '';
+  const surfaces = Array.isArray(summary.printableSurfaces) ? summary.printableSurfaces : [];
+  const polygons = surfaces
+    .map(surface => Array.isArray(surface?.polygon) ? surface.polygon : [])
+    .filter(polygon => polygon.length >= 3 && printableSurfaceArea(polygon) >= 0.003 && printableSurfaceArea(polygon) <= 0.72);
+  if (!polygons.length) return '';
+
+  const metadata = await sharp(job.templatePath, { failOn: 'none' }).rotate().metadata();
+  const width = Math.max(1, Number(metadata.width) || 1);
+  const height = Math.max(1, Number(metadata.height) || 1);
+  const points = polygons.map(polygon => polygon
+    .map(([x, y]) => `${Math.round(Math.min(1, Math.max(0, Number(x))) * width)},${Math.round(Math.min(1, Math.max(0, Number(y))) * height)}`)
+    .join(' '));
+  const cache = templateCachePaths(job.templateRoot, job.relativePath);
+  const fingerprint = crypto.createHash('sha1').update(JSON.stringify({ version: 1, width, height, points })).digest('hex').slice(0, 12);
+  const maskPath = path.join(cache.cacheFolder, `${path.basename(cache.analysisFile, '.json')}-${fingerprint}.mask.png`);
+  if (fs.existsSync(maskPath)) return maskPath;
+  await fsp.mkdir(path.dirname(maskPath), { recursive: true });
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#ffffff"/><g fill="#000000" fill-opacity="0">${points.map(value => `<polygon points="${value}"/>`).join('')}</g></svg>`;
+  await sharp(Buffer.from(svg)).png().toFile(maskPath);
+  return maskPath;
+}
+
 async function templateAnalysisForJob(job) {
   const cache = templateCachePaths(job.templateRoot, job.relativePath);
   const analysis = await readValidTemplateAnalysisCache({ cacheFile: cache.analysisFile, templateImagePath: job.templatePath });
@@ -2821,14 +2891,16 @@ async function prepareTemplateFolder(folderValue) {
   for (const job of jobs) {
     if (!(await templateAnalysisForJob(job)).cached) missing.push(job);
   }
-  const results = missing.length ? await runWithConcurrency(missing, await activeApiConcurrencyLimit(missing.length), analyzeTemplateJob) : [];
-  const failed = results.filter(result => !result.ok);
+  const results = missing.length
+    ? await runWithConcurrency(missing, await activeApiConcurrencyLimit(missing.length), job => analyzeTemplateJobWithRetry(job))
+    : [];
+  const failed = results.filter(result => !result.ok || !result.value?.ok);
   const { items } = await collectTemplateItems(folder);
   return summarizeTemplatePreparation(folder, items, {
     analyzed: results.length - failed.length,
     reused: jobs.length - missing.length,
     failed: failed.length,
-    failures: failed.slice(0, 10).map(result => result.error?.message || String(result.error || '识别失败'))
+    failures: failed.slice(0, 10).map(result => result.value?.error || result.error?.message || String(result.error || '识别失败'))
   });
 }
 
@@ -3113,16 +3185,17 @@ async function analyzeTemplateItems(payload = {}, options = {}) {
 async function analyzeTemplateFolder(folder) {
   if (warmingTemplateFolders.has(folder)) throw new Error('当前套图正在后台分析，请稍后重新打开配置窗口。');
   const jobs = await buildTemplateJobs(folder);
-  const results = await runWithConcurrency(jobs, await activeApiConcurrencyLimit(jobs.length), analyzeTemplateJob);
-  const failed = results.filter(result => !result.ok);
-  if (failed.length === jobs.length && jobs.length) throw failed[0].error;
+  const results = await runWithConcurrency(jobs, await activeApiConcurrencyLimit(jobs.length), job => analyzeTemplateJobWithRetry(job));
+  const failed = results.filter(result => !result.ok || !result.value?.ok);
+  if (failed.length === jobs.length && jobs.length) throw new Error(failed[0].value?.error || failed[0].error?.message || 'AI 分析失败');
   return listTemplates(folder);
 }
 
 async function ensureTemplateAnalysisForJob(job) {
   const current = await templateAnalysisForJob(job);
   if (current.cached) return current;
-  await analyzeTemplateJob(job);
+  const result = await analyzeTemplateJobWithRetry(job);
+  if (!result.ok) throw new Error(result.error || 'AI 分析失败');
   return templateAnalysisForJob(job);
 }
 
@@ -3135,7 +3208,7 @@ function startTemplateAnalysisWarmup(folder, knownJobs = null) {
     for (const job of jobs) {
       if (!(await templateAnalysisForJob(job)).cached) missing.push(job);
     }
-    if (missing.length) await runWithConcurrency(missing, await activeApiConcurrencyLimit(missing.length), analyzeTemplateJob);
+    if (missing.length) await runWithConcurrency(missing, await activeApiConcurrencyLimit(missing.length), job => analyzeTemplateJobWithRetry(job));
   })().catch(() => {}).finally(() => warmingTemplateFolders.delete(folder));
 }
 
@@ -3453,6 +3526,10 @@ async function generateTemplateJob(job, source, config, options = {}) {
   }
   if (options.extraInstruction && source.generationMode === 'template_print') prompt += `\n\n本次运营补充要求：${String(options.extraInstruction).trim()}`;
   if (options.includePreviousResult && fs.existsSync(job.outputPath)) imagePaths.push(job.outputPath);
+  const maskPath = await createTemplateEditMask(job, analysis);
+  if (maskPath) {
+    prompt += '\n\n锁定画布模式：本次请求附带透明编辑蒙版。只允许修改蒙版透明区域内已可见的柜门或抽屉外侧面板；蒙版不透明区域的像素、文字、尺寸线、边框、门缝、把手、柜脚、背景、道具及裁切边界必须与第一张模板图保持完全一致。不得补全被裁掉的柜体，不得重构页面或生成新的海报。';
+  }
   const isRegeneration = Boolean(options.isRegeneration || options.extraInstruction);
   const bytes = await generateImage(prompt, imagePaths, {
     size: await templateOutputSize(job),
@@ -3463,6 +3540,7 @@ async function generateTemplateJob(job, source, config, options = {}) {
       ? billingOnceKey('image:template-job-regenerate', job.outputRoot, job.relativePath, Date.now(), crypto.randomUUID())
       : billingOnceKey('image:template-job', job.outputRoot, job.relativePath, Date.now(), crypto.randomUUID()),
     skipBilling: isRegeneration && packageIsFlagship(activePack),
+    maskPath,
     signal: options.signal,
     onRequestState: options.onRequestState
   });
@@ -4699,7 +4777,8 @@ const runtimeExports = {
   setTemplateManualStatus,
   updateTaobaoPublishStatus,
   testAnalysisApi,
-  testApiSettings
+  testApiSettings,
+  validateTemplateOutputLayout
 };
 
 Object.defineProperties(runtimeExports, {

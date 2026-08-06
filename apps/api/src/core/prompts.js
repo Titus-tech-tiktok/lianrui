@@ -53,7 +53,7 @@ const TEMPLATE_ANALYSIS_PROMPT = `请把这张电商套图模板图分析成可�
 
 按这个结构输出：
 {
-  "version": 10,
+  "version": 11,
   "imageRole": "主图/场景图/尺寸图/细节图/材质图/包装物流/安装售后/买家须知/纯文字页/多图拼接/不确定",
   "includeInOutput": true,
   "processingMode": "replace_print/copy_original/manual_check",
@@ -61,7 +61,7 @@ const TEMPLATE_ANALYSIS_PROMPT = `请把这张电商套图模板图分析成可�
   "imageUnderstanding": "客观描述图片用途、家具角度、开合状态以及选择该动作的原因，80字以内",
   "viewState": "正面闭合/侧面/背面/俯视/开门/开抽屉/半开/局部特写/多角度拼图/无商品",
   "printableArea": "说明这张图是否需要使用母版商品生成，以及应保留哪些页面元素",
-  "printableSurfaces": [],
+  "printableSurfaces": [{"id":"front-panel-1","label":"柜门外侧可替换面板","polygon":[[0.20,0.30],[0.80,0.30],[0.80,0.78],[0.20,0.78]],"surfaceState":"外侧可见"}],
   "mappingMode": "master_product_migration",
   "preserveAreas": "必须保持不变的文字、背景、结构、门缝、把手、边框、柜脚、道具、阴影、人物和前景遮挡",
   "riskPoints": ["容易出错的点"],
@@ -70,7 +70,8 @@ const TEMPLATE_ANALYSIS_PROMPT = `请把这张电商套图模板图分析成可�
 
 硬性规则：
 - V10 结构中的字段应尽量完整输出；缺少说明性字段时后端会补默认值，不要因此把可执行图片改成人工确认。
-- 不再输出坐标、多边形或蒙版；printableSurfaces 固定为空数组。
+- 对 processingMode=replace_print，必须输出 printableSurfaces：只圈出当前图片里实际可见、需要换印花的柜门或抽屉外侧面板。polygon 使用 0 到 1 的归一化坐标；每个点为 [x,y]；只画面板内部，绝不包含黑色边框、门缝、把手、柜脚、文字、尺寸线、背景、道具或被裁掉的画面。
+- 对 copy_original 或 manual_check，printableSurfaces 必须为空数组。
 - replace_print 表示“这张套图需要用母版商品重新生成”，不是局部标注换印花。
 - 主图、场景图、尺寸图、SKU 图、细节图或材质图没有可印花表面时应 copy_original，不得删除，也不得强行贴印花。
 - 物流、包装、安装售后、买家须知、纯文字说明、纯侧面、背面、只有内部收纳或运输详情页通常 copy_original；但只要画面同时出现可见白色/浅色柜门正面或门板外表面，就必须 replace_print。

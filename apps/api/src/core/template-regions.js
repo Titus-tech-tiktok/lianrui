@@ -3,7 +3,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 
-const TEMPLATE_CACHE_VERSION = 10;
+const TEMPLATE_CACHE_VERSION = 11;
 const TEMPLATE_CACHE_FOLDER = '.caishen-template-cache';
 const DEFAULT_FORBIDDEN_AREA = '背景、文字、尺寸线、墙面、地面、柜脚、把手、门缝、抽屉缝、抽屉内侧、柜门内侧、包装、道具等非留白家具表面区域';
 
@@ -233,7 +233,8 @@ function validateTemplateAnalysis(value, options = {}) {
     imageUnderstanding: understanding,
     printableArea: replaceArea,
     replace_area: replaceArea,
-    printableSurfaces: [],
+    // Keep AI polygons so generation can lock every non-editable pixel with a mask.
+    printableSurfaces: surfaces,
     replace_regions: [],
     preserveAreas,
     forbidden_area: preserveAreas,

@@ -59,12 +59,12 @@ test('未配置品类根目录时从产品父目录和文件名推导', () => {
 
 test('模板分析提示词使用生产导向 V10 契约并限制人工确认兜底', () => {
   assert.equal(TEMPLATE_ANALYSIS_PROMPT.startsWith('请把这张电商套图模板图分析成可复用的“模板换印花说明书”。'), true);
-  assert.equal(TEMPLATE_ANALYSIS_PROMPT.includes('"version": 10'), true);
+  assert.equal(TEMPLATE_ANALYSIS_PROMPT.includes('"version": 11'), true);
   assert.equal(TEMPLATE_ANALYSIS_PROMPT.includes('"processingMode": "replace_print/copy_original/manual_check"'), true);
   assert.equal(TEMPLATE_ANALYSIS_PROMPT.includes('"printableSurfaces"'), true);
   assert.equal(TEMPLATE_ANALYSIS_PROMPT.includes('AI 不允许选择 exclude'), true);
   assert.equal(TEMPLATE_ANALYSIS_PROMPT.includes('V10 结构中的字段应尽量完整输出'), true);
-  assert.equal(TEMPLATE_ANALYSIS_PROMPT.includes('不再输出坐标、多边形或蒙版；printableSurfaces 固定为空数组'), true);
+  assert.equal(TEMPLATE_ANALYSIS_PROMPT.includes('必须输出 printableSurfaces'), true);
   assert.equal(TEMPLATE_ANALYSIS_PROMPT.includes('不要因为图片是多宫格、尺寸图、场景图或有人物遮挡就直接人工确认'), true);
   assert.equal(TEMPLATE_ANALYSIS_PROMPT.includes('只要小图需要展示换印花后的母版商品，就判定为 replace_print'), true);
   assert.equal(TEMPLATE_ANALYSIS_PROMPT.includes('只要画面主体需要替换为母版商品，就判定为 replace_print'), true);

@@ -59,7 +59,7 @@ test('分析动作使用新语义并兼容旧缓存别名', () => {
   assert.equal(normalizeTemplateProcessingMode('unexpected_action'), 'manual_check');
 });
 
-test('换印花动作不再依赖区域或蒙版', () => {
+test('换印花动作保留 AI 返回的可编辑面板，用于锁定其余页面像素', () => {
   const valid = validateTemplateAnalysis({
     version: TEMPLATE_CACHE_VERSION,
     imageRole: '主图',
@@ -68,12 +68,16 @@ test('换印花动作不再依赖区域或蒙版', () => {
     confidence: 0.96,
     imageUnderstanding: '正面闭合四门柜，白色柜门外表面清晰可见。',
     printableArea: '使用母版商品生成当前主图场景',
-    printableSurfaces: [],
+    printableSurfaces: [{
+      id: 'front',
+      label: '正面柜门',
+      polygon: [[0.2, 0.2], [0.8, 0.2], [0.8, 0.8], [0.2, 0.8]]
+    }],
     preserveAreas: '文字、背景、边框、门缝、把手和柜脚'
   }, { source: 'ai' });
   assert.equal(valid.processingMode, 'replace_print');
   assert.equal(valid.action, 'replace_print');
-  assert.equal(valid.printableSurfaces.length, 0);
+  assert.equal(valid.printableSurfaces.length, 1);
   assert.equal(valid.replace_regions.length, 0);
   assert.equal(valid.needs_manual_check, false);
 });
@@ -164,7 +168,7 @@ test('AI 可执行结果缺少说明字段时保留生产动作并补默认值',
     const result = validateTemplateAnalysis(incomplete, { source: 'ai' });
     assert.equal(result.action, 'replace_print', `missing ${field} must keep executable replacement`);
     assert.equal(result.needs_manual_check, false);
-    assert.equal(result.printableSurfaces.length, 0);
+    assert.equal(result.printableSurfaces.length, 1);
     assert.equal(result.replace_regions.length, 0);
   }
 });
