@@ -3736,7 +3736,7 @@ async function generateTemplateSetForFolder(folder, onlyMissing = true, relative
         : `正在处理 ${live.current}/${live.total}`
     }).catch(() => {});
   };
-  const results = await runWithConcurrency(jobs, await activeApiConcurrencyLimit(jobs.length), async job => {
+  const results = await runWithConcurrency(jobs, apiConcurrencyLimit(jobs.length), async job => {
     try {
       if (options.signal?.aborted) throw new Error('任务已停止');
       const result = await generateTemplateJob(job, source, config, {

@@ -115,7 +115,7 @@ test('template-print regeneration entrypoints use the image API', async (t) => {
 
 });
 
-test('template-print queue completes all thirty images through the image API', async (t) => {
+test('template-print queue completes all thirty images through the adaptive image API queue', async (t) => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'caishen-image-capacity-'));
   const resultPng = await sharp({ create: { width: 32, height: 32, channels: 3, background: '#44aa77' } }).png().toBuffer();
   let requests = 0;
@@ -213,4 +213,14 @@ test('template-print queue completes all thirty images through the image API', a
   assert.ok(progressEvents.some(progress => Number(progress.waitingUpstream || 0) > 0) || requests === 30);
   await fs.access(path.join(generated.folder, '.caishen-meta', 'image-api-events.jsonl'));
   await Promise.all(relativePaths.map(name => fs.access(path.join(generated.folder, name))));
+});
+
+test('template generation outer loop uses image concurrency instead of analysis concurrency', async () => {
+  const source = await fs.readFile(require.resolve('../src/runtime'), 'utf8');
+  const start = source.indexOf('const waitingUpstream = new Set()');
+  const end = source.indexOf('await imageEventWrite;', start);
+  assert.ok(start >= 0 && end > start);
+  const generationBlock = source.slice(start, end);
+  assert.match(generationBlock, /runWithConcurrency\(jobs, apiConcurrencyLimit\(jobs\.length\)/);
+  assert.doesNotMatch(generationBlock, /activeApiConcurrencyLimit\(jobs\.length\)/);
 });
