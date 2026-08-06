@@ -2593,6 +2593,22 @@ function printableSurfaceArea(polygon = []) {
   return Math.abs(sum) / 2;
 }
 
+function insetPrintablePolygon(polygon, width, height, insetPixels = 3) {
+  const points = polygon.map(([x, y]) => [
+    Math.min(1, Math.max(0, Number(x))),
+    Math.min(1, Math.max(0, Number(y)))
+  ]);
+  const centerX = points.reduce((sum, point) => sum + point[0], 0) / points.length;
+  const centerY = points.reduce((sum, point) => sum + point[1], 0) / points.length;
+  return points.map(([x, y]) => {
+    const dx = (centerX - x) * width;
+    const dy = (centerY - y) * height;
+    const distance = Math.hypot(dx, dy);
+    const ratio = distance > 0 ? Math.min(1, insetPixels / distance) : 0;
+    return [x + (centerX - x) * ratio, y + (centerY - y) * ratio];
+  });
+}
+
 async function createTemplateEditMask(job, analysis) {
   const summary = parseTemplateAnalysisSummary(analysis);
   if (resolveGenerationAction(analysis) !== 'replace_print') return '';
@@ -2605,17 +2621,46 @@ async function createTemplateEditMask(job, analysis) {
   const metadata = await sharp(job.templatePath, { failOn: 'none' }).rotate().metadata();
   const width = Math.max(1, Number(metadata.width) || 1);
   const height = Math.max(1, Number(metadata.height) || 1);
-  const points = polygons.map(polygon => polygon
+  const points = polygons.map(polygon => insetPrintablePolygon(polygon, width, height)
     .map(([x, y]) => `${Math.round(Math.min(1, Math.max(0, Number(x))) * width)},${Math.round(Math.min(1, Math.max(0, Number(y))) * height)}`)
     .join(' '));
   const cache = templateCachePaths(job.templateRoot, job.relativePath);
-  const fingerprint = crypto.createHash('sha1').update(JSON.stringify({ version: 1, width, height, points })).digest('hex').slice(0, 12);
+  const fingerprint = crypto.createHash('sha1').update(JSON.stringify({ version: 2, width, height, points })).digest('hex').slice(0, 12);
   const maskPath = path.join(cache.cacheFolder, `${path.basename(cache.analysisFile, '.json')}-${fingerprint}.mask.png`);
   if (fs.existsSync(maskPath)) return maskPath;
   await fsp.mkdir(path.dirname(maskPath), { recursive: true });
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#ffffff"/><g fill="#000000" fill-opacity="0">${points.map(value => `<polygon points="${value}"/>`).join('')}</g></svg>`;
+  // OpenAI image-edit masks use transparent pixels as editable areas. Build a\n  // real alpha cut-out; drawing a transparent polygon over an opaque white\n  // rectangle does not erase that rectangle and produces a fully locked mask.\n  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><defs><mask id="editable-cutout"><rect width="100%" height="100%" fill="#ffffff"/><g fill="#000000">${points.map(value => `<polygon points="${value}"/>`).join('')}</g></mask></defs><rect width="100%" height="100%" fill="#ffffff" mask="url(#editable-cutout)"/></svg>`;
   await sharp(Buffer.from(svg)).png().toFile(maskPath);
   return maskPath;
+}
+
+async function compositeTemplateEditResult(job, generatedBytes, maskPath) {
+  if (!maskPath || !fs.existsSync(maskPath)) return generatedBytes;
+  const metadata = await sharp(job.templatePath, { failOn: 'none' }).metadata();
+  const width = Math.max(1, Number(metadata.width) || 1);
+  const height = Math.max(1, Number(metadata.height) || 1);
+  const candidate = await sharp(generatedBytes, { failOn: 'none' })
+    .resize({ width, height, fit: 'fill' })
+    .removeAlpha()
+    .raw()
+    .toBuffer();
+  const editableAlpha = await sharp(maskPath, { failOn: 'none' })
+    .resize({ width, height, fit: 'fill' })
+    .ensureAlpha()
+    .extractChannel(3)
+    .negate()
+    .raw()
+    .toBuffer();
+  const editableOverlay = await sharp(candidate, { raw: { width, height, channels: 3 } })
+    .joinChannel(editableAlpha, { raw: { width, height, channels: 1 } })
+    .png()
+    .toBuffer();
+  return sharp(job.templatePath, { failOn: 'none' })
+    .rotate()
+    .resize({ width, height, fit: 'fill' })
+    .composite([{ input: editableOverlay, blend: 'over' }])
+    .png()
+    .toBuffer();
 }
 
 async function templateAnalysisForJob(job) {
@@ -3001,7 +3046,8 @@ async function analyzeTemplateJob(job, options = {}) {
         'Treat visible cabinet exterior surfaces as replace_print targets when they are drawer fronts, cabinet doors, side exterior panels, or cropped exterior product panels.',
         'For open drawers or storage-detail images, replace only visible drawer exterior/front panels and cabinet exterior surfaces.',
         'Preserve drawer interiors, stored items, rails, handles, seams, text, background, wall, floor, props, people, packaging, and all non-printable internal structure.',
-        'If a cabinet exterior panel is visible even partially, output processingMode/action replace_print and describe the visible exterior printable area.'
+        'If a cabinet exterior panel is visible even partially, output processingMode/action replace_print and describe the visible exterior printable area.',
+        'For every editable drawer front or cabinet-door face, printableSurfaces MUST contain a separate normalized polygon with at least four points. Never return one large polygon around the whole cabinet, page, card, or multi-grid layout. Keep every polygon inside the visible panel face and exclude frames, seams, handles, side panels, feet, shadows and text.'
       ].join('\n')
     });
   }
@@ -3195,10 +3241,19 @@ async function analyzeTemplateFolder(folder) {
 
 async function ensureTemplateAnalysisForJob(job) {
   const current = await templateAnalysisForJob(job);
-  if (current.cached) return current;
-  const result = await analyzeTemplateJobWithRetry(job);
+  const needsEditableSurfaces = current.cached
+    && resolveGenerationAction(current.analysis) === 'replace_print'
+    && !current.summary.printableSurfaces?.length;
+  if (current.cached && !needsEditableSurfaces) return current;
+  const result = await analyzeTemplateJobWithRetry(job, 3, async () => {}, {
+    forceReplacePrint: needsEditableSurfaces
+  });
   if (!result.ok) throw new Error(result.error || 'AI 分析失败');
-  return templateAnalysisForJob(job);
+  const refreshed = await templateAnalysisForJob(job);
+  if (resolveGenerationAction(refreshed.analysis) === 'replace_print' && !refreshed.summary.printableSurfaces?.length) {
+    throw new Error(`无法获得可靠的柜门/抽屉面板编辑区域：${job.relativePath}`);
+  }
+  return refreshed;
 }
 
 function startTemplateAnalysisWarmup(folder, knownJobs = null) {
@@ -3489,8 +3544,9 @@ async function generateTemplateJob(job, source, config, options = {}) {
       templateAnalysis: analysis,
       templatePath: job.relativePath
     });
-    prompt += '\n\n本次输入图顺序：第一张是当前套图模板图，第二张是已生成的母版产品图，第三张是原始印花图。母版产品图是产品外观、柜门图案、颜色和印花效果的标准；当前套图模板图只提供本页构图、场景、文字、尺寸标注和透视关系；原始印花图只用于核对图案，不允许重新设计、拼贴或替换成相似风格。最终结果必须把母版产品迁移到当前模板场景中，并保持当前模板的文字和页面布局。';
+    prompt += '\n\n本次输入图顺序：第一张是不可重构的当前套图模板图，第二张母版产品图仅用于参考印花在面板上的外观与落位，第三张原始印花图用于核对图案细节。不得迁移母版的柜体结构、尺寸、比例、视角或场景；不得替换或重新生成第一张图中的家具。最终结果只允许修改第一张图现有柜门或抽屉正面蒙版内的表面纹理，其余画布必须保持原图。';
     prompt += '\n\n硬性质量要求：印花只能落在柜门或抽屉的正面可替换面板内部，必须完整保留家具黑色外框、黑色门缝/分隔线、黑色侧板、黑色台面、黑色底边、柜脚、把手、阴影和所有场景物品。不得让印花跨过或覆盖任何黑色边框黑边，不得把黑框染成印花，不得延伸到地面、墙面、台面、咖啡机、杯子、人物或其他道具。';
+    prompt += '\n\nPIXEL_LOCKED_SURFACE_EDIT: The first image is the immutable final canvas, not a scene to recreate. Do not transplant, replace, resize, reshape, move or regenerate the cabinet or any object. Keep the exact original cabinet silhouette, dimensions, perspective, drawer count, panel seams, crop and coordinates. The master image is only a reference for print appearance and placement; it is never a source of furniture geometry. Edit only the already-visible front-panel surface inside the transparent mask. Every pixel outside the transparent mask is out of scope and must remain identical to the first image. Never add canvas, padding, white space, or outpaint beyond the original frame.';
     if (isComplexTemplatePrintAnalysis(analysis, job)) {
       prompt += `\n\n${flagshipComplexTemplatePrintPrompt()}`;
     }
@@ -3533,7 +3589,7 @@ async function generateTemplateJob(job, source, config, options = {}) {
     prompt += '\n\n锁定画布模式：本次请求附带透明编辑蒙版。只允许修改蒙版透明区域内已可见的柜门或抽屉外侧面板；蒙版不透明区域的像素、文字、尺寸线、边框、门缝、把手、柜脚、背景、道具及裁切边界必须与第一张模板图保持完全一致。不得补全被裁掉的柜体，不得重构页面或生成新的海报。';
   }
   const isRegeneration = Boolean(options.isRegeneration || options.extraInstruction);
-  const bytes = await generateImage(prompt, imagePaths, {
+  let bytes = await generateImage(prompt, imagePaths, {
     size: await templateOutputSize(job),
     quality: config.imageQuality || 'high',
     billingDescription: options.extraInstruction ? '套图图片重新生成' : '套图换印花生图',
@@ -3547,6 +3603,7 @@ async function generateTemplateJob(job, source, config, options = {}) {
     onRequestState: options.onRequestState
   });
   const billedMinor = Math.max(0, Number(bytes.billingAmountMinor) || 0);
+  bytes = await compositeTemplateEditResult(job, bytes, maskPath);
   const strictLayoutCheck = isDetailSliceTemplate(job, analysis);
   if (strictLayoutCheck) {
     const check = await validateTemplateOutputLayout(job, bytes, analysis);
@@ -4721,6 +4778,8 @@ const runtimeExports = {
   approveReviewFolder,
   batchApproveReviewFolders,
   billing,
+  compositeTemplateEditResult,
+  createTemplateEditMask,
   deleteTemplateFolder,
   deleteReviewFolders,
   exportTitles,
