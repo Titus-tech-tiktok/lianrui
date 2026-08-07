@@ -49,12 +49,15 @@ test('multi-grid keeps the same layout when generated colors differ across the p
   await fs.rm(directory, { recursive: true, force: true });
 });
 
-test('template writer fills the exact designer canvas without white letterboxing', async () => {
+test('template writer preserves geometry and the exact designer canvas without white letterboxing', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'caishen-layout-no-letterbox-'));
-  const templatePath = path.join(directory, 'designer-slice.jpg');
-  const outputPath = path.join(directory, 'output.jpg');
-  await sharp({ create: { width: 90, height: 160, channels: 3, background: '#eadfce' } }).jpeg().toFile(templatePath);
-  const generated = await sharp({ create: { width: 120, height: 120, channels: 3, background: '#245db5' } }).png().toBuffer();
+  const templatePath = path.join(directory, 'designer-slice.png');
+  const outputPath = path.join(directory, 'output.png');
+  await sharp({ create: { width: 90, height: 160, channels: 3, background: '#eadfce' } }).png().toFile(templatePath);
+  const generated = await sharp({ create: { width: 120, height: 180, channels: 3, background: '#245db5' } })
+    .composite([{ input: { create: { width: 40, height: 40, channels: 3, background: '#ef1f1f' } }, left: 40, top: 70 }])
+    .png()
+    .toBuffer();
   await runtime.writeTemplateSizedImage({ templatePath, outputPath }, generated);
   const { data, info } = await sharp(outputPath).removeAlpha().raw().toBuffer({ resolveWithObject: true });
   const bottom = (info.height - 2) * info.width * info.channels + Math.floor(info.width / 2) * info.channels;
@@ -62,5 +65,16 @@ test('template writer fills the exact designer canvas without white letterboxing
   assert.equal(info.height, 160);
   assert.ok(data[bottom + 2] > 130, 'bottom remains generated content instead of a white padding band');
   assert.ok(data[bottom] < 100);
+  const redPixels = [];
+  for (let y = 0; y < info.height; y += 1) {
+    for (let x = 0; x < info.width; x += 1) {
+      const offset = (y * info.width + x) * info.channels;
+      if (data[offset] > 200 && data[offset + 1] < 80 && data[offset + 2] < 80) redPixels.push([x, y]);
+    }
+  }
+  assert.ok(redPixels.length > 0);
+  const redWidth = Math.max(...redPixels.map(([x]) => x)) - Math.min(...redPixels.map(([x]) => x)) + 1;
+  const redHeight = Math.max(...redPixels.map(([, y]) => y)) - Math.min(...redPixels.map(([, y]) => y)) + 1;
+  assert.ok(Math.abs(redWidth - redHeight) <= 1, `print geometry must stay square, got ${redWidth}x${redHeight}`);
   await fs.rm(directory, { recursive: true, force: true });
 });
