@@ -934,6 +934,8 @@ function isComplexTemplatePrintAnalysis(analysis, job = {}) {
     'selling point',
     'open cabinet',
     'open door',
+    'open drawer',
+    'drawers open',
     'internal storage',
     'multi panel',
     'multi-panel',
@@ -952,6 +954,24 @@ function isComplexTemplatePrintAnalysis(analysis, job = {}) {
     '道具'
   ];
   return signals.some(signal => text.includes(signal));
+}
+
+function isOpenDrawerTemplatePrintAnalysis(analysis, job = {}) {
+  const text = `${String(analysis || '')}\n${String(job?.relativePath || '')}`.toLowerCase();
+  return ['open drawer', 'opened drawer', 'drawers open', 'drawer exterior front', '开抽屉', '抽屉打开', '开放抽屉']
+    .some(signal => text.includes(signal));
+}
+
+function openDrawerRegisteredPrintPrompt() {
+  return [
+    'OPEN_DRAWER_REGISTERED_PRINT_MAPPING',
+    'An opened stack of drawers is one cabinet facade in different depth positions, not several independent print canvases.',
+    'First map the complete reference artwork once onto the cabinet facade as if every drawer were closed. Divide that single mapped facade into ordered horizontal row bands from top drawer to bottom drawer.',
+    'Each visible opened drawer front must receive only its own corresponding row band from that one closed-facade mapping: row 1 to drawer 1, row 2 to drawer 2, and so on. Preserve the same global artwork scale and vertical registration across all rows.',
+    'Never restart, duplicate, independently center, independently scale, or fit the full panda artwork on every drawer front. A motif crossing a drawer seam must continue on the adjacent row at the matching horizontal position when mentally closed.',
+    'After assigning the correct row band, project only that band onto the existing front board plane using its exact camera perspective, foreshortening, opening depth, occlusion and border. Do not alter drawer geometry, spacing, rails, interiors, stored objects or shadows.',
+    'Keep print completely off the drawer interior, inner side walls, wooden box, slide rails, black top edge, black frame and all contents.'
+  ].join('\n');
 }
 
 function flagshipComplexTemplatePrintPrompt() {
@@ -2687,7 +2707,7 @@ async function compositeTemplateEditResult(job, generatedBytes, maskPath) {
   const width = Math.max(1, Number(metadata.width) || 1);
   const height = Math.max(1, Number(metadata.height) || 1);
   const candidate = await sharp(generatedBytes, { failOn: 'none' })
-    .resize({ width, height, fit: 'cover', position: 'centre' })
+    .resize({ width, height, fit: 'fill' })
     .removeAlpha()
     .raw()
     .toBuffer();
@@ -3405,7 +3425,16 @@ async function prepareTemplateGenerationCanvas(job, maskPath = '') {
   // Never enlarge a designer-prepared slice before sending it to the API.
   // Detail text therefore keeps its original pixel scale; only oversized
   // source files are reduced to fit the supported transport canvas.
-  const scale = Math.min(1, canvas.width / sourceWidth, canvas.height / sourceHeight);
+  // Keep an immutable registration frame around every template. A full-bleed
+  // 1:1 API canvas encourages image-edit models to zoom/recompose by a few
+  // percent even when the returned pixel dimensions are correct.
+  const safeInsetX = Math.max(24, Math.round(canvas.width * 0.04));
+  const safeInsetY = Math.max(24, Math.round(canvas.height * 0.04));
+  const scale = Math.min(
+    1,
+    Math.max(1, canvas.width - safeInsetX * 2) / sourceWidth,
+    Math.max(1, canvas.height - safeInsetY * 2) / sourceHeight
+  );
   const contentWidth = Math.max(1, Math.min(canvas.width, Math.round(sourceWidth * scale)));
   const contentHeight = Math.max(1, Math.min(canvas.height, Math.round(sourceHeight * scale)));
   const left = Math.floor((canvas.width - contentWidth) / 2);
@@ -3413,7 +3442,7 @@ async function prepareTemplateGenerationCanvas(job, maskPath = '') {
   const templateStat = await fsp.stat(job.templatePath);
   const maskStat = maskPath && fs.existsSync(maskPath) ? await fsp.stat(maskPath) : null;
   const fingerprint = crypto.createHash('sha1').update(JSON.stringify({
-    version: 1,
+    version: 2,
     templatePath: path.resolve(job.templatePath),
     templateSize: templateStat.size,
     templateMtimeMs: templateStat.mtimeMs,
@@ -3431,7 +3460,7 @@ async function prepareTemplateGenerationCanvas(job, maskPath = '') {
   const cache = templateCachePaths(job.templateRoot || path.dirname(job.templatePath), job.relativePath || path.basename(job.templatePath));
   const transportFolder = path.join(cache.cacheFolder, 'generation-canvas');
   const templatePath = path.join(transportFolder, fingerprint + '.template.png');
-  const preparedMaskPath = maskStat ? path.join(transportFolder, fingerprint + '.mask.png') : '';
+  const preparedMaskPath = path.join(transportFolder, fingerprint + '.mask.png');
   await fsp.mkdir(transportFolder, { recursive: true });
   if (!fs.existsSync(templatePath)) {
     const input = await sharp(job.templatePath, { failOn: 'none' })
@@ -3444,18 +3473,23 @@ async function prepareTemplateGenerationCanvas(job, maskPath = '') {
       .png()
       .toFile(templatePath);
   }
-  if (maskStat && !fs.existsSync(preparedMaskPath)) {
-    await sharp(maskPath, { failOn: 'none' })
-      .resize({ width: contentWidth, height: contentHeight, fit: 'fill' })
-      .extend({
-        left,
-        right: canvas.width - contentWidth - left,
-        top,
-        bottom: canvas.height - contentHeight - top,
-        background: { r: 255, g: 255, b: 255, alpha: 1 }
-      })
-      .png()
-      .toFile(preparedMaskPath);
+  if (!fs.existsSync(preparedMaskPath)) {
+    if (maskStat) {
+      await sharp(maskPath, { failOn: 'none' })
+        .resize({ width: contentWidth, height: contentHeight, fit: 'fill' })
+        .extend({
+          left,
+          right: canvas.width - contentWidth - left,
+          top,
+          bottom: canvas.height - contentHeight - top,
+          background: { r: 255, g: 255, b: 255, alpha: 1 }
+        })
+        .png()
+        .toFile(preparedMaskPath);
+    } else {
+      const registrationMask = `<svg xmlns="http://www.w3.org/2000/svg" width="${canvas.width}" height="${canvas.height}" viewBox="0 0 ${canvas.width} ${canvas.height}"><defs><mask id="content-cutout"><rect width="100%" height="100%" fill="#ffffff"/><rect x="${left}" y="${top}" width="${contentWidth}" height="${contentHeight}" fill="#000000"/></mask></defs><rect width="100%" height="100%" fill="#ffffff" mask="url(#content-cutout)"/></svg>`;
+      await sharp(Buffer.from(registrationMask)).png().toFile(preparedMaskPath);
+    }
   }
   return {
     size,
@@ -3701,6 +3735,9 @@ async function generateTemplateJob(job, source, config, options = {}) {
     if (isComplexTemplatePrintAnalysis(analysis, job)) {
       prompt += `\n\n${flagshipComplexTemplatePrintPrompt()}`;
     }
+    if (isOpenDrawerTemplatePrintAnalysis(analysis, job)) {
+      prompt += `\n\n${openDrawerRegisteredPrintPrompt()}`;
+    }
     if (isDetailSliceTemplate(job, analysis)) {
       prompt += `\n\n${detailSliceLayoutProtectionPrompt()}`;
     }
@@ -3727,6 +3764,9 @@ async function generateTemplateJob(job, source, config, options = {}) {
     prompt += '\n\n硬性质量要求：保留当前模板图的中文标题、卖点标签、SKU 标签、尺寸标注、图标、页面编号、背景、道具、人物、光影和排版层级；商品本体必须来自母版产品图。印花只能落在柜门或抽屉的正面可替换面板内部，必须完整保留家具边框、门缝/抽屉缝、侧板、台面、底边、柜脚、把手、阴影和所有场景物品。不得让印花覆盖文字、标签、边框、把手、柜脚、地面、墙面、人物或道具。';
     if (isComplexTemplatePrintAnalysis(analysis, job)) {
       prompt += `\n\n${flagshipComplexTemplatePrintPrompt()}`;
+    }
+    if (isOpenDrawerTemplatePrintAnalysis(analysis, job)) {
+      prompt += `\n\n${openDrawerRegisteredPrintPrompt()}`;
     }
     if (isDetailSliceTemplate(job, analysis)) {
       prompt += `\n\n${detailSliceLayoutProtectionPrompt()}`;
@@ -4960,6 +5000,8 @@ const runtimeExports = {
   detectTemplateLightCabinetPanels,
   hasSemanticPrintableSurfaces,
   imageSchedulerSettingsForRequest,
+  isOpenDrawerTemplatePrintAnalysis,
+  openDrawerRegisteredPrintPrompt,
   deleteReviewFolders,
   exportTitles,
   fileFromToken,
