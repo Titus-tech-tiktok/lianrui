@@ -223,13 +223,13 @@ const IMAGE_API_TIMEOUT_MS = Math.max(1000, Number(process.env.CAISHEN_IMAGE_API
 const IMAGE_URL_TIMEOUT_MS = Math.max(1000, Number(process.env.CAISHEN_IMAGE_URL_TIMEOUT_MS || 300000));
 const ANALYSIS_RETRY_BASE_MS = Math.max(1, Number(process.env.CAISHEN_ANALYSIS_RETRY_BASE_MS || 600));
 const DEFAULT_ANALYSIS_API_CONCURRENCY = Math.min(12, Math.max(1, Number(
-  process.env.CAISHEN_ANALYSIS_API_MAX_CONCURRENCY || 12
+  process.env.CAISHEN_ANALYSIS_API_MAX_CONCURRENCY || 4
 )));
 const DEFAULT_ANALYSIS_API_INITIAL_CONCURRENCY = Math.min(DEFAULT_ANALYSIS_API_CONCURRENCY, Math.max(1, Number(
-  process.env.CAISHEN_ANALYSIS_API_INITIAL_CONCURRENCY || 12
+  process.env.CAISHEN_ANALYSIS_API_INITIAL_CONCURRENCY || 2
 )));
 const DEFAULT_ANALYSIS_API_START_INTERVAL_MS = Math.max(0, Number(
-  process.env.CAISHEN_ANALYSIS_API_START_INTERVAL_MS || 100
+  process.env.CAISHEN_ANALYSIS_API_START_INTERVAL_MS || 500
 ));
 const ANALYSIS_API_MAX_ATTEMPTS = Math.max(1, Number(process.env.CAISHEN_ANALYSIS_API_MAX_ATTEMPTS || 5));
 const ANALYSIS_API_BACKOFF_BASE_MS = Math.max(250, Number(
@@ -3340,7 +3340,11 @@ async function ensureTemplateAnalysisForJob(job) {
   // Existing V11 caches may classify the image correctly but omit panel
   // coordinates. Enrich those caches before generation so the image endpoint
   // always receives a safe edit mask and never redraws or zooms the full page.
-  if (current.cached) return enrichTemplateAnalysisWithSurfacePolygons(job, current);
+  // Generation must never wait for a second coordinate-analysis pass. Some
+  // vision providers classify templates correctly but cannot return stable
+  // polygons; using those coordinates caused slow batches, mass failures and
+  // misplaced drawer artwork. Keep the existing executable classification.
+  if (current.cached) return current;
   const result = await analyzeTemplateJobWithRetry(job);
   if (!result.ok) throw new Error(result.error || 'AI 分析失败');
   const refreshed = await templateAnalysisForJob(job);
@@ -3796,10 +3800,11 @@ async function generateTemplateJob(job, source, config, options = {}) {
   }
   if (options.extraInstruction && source.generationMode === 'template_print') prompt += `\n\n本次运营补充要求：${String(options.extraInstruction).trim()}`;
   if (options.includePreviousResult && fs.existsSync(job.outputPath)) imagePaths.push(job.outputPath);
-  const maskPath = await createTemplateEditMask(job, analysis);
-  if (action === 'replace_print' && !maskPath) {
-    throw new Error('未能获得安全的柜门/抽屉正面蒙版，已停止本张生成，避免整页被放大或重绘。请重新执行该图 AI 分析后再生成。');
-  }
+  // Do not feed AI-produced panel coordinates into image generation. The
+  // configured analysis model does not return them consistently, and an
+  // incorrect mask is worse than no mask: it moves artwork onto drawer
+  // interiors and rejects most of the set before Image2 is even called.
+  const maskPath = '';
   if (maskPath) {
     prompt += '\n\n锁定画布模式：本次请求附带透明编辑蒙版。只允许修改蒙版透明区域内已可见的柜门或抽屉外侧面板；蒙版不透明区域的像素、文字、尺寸线、边框、门缝、把手、柜脚、背景、道具及裁切边界必须与第一张模板图保持完全一致。不得补全被裁掉的柜体，不得重构页面或生成新的海报。';
   }
