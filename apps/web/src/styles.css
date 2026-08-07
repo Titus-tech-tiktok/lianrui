@@ -2067,6 +2067,14 @@ input:focus, textarea:focus, select:focus {
   display: grid;
 }
 
+.review-layout.review-log-hidden {
+  grid-template-columns: 280px minmax(440px, 1fr);
+}
+
+.review-log[hidden] {
+  display: none !important;
+}
+
 .review-sidebar, .review-log {
   padding: 20px;
   overflow: hidden;
@@ -5663,6 +5671,10 @@ label input, label textarea {
     grid-template-columns: 250px minmax(360px, 1fr) 260px;
   }
 
+  .review-layout.review-log-hidden {
+    grid-template-columns: 250px minmax(360px, 1fr);
+  }
+
   .template-editor-card {
     grid-template-columns: 108px minmax(0, 1fr);
   }
@@ -5757,6 +5769,10 @@ label input, label textarea {
     grid-template-columns: 250px minmax(360px, 1fr) 260px;
   }
 
+  .review-layout.review-log-hidden {
+    grid-template-columns: 250px minmax(360px, 1fr);
+  }
+
   .taobao-publish-layout {
     grid-template-columns: 260px minmax(440px, 1fr) 300px;
   }
@@ -5771,6 +5787,10 @@ label input, label textarea {
       "detail";
     height: auto;
     min-height: 0;
+  }
+
+  .review-layout.review-log-hidden {
+    grid-template-columns: 1fr;
   }
 
   .task-layout.template-print-mode {
