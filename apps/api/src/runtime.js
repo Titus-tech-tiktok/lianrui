@@ -3378,6 +3378,106 @@ async function templateOutputSize(job) {
   return imageApiSizeForDimensions(metadata.width, metadata.height);
 }
 
+
+function parseImageCanvasSize(value) {
+  const match = String(value || '').match(/^(\d+)x(\d+)$/i);
+  if (!match) throw new Error('Unsupported image canvas size: ' + value);
+  return { width: Math.max(1, Number(match[1])), height: Math.max(1, Number(match[2])) };
+}
+
+async function prepareTemplateGenerationCanvas(job, maskPath = '') {
+  const size = await templateOutputSize(job);
+  const canvas = parseImageCanvasSize(size);
+  const metadata = await sharp(job.templatePath, { failOn: 'none' }).metadata();
+  const sourceWidth = Math.max(1, Number(metadata.width) || 1);
+  const sourceHeight = Math.max(1, Number(metadata.height) || 1);
+  // Never enlarge a designer-prepared slice before sending it to the API.
+  // Detail text therefore keeps its original pixel scale; only oversized
+  // source files are reduced to fit the supported transport canvas.
+  const scale = Math.min(1, canvas.width / sourceWidth, canvas.height / sourceHeight);
+  const contentWidth = Math.max(1, Math.min(canvas.width, Math.round(sourceWidth * scale)));
+  const contentHeight = Math.max(1, Math.min(canvas.height, Math.round(sourceHeight * scale)));
+  const left = Math.floor((canvas.width - contentWidth) / 2);
+  const top = Math.floor((canvas.height - contentHeight) / 2);
+  const templateStat = await fsp.stat(job.templatePath);
+  const maskStat = maskPath && fs.existsSync(maskPath) ? await fsp.stat(maskPath) : null;
+  const fingerprint = crypto.createHash('sha1').update(JSON.stringify({
+    version: 1,
+    templatePath: path.resolve(job.templatePath),
+    templateSize: templateStat.size,
+    templateMtimeMs: templateStat.mtimeMs,
+    maskPath: maskPath ? path.resolve(maskPath) : '',
+    maskSize: maskStat?.size || 0,
+    maskMtimeMs: maskStat?.mtimeMs || 0,
+    size,
+    sourceWidth,
+    sourceHeight,
+    contentWidth,
+    contentHeight,
+    left,
+    top
+  })).digest('hex').slice(0, 16);
+  const cache = templateCachePaths(job.templateRoot || path.dirname(job.templatePath), job.relativePath || path.basename(job.templatePath));
+  const transportFolder = path.join(cache.cacheFolder, 'generation-canvas');
+  const templatePath = path.join(transportFolder, fingerprint + '.template.png');
+  const preparedMaskPath = maskStat ? path.join(transportFolder, fingerprint + '.mask.png') : '';
+  await fsp.mkdir(transportFolder, { recursive: true });
+  if (!fs.existsSync(templatePath)) {
+    const input = await sharp(job.templatePath, { failOn: 'none' })
+      .rotate()
+      .resize({ width: contentWidth, height: contentHeight, fit: 'fill' })
+      .png()
+      .toBuffer();
+    await sharp({ create: { width: canvas.width, height: canvas.height, channels: 4, background: { r: 245, g: 241, b: 233, alpha: 1 } } })
+      .composite([{ input, left, top }])
+      .png()
+      .toFile(templatePath);
+  }
+  if (maskStat && !fs.existsSync(preparedMaskPath)) {
+    await sharp(maskPath, { failOn: 'none' })
+      .resize({ width: contentWidth, height: contentHeight, fit: 'fill' })
+      .extend({
+        left,
+        right: canvas.width - contentWidth - left,
+        top,
+        bottom: canvas.height - contentHeight - top,
+        background: { r: 255, g: 255, b: 255, alpha: 1 }
+      })
+      .png()
+      .toFile(preparedMaskPath);
+  }
+  return {
+    size,
+    templatePath,
+    maskPath: preparedMaskPath,
+    sourceWidth,
+    sourceHeight,
+    canvasWidth: canvas.width,
+    canvasHeight: canvas.height,
+    contentWidth,
+    contentHeight,
+    left,
+    top
+  };
+}
+
+async function restoreTemplateGenerationCanvas(bytes, plan) {
+  const billingAmountMinor = Math.max(0, Number(bytes?.billingAmountMinor) || 0);
+  // Keep normalization and extraction in separate Sharp pipelines. Sharp may
+  // otherwise reorder an extract around resize and reject valid crop bounds.
+  const normalized = await sharp(bytes, { failOn: 'none' })
+    .resize({ width: plan.canvasWidth, height: plan.canvasHeight, fit: 'fill' })
+    .png()
+    .toBuffer();
+  const restored = await sharp(normalized, { failOn: 'none' })
+    .extract({ left: plan.left, top: plan.top, width: plan.contentWidth, height: plan.contentHeight })
+    .resize({ width: plan.sourceWidth, height: plan.sourceHeight, fit: 'fill' })
+    .png()
+    .toBuffer();
+  restored.billingAmountMinor = billingAmountMinor;
+  return restored;
+}
+
 function containsAny(value, candidates) {
   const text = String(value || '').toLocaleLowerCase('zh-CN');
   return candidates.some(candidate => text.includes(String(candidate).toLocaleLowerCase('zh-CN')));
@@ -3441,11 +3541,9 @@ async function writeTemplateSizedImage(job, bytes, trimPixels = null) {
     image = image.resize({
       width,
       height,
-      // Keep the designer's exact canvas size without stretching furniture.
-      // The image API only supports a small set of aspect ratios, so crop the
-      // excess evenly instead of distorting or adding a white letterbox.
-      fit: 'cover',
-      position: 'centre',
+      // Generation results are restored from a transport canvas before this
+      // final write. This is normally a no-op and must never crop/zoom the page.
+      fit: 'fill',
       withoutEnlargement: false
     });
   }
@@ -3630,9 +3728,12 @@ async function generateTemplateJob(job, source, config, options = {}) {
   if (maskPath) {
     prompt += '\n\n锁定画布模式：本次请求附带透明编辑蒙版。只允许修改蒙版透明区域内已可见的柜门或抽屉外侧面板；蒙版不透明区域的像素、文字、尺寸线、边框、门缝、把手、柜脚、背景、道具及裁切边界必须与第一张模板图保持完全一致。不得补全被裁掉的柜体，不得重构页面或生成新的海报。';
   }
+  const generationCanvas = await prepareTemplateGenerationCanvas(job, maskPath);
+  imagePaths[0] = generationCanvas.templatePath;
+  prompt += '\n\nTRANSPORT_CANVAS_LOCK: The first image contains the original template centered inside a neutral transport margin. The transport margin is not part of the design and will be removed after generation. Preserve the complete centered template region at its exact scale and coordinates. Do not zoom, crop, enlarge, reflow or move any text, furniture, labels or page elements. Do not extend design content into the outer transport margin.';
   const isRegeneration = Boolean(options.isRegeneration || options.extraInstruction);
   let bytes = await generateImage(prompt, imagePaths, {
-    size: await templateOutputSize(job),
+    size: generationCanvas.size,
     quality: config.imageQuality || 'high',
     billingDescription: options.extraInstruction ? '套图图片重新生成' : '套图换印花生图',
     billingReference: job.relativePath,
@@ -3640,11 +3741,12 @@ async function generateTemplateJob(job, source, config, options = {}) {
       ? billingOnceKey('image:template-job-regenerate', job.outputRoot, job.relativePath, Date.now(), crypto.randomUUID())
       : billingOnceKey('image:template-job', job.outputRoot, job.relativePath, Date.now(), crypto.randomUUID()),
     skipBilling: isRegeneration && packageIsFlagship(activePack),
-    maskPath,
+    maskPath: generationCanvas.maskPath,
     signal: options.signal,
     onRequestState: options.onRequestState
   });
   const billedMinor = Math.max(0, Number(bytes.billingAmountMinor) || 0);
+  bytes = await restoreTemplateGenerationCanvas(bytes, generationCanvas);
   bytes = await compositeTemplateEditResult(job, bytes, maskPath);
   const strictLayoutCheck = isDetailSliceTemplate(job, analysis);
   if (strictLayoutCheck) {
@@ -4883,6 +4985,8 @@ const runtimeExports = {
   testAnalysisApi,
   testApiSettings,
   validateTemplateOutputLayout,
+  prepareTemplateGenerationCanvas,
+  restoreTemplateGenerationCanvas,
   writeTemplateSizedImage
 };
 
