@@ -58,10 +58,21 @@ function polygonArea(points) {
 
 function normalizePrintableSurface(value, index = 0) {
   if (!value || typeof value !== 'object') return null;
-  const rawPolygon = Array.isArray(value.polygon) ? value.polygon
+  let rawPolygon = Array.isArray(value.polygon) ? value.polygon
     : Array.isArray(value.points) ? value.points
       : Array.isArray(value.vertices) ? value.vertices
         : [];
+  const box = Array.isArray(value.box_2d) ? value.box_2d : Array.isArray(value.bounding_box) ? value.bounding_box : null;
+  if (!rawPolygon.length && box?.length >= 4) {
+    const [top, left, bottom, right] = box.map(Number);
+    rawPolygon = [[left, top], [right, top], [right, bottom], [left, bottom]];
+  } else if (!rawPolygon.length && value.bbox && typeof value.bbox === 'object') {
+    const left = Number(value.bbox.x ?? value.bbox.left);
+    const top = Number(value.bbox.y ?? value.bbox.top);
+    const right = Number(value.bbox.right ?? (left + Number(value.bbox.width)));
+    const bottom = Number(value.bbox.bottom ?? (top + Number(value.bbox.height)));
+    rawPolygon = [[left, top], [right, top], [right, bottom], [left, bottom]];
+  }
   const coordinateValues = rawPolygon.flatMap(point => Array.isArray(point)
     ? point.slice(0, 2)
     : [point?.x, point?.y]).map(Number).filter(Number.isFinite);
