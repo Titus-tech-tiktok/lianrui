@@ -170,7 +170,7 @@ test('批量 AI 分析使用系统 API 并发配置', async (t) => {
   assert.equal(batch.failed, 0);
 });
 
-test('full detail page slices use unified analysis concurrency with regular images', async (t) => {
+test('designer-prepared detail images remain intact and share analysis concurrency with regular images', async (t) => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'caishen-template-analysis-detail-cap-'));
   let active = 0;
   let maxActive = 0;
@@ -249,10 +249,10 @@ test('full detail page slices use unified analysis concurrency with regular imag
 
   const items = await runtime.listTemplates(folder);
   const relativePaths = items.map(item => item.relativePath);
-  assert.equal(relativePaths.filter(value => value.startsWith('详情页/')).length, 6);
+  assert.equal(relativePaths.filter(value => value.startsWith('详情页/')).length, 1);
 
   const batch = await runtime.analyzeTemplateItems({ folder, relativePaths });
-  assert.equal(batch.completed, 12);
+  assert.equal(batch.completed, 7);
   assert.equal(batch.failed, 0);
   assert.ok(maxActive > 1, 'analysis should still run concurrently');
   assert.ok(maxActive <= 4, 'analysis should use the stable independent ceiling');
@@ -575,3 +575,4 @@ test('detail slice template analysis includes neighbor slices as context only', 
 function templateRelativeKeyForTest(value) {
   return String(value || '').replaceAll('\\', '/').toLocaleLowerCase('zh-CN');
 }
+
