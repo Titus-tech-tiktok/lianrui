@@ -575,4 +575,3 @@ test('detail slice template analysis includes neighbor slices as context only', 
 function templateRelativeKeyForTest(value) {
   return String(value || '').replaceAll('\\', '/').toLocaleLowerCase('zh-CN');
 }
-
