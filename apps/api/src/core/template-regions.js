@@ -58,7 +58,22 @@ function polygonArea(points) {
 
 function normalizePrintableSurface(value, index = 0) {
   if (!value || typeof value !== 'object') return null;
-  const polygon = (Array.isArray(value.polygon) ? value.polygon : Array.isArray(value.points) ? value.points : [])
+  const rawPolygon = Array.isArray(value.polygon) ? value.polygon
+    : Array.isArray(value.points) ? value.points
+      : Array.isArray(value.vertices) ? value.vertices
+        : [];
+  const coordinateValues = rawPolygon.flatMap(point => Array.isArray(point)
+    ? point.slice(0, 2)
+    : [point?.x, point?.y]).map(Number).filter(Number.isFinite);
+  const coordinateMaximum = coordinateValues.length ? Math.max(...coordinateValues.map(Math.abs)) : 0;
+  // Some vision providers return percentages or 0..1000 coordinates even
+  // when 0..1 was requested. Convert them before clamping; otherwise every
+  // value above one collapses to the same corner and the mask is discarded.
+  const coordinateScale = coordinateMaximum > 100 ? 1000 : coordinateMaximum > 1 ? 100 : 1;
+  const polygon = rawPolygon
+    .map(point => Array.isArray(point)
+      ? [Number(point[0]) / coordinateScale, Number(point[1]) / coordinateScale]
+      : { x: Number(point?.x) / coordinateScale, y: Number(point?.y) / coordinateScale })
     .map(normalizePolygonPoint)
     .filter(Boolean);
   if (polygon.length < 3 || polygonArea(polygon) < 0.0005) return null;
