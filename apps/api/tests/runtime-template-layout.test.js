@@ -48,3 +48,20 @@ test('multi-grid keeps the same layout when generated colors differ across the p
   assert.equal(result.passed, true);
   await fs.rm(directory, { recursive: true, force: true });
 });
+
+test('template writer fills the exact designer canvas without white letterboxing', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'caishen-layout-no-letterbox-'));
+  const templatePath = path.join(directory, 'designer-slice.jpg');
+  const outputPath = path.join(directory, 'output.jpg');
+  await sharp({ create: { width: 90, height: 160, channels: 3, background: '#eadfce' } }).jpeg().toFile(templatePath);
+  const generated = await sharp({ create: { width: 120, height: 120, channels: 3, background: '#245db5' } }).png().toBuffer();
+  await runtime.writeTemplateSizedImage({ templatePath, outputPath }, generated);
+  const { data, info } = await sharp(outputPath).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  const bottom = (info.height - 2) * info.width * info.channels + Math.floor(info.width / 2) * info.channels;
+  assert.equal(info.width, 90);
+  assert.equal(info.height, 160);
+  assert.ok(data[bottom + 2] > 130, 'bottom remains generated content instead of a white padding band');
+  assert.ok(data[bottom] < 100);
+  await fs.rm(directory, { recursive: true, force: true });
+});
+
