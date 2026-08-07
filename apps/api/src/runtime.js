@@ -3836,8 +3836,6 @@ async function generateTemplateJob(job, source, config, options = {}) {
   }
   if (maskPath) {
     prompt += '\n\n锁定画布模式：本次请求附带透明编辑蒙版。只允许修改蒙版透明区域内已可见的柜门或抽屉外侧面板；蒙版不透明区域的像素、文字、尺寸线、边框、门缝、把手、柜脚、背景、道具及裁切边界必须与第一张模板图保持完全一致。不得补全被裁掉的柜体，不得重构页面或生成新的海报。';
-  } else if (action === 'replace_print') {
-    prompt += '\n\nNO_MASK_PIXEL_LOCK: The analysis provider did not return usable panel polygons. Continue the requested print replacement, but treat the entire first image as an immutable layout canvas. Preserve its exact pixel dimensions, crop, text size, labels, background, people, props, cabinet geometry, seams, frame, handles and feet. Change only the already-visible cabinet/drawer front surface appearance; do not zoom, stretch, move, rebuild or outpaint any element.';
   }
   const generationCanvas = await prepareTemplateGenerationCanvas(job, maskPath);
   imagePaths[0] = generationCanvas.templatePath;
