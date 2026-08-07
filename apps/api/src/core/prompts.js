@@ -38,7 +38,7 @@ const TEMPLATE_ANALYSIS_PROMPT = `请把这张电商套图模板图分析成可�
 决策顺序：
 1. 识别图片用途：主图、场景图、尺寸图、细节图、物流包装、安装售后、纯文字说明或其他必要详情页。
 2. 套图文件夹里的图片默认都需要进入最终输出；没有可印花表面不等于删除图片。
-3. 当前页面需要出现母版商品、母版商品局部或把原柜体替换为母版商品时，processingMode=replace_print；不需要输出坐标或区域。
+3. 当前页面需要出现母版商品、母版商品局部或把原柜体替换为母版商品时，processingMode=replace_print；并且必须输出当前图片中实际可见面板的 printableSurfaces 归一化坐标。
 4. 图片仍有上架价值但没有可印花表面时，processingMode=copy_original，后端会逐字节复制原图，不调用生图 API。
 5. 不要因为图片是多宫格、尺寸图、场景图或有人物遮挡就直接人工确认；只要画面需要出现母版商品或母版商品局部，就优先 processingMode=replace_print。
 6. AI 不允许选择 exclude；只有运营可以手动排除图片。
