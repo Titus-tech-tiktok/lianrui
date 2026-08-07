@@ -2661,7 +2661,7 @@ async function compositeTemplateEditResult(job, generatedBytes, maskPath) {
   const width = Math.max(1, Number(metadata.width) || 1);
   const height = Math.max(1, Number(metadata.height) || 1);
   const candidate = await sharp(generatedBytes, { failOn: 'none' })
-    .resize({ width, height, fit: 'fill' })
+    .resize({ width, height, fit: 'cover', position: 'centre' })
     .removeAlpha()
     .raw()
     .toBuffer();
@@ -3441,9 +3441,11 @@ async function writeTemplateSizedImage(job, bytes, trimPixels = null) {
     image = image.resize({
       width,
       height,
-      // API output uses a small set of aspect ratios. Stretch it back into the
-      // exact designer canvas instead of letterboxing with visible white space.
-      fit: 'fill',
+      // Keep the designer's exact canvas size without stretching furniture.
+      // The image API only supports a small set of aspect ratios, so crop the
+      // excess evenly instead of distorting or adding a white letterbox.
+      fit: 'cover',
+      position: 'centre',
       withoutEnlargement: false
     });
   }
