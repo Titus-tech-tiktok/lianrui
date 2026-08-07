@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const sharp = require('sharp');
 
-test('every workspace lists a full detail page as sliced template jobs', async () => {
+test('every workspace keeps designer-prepared detail images intact without automatic slicing', async () => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'caishen-folder-slicing-'));
   process.env.CAISHEN_DATA_DIR = path.join(temp, 'data');
   process.env.CAISHEN_DETAIL_FULL_SLICE_HEIGHT = '700';
@@ -35,15 +35,14 @@ test('every workspace lists a full detail page as sliced template jobs', async (
         .toFile(path.join(folder, detailDirectory, detailFile));
       const folders = await runtime.listTemplateFolders();
       assert.equal(folders.length, 1);
-      assert.equal(folders[0].count, 5);
+      assert.equal(folders[0].count, 3);
       const items = await runtime.listTemplates(folders[0].path);
       assert.deepEqual(items.map(item => item.relativePath), [
         `${mainDirectory}/01.jpg`,
         `${skuDirectory}/01.jpg`,
-        `${detailDirectory}/01.jpg`,
-        `${detailDirectory}/02.jpg`,
-        `${detailDirectory}/03.jpg`
+        `${detailDirectory}/${detailFile}`
       ]);
     });
   }
 });
+
