@@ -27,6 +27,8 @@ const {
 const {
   createFallbackTemplateAnalysis,
   createManualTemplateAnalysis,
+  deserializeTemplateAnalysis,
+  normalizePrintableSurfaces,
   normalizeTemplateProcessingMode,
   parseTemplateAnalysisSummary,
   readValidTemplateAnalysisCache,
@@ -2670,13 +2672,19 @@ function insetPrintablePolygon(polygon, width, height, insetPixels = 3) {
 async function createTemplateEditMask(job, analysis) {
   const summary = parseTemplateAnalysisSummary(analysis);
   if (resolveGenerationAction(analysis) !== 'replace_print') return '';
-  const surfaces = Array.isArray(summary.printableSurfaces) ? summary.printableSurfaces : [];
-  // Local colour/component detection is useful for recognizing that a cabinet
-  // exists, but it cannot prove that every open drawer, cropped face or
-  // multi-grid instance was found. A partial mask makes image-2 leave obvious
-  // blank panels. Only semantic/AI polygons are precise enough to constrain
-  // the edit request; local surfaces fall back to locked-canvas generation.
-  if (surfaces.length && surfaces.every(surface => String(surface?.id || '').startsWith('local-panel-'))) return '';
+  let surfaces = (Array.isArray(summary.printableSurfaces) ? summary.printableSurfaces : [])
+    .filter(surface => !String(surface?.id || '').startsWith('local-panel-'));
+  // A dedicated semantic extraction is preferred. For legacy caches where it
+  // still produced no polygon, use only conservative local components fully
+  // inside the page. Components touching a page edge are commonly windows,
+  // paper backgrounds or rugs and must never unlock the whole composition.
+  if (!surfaces.length) {
+    surfaces = (await detectTemplateLightCabinetPanels(job.templatePath).catch(() => []))
+      .filter(surface => {
+        const polygon = Array.isArray(surface?.polygon) ? surface.polygon : [];
+        return polygon.length >= 3 && polygon.every(([x, y]) => x > 0.01 && x < 0.99 && y > 0.01 && y < 0.99);
+      });
+  }
   const polygons = surfaces
     .map(surface => Array.isArray(surface?.polygon) ? surface.polygon : [])
     .filter(polygon => polygon.length >= 3 && printableSurfaceArea(polygon) >= 0.003 && printableSurfaceArea(polygon) <= 0.72);
@@ -3311,6 +3319,53 @@ async function analyzeTemplateFolder(folder) {
   return listTemplates(folder);
 }
 
+async function enrichTemplateAnalysisWithSurfacePolygons(job, current) {
+  if (resolveGenerationAction(current.analysis) !== 'replace_print' || hasSemanticPrintableSurfaces(current.summary)) return current;
+  try {
+    const api = await activeApiConfig('analysis');
+    const prompt = [
+      'Return one legal JSON object only. Do not use Markdown.',
+      'Locate every actually visible exterior cabinet-door face and drawer-front face that must receive the new print in the target image.',
+      '{"printableSurfaces":[{"id":"drawer-front-1","label":"visible exterior drawer front","polygon":[[0.1,0.1],[0.2,0.1],[0.2,0.2],[0.1,0.2]],"surfaceState":"exterior visible"}]}',
+      'All coordinates are normalized from 0 to 1 relative to the complete target image.',
+      'Use a separate tight polygon for every visible panel and every repeated cabinet occurrence in a multi-grid page.',
+      'For open drawers, include only the exterior front board; exclude the drawer interior, inner walls, stored objects, wooden box and slide rails.',
+      'For cropped cabinets, polygon points may touch the crop edge only when the visible exterior panel itself is cut by that edge.',
+      'Exclude all text, labels, people, background, floor, wall, props, black frames, seams, handles, legs, side panels and shadows.',
+      `Existing classification context: ${JSON.stringify(current.summary).slice(0, 6000)}`
+    ].join('\n');
+    const body = await analysisApiJson(api, {
+      model: resolveAnalysisModel(api),
+      messages: [{ role: 'user', content: [
+        { type: 'text', text: prompt },
+        { type: 'image_url', image_url: { url: await imageAsAnalysisDataUrl(job.templatePath) } }
+      ] }],
+      max_tokens: 3500
+    }, (api.requestTimeoutSeconds || 300) * 1000, {
+      description: '套图柜面蒙版坐标补全',
+      reference: job.relativePath,
+      onceKey: billingOnceKey('llm:template-surface-polygons', job.templateRoot, job.relativePath)
+    });
+    const choice = body?.choices?.[0] || {};
+    const content = choice?.message?.content ?? choice?.delta?.content ?? choice?.text ?? body?.output_text ?? body?.content;
+    const root = deserializeTemplateAnalysis(analysisContentToString(content));
+    const printableSurfaces = normalizePrintableSurfaces(root.printableSurfaces ?? root.printable_surfaces);
+    if (!printableSurfaces.length) return current;
+    const merged = { ...current.summary, printableSurfaces };
+    await writeTemplateAnalysisCache({
+      cacheFile: current.cache.analysisFile,
+      templateRoot: job.templateRoot,
+      templateImagePath: job.templatePath,
+      relativeTemplatePath: job.relativePath,
+      analysis: JSON.stringify(merged),
+      manualOverride: false
+    });
+    return templateAnalysisForJob(job);
+  } catch {
+    return current;
+  }
+}
+
 async function ensureTemplateAnalysisForJob(job) {
   const current = await templateAnalysisForJob(job);
   // Analysis decides whether a template needs print replacement. Semantic
@@ -3319,7 +3374,7 @@ async function ensureTemplateAnalysisForJob(job) {
   // caches and some analysis providers legitimately omit polygon coordinates.
   // Re-analyzing every cached image here also serializes a bulk generation and
   // can turn a 40-image task into several minutes of analysis-only failures.
-  if (current.cached) return current;
+  if (current.cached) return enrichTemplateAnalysisWithSurfacePolygons(job, current);
   const result = await analyzeTemplateJobWithRetry(job);
   if (!result.ok) throw new Error(result.error || 'AI 分析失败');
   const refreshed = await templateAnalysisForJob(job);
@@ -3776,6 +3831,9 @@ async function generateTemplateJob(job, source, config, options = {}) {
   if (options.extraInstruction && source.generationMode === 'template_print') prompt += `\n\n本次运营补充要求：${String(options.extraInstruction).trim()}`;
   if (options.includePreviousResult && fs.existsSync(job.outputPath)) imagePaths.push(job.outputPath);
   const maskPath = await createTemplateEditMask(job, analysis);
+  if (action === 'replace_print' && !maskPath) {
+    throw new Error('未能获得安全的柜门/抽屉正面蒙版，已停止本张生成，避免整页被放大或重绘。请重新执行该图 AI 分析后再生成。');
+  }
   if (maskPath) {
     prompt += '\n\n锁定画布模式：本次请求附带透明编辑蒙版。只允许修改蒙版透明区域内已可见的柜门或抽屉外侧面板；蒙版不透明区域的像素、文字、尺寸线、边框、门缝、把手、柜脚、背景、道具及裁切边界必须与第一张模板图保持完全一致。不得补全被裁掉的柜体，不得重构页面或生成新的海报。';
   } else if (action === 'replace_print') {
