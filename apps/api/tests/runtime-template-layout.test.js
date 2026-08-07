@@ -100,3 +100,29 @@ test('transport canvas keeps mask cut-outs aligned and locks its outer margins',
   assert.equal(alphaAt(plan.left + Math.floor(plan.contentWidth / 2), plan.top + Math.floor(plan.contentHeight / 2)), 0, 'editable cut-out remains transparent');
   await fs.rm(directory, { recursive: true, force: true });
 });
+
+test('square templates keep a locked registration frame instead of filling and zooming the API canvas', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'caishen-layout-square-registration-'));
+  const templatePath = path.join(directory, 'square.png');
+  await sharp({ create: { width: 1440, height: 1440, channels: 3, background: '#eadfce' } }).png().toFile(templatePath);
+  const plan = await runtime.prepareTemplateGenerationCanvas({ templatePath, templateRoot: directory, relativePath: '1-1主图/01.png' });
+  assert.equal(plan.canvasWidth, 1024);
+  assert.equal(plan.canvasHeight, 1024);
+  assert.ok(plan.left >= 40 && plan.top >= 40, `square canvas needs a safety frame, got ${plan.left},${plan.top}`);
+  assert.ok(plan.contentWidth < plan.canvasWidth && plan.contentHeight < plan.canvasHeight);
+  const { data, info } = await sharp(plan.maskPath).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const alphaAt = (x, y) => data[(y * info.width + x) * info.channels + 3];
+  assert.equal(alphaAt(2, 2), 255, 'outer registration frame is protected');
+  assert.equal(alphaAt(Math.floor(info.width / 2), Math.floor(info.height / 2)), 0, 'original template region remains editable');
+  await fs.rm(directory, { recursive: true, force: true });
+});
+
+test('open drawers use one registered artwork split into ordered row bands', () => {
+  assert.equal(runtime.isOpenDrawerTemplatePrintAnalysis(JSON.stringify({ viewState: '开抽屉' })), true);
+  const prompt = runtime.openDrawerRegisteredPrintPrompt();
+  assert.match(prompt, /one cabinet facade/i);
+  assert.match(prompt, /row 1 to drawer 1/i);
+  assert.match(prompt, /Never restart, duplicate/i);
+  assert.match(prompt, /drawer interior/i);
+});
+
