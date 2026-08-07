@@ -3076,7 +3076,26 @@ function renderReviewStagePreservingScroll() {
   if (stage) stage.scrollTop = top;
 }
 
+function setReviewTrackingLogVisible(visible, folder = '') {
+  const panel = $('#reviewLogPanel');
+  if (!panel) return;
+  panel.hidden = !visible;
+  panel.dataset.reviewFolder = visible ? String(folder || '') : '';
+  panel.closest('.review-layout')?.classList.toggle('review-log-hidden', !visible);
+}
+
 function renderReviewTrackingLog(item, summary, running) {
+  const isCurrentTask = Boolean(
+    state.reviewTaskActivated
+    && state.activeReview?.folder
+    && item?.folder
+    && state.activeReview.folder === item.folder
+  );
+  if (!isCurrentTask) {
+    renderEmptyReviewTrackingLog();
+    return;
+  }
+  setReviewTrackingLogVisible(true, item.folder);
   const jobs = item?.jobs || [];
   const activeRelativePath = normalizedRelativePath(summary?.activeRelativePath);
   const jobEntries = jobs.map((job, index) => ({
@@ -3174,7 +3193,8 @@ function renderEmptyReviewTrackingLog() {
   const log = $('#reviewOperationLog');
   if (!log) return;
   state.reviewLogFilter = 'all';
-  log.innerHTML = '<div class="review-track-empty">请先点击左侧任务卡片</div>';
+  log.innerHTML = '';
+  setReviewTrackingLogVisible(false);
 }
 
 async function loadReviews({ silent = false } = {}) {
