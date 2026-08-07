@@ -3321,49 +3321,18 @@ async function analyzeTemplateFolder(folder) {
 
 async function enrichTemplateAnalysisWithSurfacePolygons(job, current) {
   if (resolveGenerationAction(current.analysis) !== 'replace_print' || hasSemanticPrintableSurfaces(current.summary)) return current;
-  try {
-    const api = await activeApiConfig('analysis');
-    const prompt = [
-      'Return one legal JSON object only. Do not use Markdown.',
-      'Locate every actually visible exterior cabinet-door face and drawer-front face that must receive the new print in the target image.',
-      '{"printableSurfaces":[{"id":"drawer-front-1","label":"visible exterior drawer front","polygon":[[0.1,0.1],[0.2,0.1],[0.2,0.2],[0.1,0.2]],"surfaceState":"exterior visible"}]}',
-      'All coordinates are normalized from 0 to 1 relative to the complete target image.',
-      'Use a separate tight polygon for every visible panel and every repeated cabinet occurrence in a multi-grid page.',
-      'For open drawers, include only the exterior front board; exclude the drawer interior, inner walls, stored objects, wooden box and slide rails.',
-      'For cropped cabinets, polygon points may touch the crop edge only when the visible exterior panel itself is cut by that edge.',
-      'Exclude all text, labels, people, background, floor, wall, props, black frames, seams, handles, legs, side panels and shadows.',
-      `Existing classification context: ${JSON.stringify(current.summary).slice(0, 6000)}`
-    ].join('\n');
-    const body = await analysisApiJson(api, {
-      model: resolveAnalysisModel(api),
-      messages: [{ role: 'user', content: [
-        { type: 'text', text: prompt },
-        { type: 'image_url', image_url: { url: await imageAsAnalysisDataUrl(job.templatePath) } }
-      ] }],
-      max_tokens: 3500
-    }, (api.requestTimeoutSeconds || 300) * 1000, {
-      description: '套图柜面蒙版坐标补全',
-      reference: job.relativePath,
-      onceKey: billingOnceKey('llm:template-surface-polygons', job.templateRoot, job.relativePath)
-    });
-    const choice = body?.choices?.[0] || {};
-    const content = choice?.message?.content ?? choice?.delta?.content ?? choice?.text ?? body?.output_text ?? body?.content;
-    const root = deserializeTemplateAnalysis(analysisContentToString(content));
-    const printableSurfaces = normalizePrintableSurfaces(root.printableSurfaces ?? root.printable_surfaces);
-    if (!printableSurfaces.length) return current;
-    const merged = { ...current.summary, printableSurfaces };
-    await writeTemplateAnalysisCache({
-      cacheFile: current.cache.analysisFile,
-      templateRoot: job.templateRoot,
-      templateImagePath: job.templatePath,
-      relativeTemplatePath: job.relativePath,
-      analysis: JSON.stringify(merged),
-      manualOverride: false
-    });
-    return templateAnalysisForJob(job);
-  } catch {
-    return current;
+  const result = await analyzeTemplateJobWithRetry(job, 3, async () => {}, {
+    forceReplacePrint: true,
+    requireSemanticSurfaces: true
+  });
+  if (!result.ok) {
+    throw new Error(`柜门/抽屉正面蒙版分析失败：${result.error || 'AI 未返回有效面板坐标'}`);
   }
+  const refreshed = await templateAnalysisForJob(job);
+  if (!hasSemanticPrintableSurfaces(refreshed.summary)) {
+    throw new Error('柜门/抽屉正面蒙版分析失败：AI 未返回有效面板坐标');
+  }
+  return refreshed;
 }
 
 async function ensureTemplateAnalysisForJob(job) {
@@ -3947,7 +3916,10 @@ async function generateTemplateSetForFolder(folder, onlyMissing = true, relative
   const analysisJobs = [];
   for (const job of jobs) {
     const cacheState = await templateAnalysisForJob(job);
-    if (!cacheState.cached) analysisJobs.push(job);
+    const needsSemanticMask = cacheState.cached
+      && resolveGenerationAction(cacheState.analysis) === 'replace_print'
+      && !hasSemanticPrintableSurfaces(cacheState.summary);
+    if (!cacheState.cached || needsSemanticMask) analysisJobs.push({ job, needsSemanticMask });
   }
   if (analysisJobs.length) {
     const analysisConcurrency = await activeApiConcurrencyLimit(jobs.length);
@@ -3968,7 +3940,7 @@ async function generateTemplateSetForFolder(folder, onlyMissing = true, relative
       pending: analysisJobs.length,
       message: `AI 分析已排队 ${analysisJobs.length} 张，按最大并发 ${analysisConcurrency} 进行`
     });
-    const analyzeWithProgress = (job) => analyzeTemplateJobWithRetry(job, 3, async progress => {
+    const analyzeWithProgress = ({ job, needsSemanticMask }) => analyzeTemplateJobWithRetry(job, 3, async progress => {
       await publishProgress({
         phase: 'analyzing',
         total: jobs.length,
@@ -3986,7 +3958,10 @@ async function generateTemplateSetForFolder(folder, onlyMissing = true, relative
           ? `AI 分析失败，正在重试：${job.relativePath}`
           : `正在分析：${job.relativePath}`
       });
-    }).then(async result => {
+    }, needsSemanticMask ? {
+      forceReplacePrint: true,
+      requireSemanticSurfaces: true
+    } : {}).then(async result => {
       analysisCompleted += 1;
       if (!result.ok) analysisFailed += 1;
       await publishProgress({
