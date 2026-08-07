@@ -45,4 +45,3 @@ test('every workspace keeps designer-prepared detail images intact without autom
     });
   }
 });
-
