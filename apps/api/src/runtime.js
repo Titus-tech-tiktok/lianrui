@@ -2495,7 +2495,6 @@ async function buildStructuredTemplateJobSpecs(templateRoot, imagePaths) {
   const ratioSpecs = [];
   const skuSpecs = [];
   const detailSpecs = [];
-  const detailFullImages = [];
   for (const templatePath of imagePaths) {
     const relativePath = normalizeTemplateRelativePath(path.relative(templateRoot, templatePath));
     const sectionName = templateSectionName(relativePath);
@@ -2512,17 +2511,10 @@ async function buildStructuredTemplateJobSpecs(templateRoot, imagePaths) {
       continue;
     }
     if (STRUCTURED_TEMPLATE_SECTIONS.detail.has(sectionName)) {
-      if (detailFullRelativePath(relativePath)) detailFullImages.push(templatePath);
-      else detailSpecs.push({ templatePath, relativePath, sectionName });
+      // Detail pages are supplied by designers as final ordered slices. Never
+      // split or rename them in the backend, regardless of filename or height.
+      detailSpecs.push({ templatePath, relativePath, sectionName });
     }
-  }
-  detailFullImages.sort((left, right) => normalizeTemplateRelativePath(path.relative(templateRoot, left)).localeCompare(
-    normalizeTemplateRelativePath(path.relative(templateRoot, right)),
-    'zh-CN',
-    { numeric: true }
-  ));
-  for (const detailFullPath of detailFullImages) {
-    detailSpecs.push(...await ensureDetailFullSliceSpecs(templateRoot, detailFullPath));
   }
   return [...mainSpecs, ...ratioSpecs, ...skuSpecs, ...detailSpecs];
 }
@@ -3449,9 +3441,9 @@ async function writeTemplateSizedImage(job, bytes, trimPixels = null) {
     image = image.resize({
       width,
       height,
-      fit: 'contain',
-      position: 'northwest',
-      background: { r: 255, g: 255, b: 255, alpha: 1 },
+      // API output uses a small set of aspect ratios. Stretch it back into the
+      // exact designer canvas instead of letterboxing with visible white space.
+      fit: 'fill',
       withoutEnlargement: false
     });
   }
@@ -4888,7 +4880,8 @@ const runtimeExports = {
   updateTaobaoPublishStatus,
   testAnalysisApi,
   testApiSettings,
-  validateTemplateOutputLayout
+  validateTemplateOutputLayout,
+  writeTemplateSizedImage
 };
 
 Object.defineProperties(runtimeExports, {
