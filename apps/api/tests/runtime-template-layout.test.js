@@ -64,4 +64,3 @@ test('template writer fills the exact designer canvas without white letterboxing
   assert.ok(data[bottom] < 100);
   await fs.rm(directory, { recursive: true, force: true });
 });
-
