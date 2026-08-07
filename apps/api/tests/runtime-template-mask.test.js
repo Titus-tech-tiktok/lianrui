@@ -81,3 +81,12 @@ test('partial local detections never constrain open, cropped or multi-grid gener
   });
   assert.equal(await runtime.createTemplateEditMask({ templatePath, templateRoot: root, relativePath: '详情/open.png' }, analysis), '');
 });
+
+test('only semantic panel polygons are trusted for structure-preserving generation', () => {
+  assert.equal(runtime.hasSemanticPrintableSurfaces({
+    printableSurfaces: [{ id: 'local-panel-1', polygon: [[0.1, 0.1], [0.4, 0.1], [0.4, 0.4], [0.1, 0.4]] }]
+  }), false);
+  assert.equal(runtime.hasSemanticPrintableSurfaces({
+    printableSurfaces: [{ id: 'drawer-front-1', polygon: [[0.1, 0.1], [0.4, 0.1], [0.4, 0.4], [0.1, 0.4]] }]
+  }), true);
+});
