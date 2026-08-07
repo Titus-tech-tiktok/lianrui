@@ -2601,6 +2601,18 @@ function printableSurfaceArea(polygon = []) {
   return Math.abs(sum) / 2;
 }
 
+
+function hasSemanticPrintableSurfaces(value) {
+  const summary = typeof value === 'string' ? parseTemplateAnalysisSummary(value) : value || {};
+  const surfaces = Array.isArray(summary.printableSurfaces) ? summary.printableSurfaces : [];
+  return surfaces.some(surface => {
+    if (String(surface?.id || '').startsWith('local-panel-')) return false;
+    const polygon = Array.isArray(surface?.polygon) ? surface.polygon : [];
+    const area = printableSurfaceArea(polygon);
+    return polygon.length >= 3 && area >= 0.003 && area <= 0.72;
+  });
+}
+
 function insetPrintablePolygon(polygon, width, height, insetPixels = 3) {
   const points = polygon.map(([x, y]) => [
     Math.min(1, Math.max(0, Number(x))),
@@ -3110,7 +3122,7 @@ async function analyzeTemplateJob(job, options = {}) {
   }
   const cache = templateCachePaths(job.templateRoot, job.relativePath);
   let validated = validateTemplateAnalysis(analysisText, { source: 'ai' });
-  if (validated.action === 'manual_check' || validated.action === 'copy_original' || (validated.action === 'replace_print' && !validated.printableSurfaces?.length)) {
+  if (validated.action === 'manual_check' || validated.action === 'copy_original' || (validated.action === 'replace_print' && !validated.printableSurfaces?.length && !options.requireSemanticSurfaces)) {
     const visualFallback = await createVisualFallbackTemplateAnalysis(
       job,
       validated.action === 'copy_original'
@@ -3120,6 +3132,9 @@ async function analyzeTemplateJob(job, options = {}) {
           : 'AI marked this template for manual check; local visual panel detection found executable light cabinet panels.'
     );
     if (visualFallback) validated = visualFallback;
+  }
+  if (options.requireSemanticSurfaces && validated.action === 'replace_print' && !hasSemanticPrintableSurfaces(validated)) {
+    throw new Error('AI 未返回可靠的柜门/抽屉面板坐标，已拒绝无蒙版整图生成。');
   }
   const normalizedAnalysis = JSON.stringify(validated);
   await writeTemplateAnalysisCache({
@@ -3264,30 +3279,18 @@ async function analyzeTemplateFolder(folder) {
 
 async function ensureTemplateAnalysisForJob(job) {
   const current = await templateAnalysisForJob(job);
-  const needsEditableSurfaces = current.cached
-    && resolveGenerationAction(current.analysis) === 'replace_print'
-    && !current.summary.printableSurfaces?.length;
-  if (current.cached && !needsEditableSurfaces) return current;
-  if (needsEditableSurfaces) {
-    const localFallback = await createVisualFallbackTemplateAnalysis(
-      job,
-      'Existing replace_print analysis omitted panel coordinates; local visual detection supplied conservative editable polygons.'
-    );
-    if (localFallback?.printableSurfaces?.length) {
-      await writeTemplateAnalysisCache({
-        cacheFile: current.cache.analysisFile,
-        templateRoot: job.templateRoot,
-        templateImagePath: job.templatePath,
-        relativeTemplatePath: job.relativePath,
-        analysis: JSON.stringify(localFallback),
-        manualOverride: false
-      });
-      return templateAnalysisForJob(job);
-    }
-    // Missing polygons must never block an otherwise executable generation.
-    // The locked-canvas prompt still applies; only deterministic mask
-    // compositing is skipped for this image.
-    return current;
+  const action = resolveGenerationAction(current.analysis);
+  const needsSemanticSurfaces = action === 'replace_print' && !hasSemanticPrintableSurfaces(current.summary);
+  if (current.cached && !needsSemanticSurfaces) return current;
+  if (needsSemanticSurfaces) {
+    const result = await analyzeTemplateJobWithRetry(job, 3, async () => {}, {
+      forceReplacePrint: true,
+      requireSemanticSurfaces: true
+    });
+    if (!result.ok) throw new Error(result.error || '无法获得可靠的柜门/抽屉面板坐标');
+    const refreshed = await templateAnalysisForJob(job);
+    if (!hasSemanticPrintableSurfaces(refreshed.summary)) throw new Error('无法获得可靠的柜门/抽屉面板坐标');
+    return refreshed;
   }
   const result = await analyzeTemplateJobWithRetry(job);
   if (!result.ok) throw new Error(result.error || 'AI 分析失败');
@@ -3725,6 +3728,9 @@ async function generateTemplateJob(job, source, config, options = {}) {
   if (options.extraInstruction && source.generationMode === 'template_print') prompt += `\n\n本次运营补充要求：${String(options.extraInstruction).trim()}`;
   if (options.includePreviousResult && fs.existsSync(job.outputPath)) imagePaths.push(job.outputPath);
   const maskPath = await createTemplateEditMask(job, analysis);
+  if (action === 'replace_print' && !maskPath) {
+    throw new Error('无法获得可靠的柜门/抽屉面板编辑区域，已停止本张图片，避免重构或拉伸原套图。');
+  }
   if (maskPath) {
     prompt += '\n\n锁定画布模式：本次请求附带透明编辑蒙版。只允许修改蒙版透明区域内已可见的柜门或抽屉外侧面板；蒙版不透明区域的像素、文字、尺寸线、边框、门缝、把手、柜脚、背景、道具及裁切边界必须与第一张模板图保持完全一致。不得补全被裁掉的柜体，不得重构页面或生成新的海报。';
   }
@@ -4926,6 +4932,7 @@ const runtimeExports = {
   createTemplateEditMask,
   deleteTemplateFolder,
   detectTemplateLightCabinetPanels,
+  hasSemanticPrintableSurfaces,
   deleteReviewFolders,
   exportTitles,
   fileFromToken,
