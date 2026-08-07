@@ -3337,12 +3337,9 @@ async function enrichTemplateAnalysisWithSurfacePolygons(job, current) {
 
 async function ensureTemplateAnalysisForJob(job) {
   const current = await templateAnalysisForJob(job);
-  // Analysis decides whether a template needs print replacement. Semantic
-  // polygons improve the edit when the vision model returns them, but they
-  // must never become a hard prerequisite for generation: existing V11
-  // caches and some analysis providers legitimately omit polygon coordinates.
-  // Re-analyzing every cached image here also serializes a bulk generation and
-  // can turn a 40-image task into several minutes of analysis-only failures.
+  // Existing V11 caches may classify the image correctly but omit panel
+  // coordinates. Enrich those caches before generation so the image endpoint
+  // always receives a safe edit mask and never redraws or zooms the full page.
   if (current.cached) return enrichTemplateAnalysisWithSurfacePolygons(job, current);
   const result = await analyzeTemplateJobWithRetry(job);
   if (!result.ok) throw new Error(result.error || 'AI 分析失败');
