@@ -3760,9 +3760,10 @@ async function generateTemplateJob(job, source, config, options = {}) {
     if (isComplexTemplatePrintAnalysis(analysis, job)) {
       prompt += `\n\n${flagshipComplexTemplatePrintPrompt()}`;
     }
-    if (isOpenDrawerTemplatePrintAnalysis(analysis, job)) {
-      prompt += `\n\n${openDrawerRegisteredPrintPrompt()}`;
-    }
+    // Apply the registered row-band rule to every cabinet template. Closed
+    // drawers are the trivial case; opened drawers then cannot be treated as
+    // independent canvases or have their physical geometry regenerated.
+    prompt += `\n\n${openDrawerRegisteredPrintPrompt()}`;
     if (isDetailSliceTemplate(job, analysis)) {
       prompt += `\n\n${detailSliceLayoutProtectionPrompt()}`;
     }
@@ -3790,9 +3791,7 @@ async function generateTemplateJob(job, source, config, options = {}) {
     if (isComplexTemplatePrintAnalysis(analysis, job)) {
       prompt += `\n\n${flagshipComplexTemplatePrintPrompt()}`;
     }
-    if (isOpenDrawerTemplatePrintAnalysis(analysis, job)) {
-      prompt += `\n\n${openDrawerRegisteredPrintPrompt()}`;
-    }
+    prompt += `\n\n${openDrawerRegisteredPrintPrompt()}`;
     if (isDetailSliceTemplate(job, analysis)) {
       prompt += `\n\n${detailSliceLayoutProtectionPrompt()}`;
     }
