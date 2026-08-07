@@ -389,6 +389,24 @@ function apiConcurrencyLimit(total = Infinity) {
   return Math.min(max, Math.max(1, Math.trunc(count)));
 }
 
+
+function imageSchedulerSettingsForRequest(pack, options = {}, settings = currentApiSettings()) {
+  if (options.bulkGeneration === true) {
+    const bulk = normalizeImageConcurrencySettings(settings);
+    return {
+      initialConcurrency: bulk.imageMaxConcurrency,
+      maxConcurrency: bulk.imageMaxConcurrency,
+      minStartIntervalMs: bulk.imageStartIntervalMs
+    };
+  }
+  const maxConcurrency = Math.max(1, Number(pack?.maxConcurrency) || DEFAULT_IMAGE_API_CONCURRENCY);
+  return {
+    initialConcurrency: maxConcurrency,
+    maxConcurrency,
+    minStartIntervalMs: Math.max(0, Number(pack?.startIntervalMs) || 0)
+  };
+}
+
 function publicApiConcurrencySettings(value = currentApiSettings()) {
   return normalizeImageConcurrencySettings(value);
 }
@@ -2192,11 +2210,7 @@ async function generateImage(prompt, imagePaths, options = {}) {
   const api = await activeApiConfig('image');
   const pack = api.activeModelPackage;
   if (pack) {
-    imageApiScheduler.configure({
-      initialConcurrency: Math.min(Number(pack.maxConcurrency) || 1, Number(pack.maxConcurrency) || 1),
-      maxConcurrency: Number(pack.maxConcurrency) || 1,
-      minStartIntervalMs: Number(pack.startIntervalMs) || 0
-    });
+    imageApiScheduler.configure(imageSchedulerSettingsForRequest(pack, options));
   }
   const preparedImages = await Promise.all(imagePaths.map(file => {
     if (!isImagePath(file)) throw new Error(`Unsupported image format: ${path.basename(file)}`);
@@ -3283,7 +3297,9 @@ async function ensureTemplateAnalysisForJob(job) {
   const needsSemanticSurfaces = action === 'replace_print' && !hasSemanticPrintableSurfaces(current.summary);
   if (current.cached && !needsSemanticSurfaces) return current;
   if (needsSemanticSurfaces) {
-    const result = await analyzeTemplateJobWithRetry(job, 3, async () => {}, {
+    // One semantic retry is enough; repeated vision calls inside every image
+    // worker can otherwise dominate a bulk task for several minutes.
+    const result = await analyzeTemplateJobWithRetry(job, 1, async () => {}, {
       forceReplacePrint: true,
       requireSemanticSurfaces: true
     });
@@ -3741,6 +3757,7 @@ async function generateTemplateJob(job, source, config, options = {}) {
   let bytes = await generateImage(prompt, imagePaths, {
     size: generationCanvas.size,
     quality: config.imageQuality || 'high',
+    bulkGeneration: options.bulkGeneration === true,
     billingDescription: options.extraInstruction ? '套图图片重新生成' : '套图换印花生图',
     billingReference: job.relativePath,
     billingOnceKey: isRegeneration
@@ -3795,10 +3812,14 @@ async function generateTemplateSetForFolder(folder, onlyMissing = true, relative
   }
   if (onlyMissing) jobs = jobs.filter(job => !fs.existsSync(job.outputPath));
   let progressWrite = Promise.resolve();
+  const lastProgressByPhase = new Map();
   const generationStartedAt = new Date();
   const generationStartedAtIso = generationStartedAt.toISOString();
   const publishProgress = progress => {
     const phase = progress.phase || 'generating';
+    const requestedCurrent = Math.max(0, Number(progress.current) || 0);
+    const monotonicCurrent = Math.max(requestedCurrent, lastProgressByPhase.get(phase) || 0);
+    lastProgressByPhase.set(phase, monotonicCurrent);
     const completedAt = progress.completedAt || (['completed', 'completed_with_errors', 'failed'].includes(phase) ? new Date().toISOString() : '');
     const elapsedMs = completedAt
       ? Math.max(0, new Date(completedAt).getTime() - generationStartedAt.getTime())
@@ -3806,7 +3827,7 @@ async function generateTemplateSetForFolder(folder, onlyMissing = true, relative
     const next = {
       folder,
       phase,
-      current: Math.max(0, Number(progress.current) || 0),
+      current: monotonicCurrent,
       total: Math.max(0, Number(progress.total) || jobs.length),
       percent: Math.max(0, Math.min(100, Number(progress.percent) || 0)),
       apiGenerated: Math.max(0, Number(progress.apiGenerated) || 0),
@@ -3949,6 +3970,7 @@ async function generateTemplateSetForFolder(folder, onlyMissing = true, relative
       const result = await generateTemplateJob(job, source, config, {
         extraInstruction: options.extraInstruction,
         isRegeneration,
+        bulkGeneration: true,
         signal: options.signal,
         onRequestState: event => recordImageRequestState(job, event)
       });
@@ -4040,6 +4062,16 @@ async function regenerateSingleTemplate(payload, options = {}) {
   const extraInstruction = String(payload?.extraInstruction || audit.retryInstruction || '').trim();
   const referenceResultPath = await resolveReviewReferenceResultPath(folder, payload?.referenceResultRelativePath || '');
   const progressFile = metadataPaths(folder).generationProgress;
+  const activeProgress = await readJsonFile(progressFile, {});
+  const activePhase = String(activeProgress?.phase || '');
+  const progressAgeMs = Date.now() - new Date(activeProgress?.updatedAt || 0).getTime();
+  if (['queued', 'preparing', 'analyzing', 'generating', 'auditing', 'running'].includes(activePhase)
+      && Number.isFinite(progressAgeMs)
+      && progressAgeMs < 20 * 60 * 1000) {
+    throw new Error(activeProgress?.activeRelativePath
+      ? '当前已有单张图片正在重新生成，请等待完成后再试。'
+      : '当前整套任务仍在生成，请等待整套完成后再重新生成单张图片。');
+  }
   const startedAt = new Date().toISOString();
   const publishSingleProgress = async update => {
     const existing = await readJsonFile(progressFile, {});
@@ -4060,6 +4092,9 @@ async function regenerateSingleTemplate(payload, options = {}) {
       message: String(update?.message || `正在重新生成图片：${job.relativePath}`),
       activeRelativePath: job.relativePath,
       startedAt: existing?.startedAt || startedAt,
+      completedAt: ['queued', 'preparing', 'analyzing', 'generating', 'auditing', 'running'].includes(String(update?.phase || ''))
+        ? ''
+        : String(update?.completedAt || existing?.completedAt || ''),
       updatedAt: new Date().toISOString()
     };
     await writeJsonFile(progressFile, next);
@@ -4933,6 +4968,7 @@ const runtimeExports = {
   deleteTemplateFolder,
   detectTemplateLightCabinetPanels,
   hasSemanticPrintableSurfaces,
+  imageSchedulerSettingsForRequest,
   deleteReviewFolders,
   exportTitles,
   fileFromToken,
