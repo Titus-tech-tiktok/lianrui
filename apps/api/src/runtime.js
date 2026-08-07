@@ -223,13 +223,13 @@ const IMAGE_API_TIMEOUT_MS = Math.max(1000, Number(process.env.CAISHEN_IMAGE_API
 const IMAGE_URL_TIMEOUT_MS = Math.max(1000, Number(process.env.CAISHEN_IMAGE_URL_TIMEOUT_MS || 300000));
 const ANALYSIS_RETRY_BASE_MS = Math.max(1, Number(process.env.CAISHEN_ANALYSIS_RETRY_BASE_MS || 600));
 const DEFAULT_ANALYSIS_API_CONCURRENCY = Math.min(12, Math.max(1, Number(
-  process.env.CAISHEN_ANALYSIS_API_MAX_CONCURRENCY || 4
+  process.env.CAISHEN_ANALYSIS_API_MAX_CONCURRENCY || 12
 )));
 const DEFAULT_ANALYSIS_API_INITIAL_CONCURRENCY = Math.min(DEFAULT_ANALYSIS_API_CONCURRENCY, Math.max(1, Number(
-  process.env.CAISHEN_ANALYSIS_API_INITIAL_CONCURRENCY || 2
+  process.env.CAISHEN_ANALYSIS_API_INITIAL_CONCURRENCY || 12
 )));
 const DEFAULT_ANALYSIS_API_START_INTERVAL_MS = Math.max(0, Number(
-  process.env.CAISHEN_ANALYSIS_API_START_INTERVAL_MS || 500
+  process.env.CAISHEN_ANALYSIS_API_START_INTERVAL_MS || 100
 ));
 const ANALYSIS_API_MAX_ATTEMPTS = Math.max(1, Number(process.env.CAISHEN_ANALYSIS_API_MAX_ATTEMPTS || 5));
 const ANALYSIS_API_BACKOFF_BASE_MS = Math.max(250, Number(
@@ -3321,7 +3321,7 @@ async function analyzeTemplateFolder(folder) {
 
 async function enrichTemplateAnalysisWithSurfacePolygons(job, current) {
   if (resolveGenerationAction(current.analysis) !== 'replace_print' || hasSemanticPrintableSurfaces(current.summary)) return current;
-  const result = await analyzeTemplateJobWithRetry(job, 3, async () => {}, {
+  const result = await analyzeTemplateJobWithRetry(job, 1, async () => {}, {
     forceReplacePrint: true,
     requireSemanticSurfaces: true
   });
@@ -3913,10 +3913,7 @@ async function generateTemplateSetForFolder(folder, onlyMissing = true, relative
   const analysisJobs = [];
   for (const job of jobs) {
     const cacheState = await templateAnalysisForJob(job);
-    const needsSemanticMask = cacheState.cached
-      && resolveGenerationAction(cacheState.analysis) === 'replace_print'
-      && !hasSemanticPrintableSurfaces(cacheState.summary);
-    if (!cacheState.cached || needsSemanticMask) analysisJobs.push({ job, needsSemanticMask });
+    if (!cacheState.cached) analysisJobs.push(job);
   }
   if (analysisJobs.length) {
     const analysisConcurrency = await activeApiConcurrencyLimit(jobs.length);
@@ -3937,7 +3934,7 @@ async function generateTemplateSetForFolder(folder, onlyMissing = true, relative
       pending: analysisJobs.length,
       message: `AI 分析已排队 ${analysisJobs.length} 张，按最大并发 ${analysisConcurrency} 进行`
     });
-    const analyzeWithProgress = ({ job, needsSemanticMask }) => analyzeTemplateJobWithRetry(job, 3, async progress => {
+    const analyzeWithProgress = (job) => analyzeTemplateJobWithRetry(job, 3, async progress => {
       await publishProgress({
         phase: 'analyzing',
         total: jobs.length,
@@ -3955,10 +3952,7 @@ async function generateTemplateSetForFolder(folder, onlyMissing = true, relative
           ? `AI 分析失败，正在重试：${job.relativePath}`
           : `正在分析：${job.relativePath}`
       });
-    }, needsSemanticMask ? {
-      forceReplacePrint: true,
-      requireSemanticSurfaces: true
-    } : {}).then(async result => {
+    }).then(async result => {
       analysisCompleted += 1;
       if (!result.ok) analysisFailed += 1;
       await publishProgress({
