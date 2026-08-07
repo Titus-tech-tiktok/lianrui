@@ -3293,21 +3293,13 @@ async function analyzeTemplateFolder(folder) {
 
 async function ensureTemplateAnalysisForJob(job) {
   const current = await templateAnalysisForJob(job);
-  const action = resolveGenerationAction(current.analysis);
-  const needsSemanticSurfaces = action === 'replace_print' && !hasSemanticPrintableSurfaces(current.summary);
-  if (current.cached && !needsSemanticSurfaces) return current;
-  if (needsSemanticSurfaces) {
-    // One semantic retry is enough; repeated vision calls inside every image
-    // worker can otherwise dominate a bulk task for several minutes.
-    const result = await analyzeTemplateJobWithRetry(job, 1, async () => {}, {
-      forceReplacePrint: true,
-      requireSemanticSurfaces: true
-    });
-    if (!result.ok) throw new Error(result.error || '无法获得可靠的柜门/抽屉面板坐标');
-    const refreshed = await templateAnalysisForJob(job);
-    if (!hasSemanticPrintableSurfaces(refreshed.summary)) throw new Error('无法获得可靠的柜门/抽屉面板坐标');
-    return refreshed;
-  }
+  // Analysis decides whether a template needs print replacement. Semantic
+  // polygons improve the edit when the vision model returns them, but they
+  // must never become a hard prerequisite for generation: existing V11
+  // caches and some analysis providers legitimately omit polygon coordinates.
+  // Re-analyzing every cached image here also serializes a bulk generation and
+  // can turn a 40-image task into several minutes of analysis-only failures.
+  if (current.cached) return current;
   const result = await analyzeTemplateJobWithRetry(job);
   if (!result.ok) throw new Error(result.error || 'AI 分析失败');
   const refreshed = await templateAnalysisForJob(job);
@@ -3744,11 +3736,10 @@ async function generateTemplateJob(job, source, config, options = {}) {
   if (options.extraInstruction && source.generationMode === 'template_print') prompt += `\n\n本次运营补充要求：${String(options.extraInstruction).trim()}`;
   if (options.includePreviousResult && fs.existsSync(job.outputPath)) imagePaths.push(job.outputPath);
   const maskPath = await createTemplateEditMask(job, analysis);
-  if (action === 'replace_print' && !maskPath) {
-    throw new Error('无法获得可靠的柜门/抽屉面板编辑区域，已停止本张图片，避免重构或拉伸原套图。');
-  }
   if (maskPath) {
     prompt += '\n\n锁定画布模式：本次请求附带透明编辑蒙版。只允许修改蒙版透明区域内已可见的柜门或抽屉外侧面板；蒙版不透明区域的像素、文字、尺寸线、边框、门缝、把手、柜脚、背景、道具及裁切边界必须与第一张模板图保持完全一致。不得补全被裁掉的柜体，不得重构页面或生成新的海报。';
+  } else if (action === 'replace_print') {
+    prompt += '\n\nNO_MASK_PIXEL_LOCK: The analysis provider did not return usable panel polygons. Continue the requested print replacement, but treat the entire first image as an immutable layout canvas. Preserve its exact pixel dimensions, crop, text size, labels, background, people, props, cabinet geometry, seams, frame, handles and feet. Change only the already-visible cabinet/drawer front surface appearance; do not zoom, stretch, move, rebuild or outpaint any element.';
   }
   const generationCanvas = await prepareTemplateGenerationCanvas(job, maskPath);
   imagePaths[0] = generationCanvas.templatePath;
