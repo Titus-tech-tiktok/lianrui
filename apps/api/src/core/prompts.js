@@ -1,314 +1,80 @@
 'use strict';
 
-const path = require('node:path');
-
-const GLOBAL_NEGATIVE_PROMPT = `全局负向约束：
-不得改变家具主体结构、品类、比例、柜门、抽屉、层板、柜脚、把手、边框、五金件和可见尺寸关系。
-不得改变印花内容、颜色、明暗、饱和度、元素、文字、布局和相对位置。
-不得只截取印花局部，不得把印花变成浮雕、3D凸起、悬浮物、雕刻件、挂件或真实装饰件。
-不得让光影改变家具本体颜色和印花颜色。
-不得出现货不对板、结构错乱、门数错误、柜脚缺失、边框变形、印花错位、白边、黑边、脏边、残影、断裂、局部缺失。`;
-
-const MASTER_PROMPT_TEMPLATE = `你是母版图生成前的提示词反推模型。请同时观察上传的品类款式图和印花图，只输出一份用于生成“单张母版图”的中文生图提示词。
-
-最高优先级规则：
-1. 以品类款式图为产品结构唯一依据，完整保持家具品类、外形、横竖版方向、比例、透视、柜门线、抽屉线、层板、边框、柜脚、把手和五金件。
-2. 以印花图为图案唯一依据，必须尽量完整保留整体内容、布局、主要元素、文字和色块关系，不得只截取局部，不得重新设计。
-3. 印花必须作为二维平面印刷图案贴合在家具正面可贴图区。即使原素材带浮雕感、3D感、阴影、高光或厚涂感，也必须压平成UV打印、贴膜、喷绘或平面彩绘效果。
-4. 根据家具与印花的横竖方向进行等比例适配。允许为适配柜门边界做整体缩放和必要留白，但禁止拉伸、挤压、变形和切掉核心内容。
-5. 印花不得覆盖外框、侧板厚度、柜脚、把手、地面、背景和阴影；柜门分缝必须自然保留在印花表面。
-6. 融合边缘必须干净贴合，禁止白边、黑边、脏边、残影、断裂、错位、局部缺失、悬浮、凸起、竖条和投影溢出。
-7. 如果品类图包含尺寸线或尺寸文字，只用于理解真实比例，不得把尺寸标注复制进母版图。
-8. 最终母版必须是干净、完整、真实的商品图，不加标题、标签、水印、装饰边框和营销文案。
-
-输出要求：
-- 直接输出可执行的母版生图提示词；
-- 明确写出产品结构保持、印花完整平面化、方向适配、覆盖边界和缺陷禁止项；
-- 不输出分析过程，不输出多个方案。
-
-母版生图固定约束：
-使用输入的品类款式图作为产品结构基准，使用输入的印花图作为唯一图案基准，生成一张干净的电商母版商品图。
-家具结构、比例、柜门/抽屉/柜脚/把手/边框必须与品类图一致；印花必须完整、等比例、二维平面化地贴合在正面可贴图区，不得浮雕、立体、悬浮、重绘、变色或只取局部。保留真实柜门分缝和边框，清除尺寸标注、营销文字、水印和无关背景。输出真实、清晰、可继续用于生成电商主图的母版图。
-
-${GLOBAL_NEGATIVE_PROMPT}`;
-
-const TEMPLATE_ANALYSIS_PROMPT = `请把这张电商套图模板图分析成可复用的“模板换印花说明书”。只输出合法 JSON，不要 Markdown，不要解释。
-后续正式处理会调用 AI 生图接口重新生成套图成品。你必须先判断图片在整套商品链接里的用途，再判断是否存在清晰可见、属于家具外侧的白色或浅色柜门、抽屉正面或面板。
-
-决策顺序：
-1. 识别图片用途：主图、场景图、尺寸图、细节图、物流包装、安装售后、纯文字说明或其他必要详情页。
-2. 套图文件夹里的图片默认都需要进入最终输出；没有可印花表面不等于删除图片。
-3. 当前页面需要出现母版商品、母版商品局部或把原柜体替换为母版商品时，processingMode=replace_print；并且必须输出当前图片中实际可见面板的 printableSurfaces 归一化坐标。
-4. 图片仍有上架价值但没有可印花表面时，processingMode=copy_original，后端会逐字节复制原图，不调用生图 API。
-5. 不要因为图片是多宫格、尺寸图、场景图或有人物遮挡就直接人工确认；只要画面需要出现母版商品或母版商品局部，就优先 processingMode=replace_print。
-6. AI 不允许选择 exclude；只有运营可以手动排除图片。
-
-必须判定为 replace_print 的常见情况：
-- 规格图、SKU 图、多宫格对比图里，只要小图需要展示换印花后的母版商品，就判定为 replace_print。
-- 详情页场景图、卖点文字图、人物使用图里，只要画面主体需要替换为母版商品，就判定为 replace_print；文字、人物和道具写入 preserveAreas。
-- 柜门打开或半开时，如果仍需要展示母版商品的外观效果，判定为 replace_print；柜体内部、门内侧、人物遮挡处写入 preserveAreas。
-- 正面柜子被沙发、人物、植物、台面物品局部遮挡时，如果可见商品主体需要迁移成母版商品，仍判定为 replace_print。
-- 如果图片看起来是完整详情页被上下切开的局部切片，必须结合页面边缘判断被裁掉的商品是否仍在当前切片中延续；被边缘裁掉的半个抽屉、半扇柜门或局部柜体也必须继续视为需要母版商品迁移。
-- 多宫格或细节图中每个小画面独立判断；只要任意小画面包含可见柜门、抽屉正面、半截面板或跨切片延续的柜体外侧，就必须 processingMode=replace_print，并在 preserveAreas 中写清楚文字和未涉及的小图需要保护。
-
-按这个结构输出：
-{
-  "version": 11,
-  "imageRole": "主图/场景图/尺寸图/细节图/材质图/包装物流/安装售后/买家须知/纯文字页/多图拼接/不确定",
-  "includeInOutput": true,
-  "processingMode": "replace_print/copy_original/manual_check",
-  "confidence": 0.0,
-  "imageUnderstanding": "客观描述图片用途、家具角度、开合状态以及选择该动作的原因，80字以内",
-  "viewState": "正面闭合/侧面/背面/俯视/开门/开抽屉/半开/局部特写/多角度拼图/无商品",
-  "printableArea": "说明这张图是否需要使用母版商品生成，以及应保留哪些页面元素",
-  "printableSurfaces": [{"id":"front-panel-1","label":"柜门外侧可替换面板","polygon":[[0.20,0.30],[0.80,0.30],[0.80,0.78],[0.20,0.78]],"surfaceState":"外侧可见"}],
-  "mappingMode": "master_product_migration",
-  "preserveAreas": "必须保持不变的文字、背景、结构、门缝、把手、边框、柜脚、道具、阴影、人物和前景遮挡",
-  "riskPoints": ["容易出错的点"],
-  "needs_manual_check": false
-}
-
-硬性规则：
-- V11 结构中的字段应尽量完整输出；缺少说明性字段时后端会补默认值，不要因此把可执行图片改成人工确认。
-- 对 processingMode=replace_print，必须输出 printableSurfaces：只圈出当前图片里实际可见、需要换印花的柜门或抽屉外侧面板。polygon 使用 0 到 1 的归一化坐标；每个点为 [x,y]；只画面板内部，绝不包含黑色边框、门缝、把手、柜脚、文字、尺寸线、背景、道具或被裁掉的画面。
-- 对 copy_original 或 manual_check，printableSurfaces 必须为空数组。
-- replace_print 表示“这张套图需要用母版商品重新生成”，不是局部标注换印花。
-- 主图、场景图、尺寸图、SKU 图、细节图或材质图没有可印花表面时应 copy_original，不得删除，也不得强行贴印花。
-- 物流、包装、安装售后、买家须知、纯文字说明、纯侧面、背面、只有内部收纳或运输详情页通常 copy_original；但只要画面同时出现可见白色/浅色柜门正面或门板外表面，就必须 replace_print。
-- 多宫格逐个小图确认；需要母版商品出现的小图按 replace_print，不能换印花的小图或遮挡区域写入 preserveAreas。
-- 对详情页切片尤其保守：不要因为柜体被图片边缘切断、只露出一部分抽屉、只出现局部柜门、或文字区域占比更大就 copy_original；只要该局部仍属于商品外观展示，就判定为 replace_print。
-- confidence 只表示判断把握，不作为自动降级人工确认的硬门槛；需要母版商品出现在当前页面时仍应输出 replace_print。
-- replace_print 必须给出具体 printableArea 文字说明；只有图像损坏、主体完全不可判断时，才使用 manual_check。`;
-
-function selectPathApi(...values) {
-  return values.some(value => /^[A-Za-z]:[\\/]/.test(String(value || '')) || String(value || '').includes('\\'))
-    ? path.win32
-    : path.posix;
-}
-
-function basenameAny(value) {
-  const text = String(value || '');
-  return selectPathApi(text).basename(text);
-}
-
-function dirnameAny(value) {
-  const text = String(value || '');
-  if (!text) return '';
-  const api = selectPathApi(text);
-  const result = api.dirname(text);
-  return result === '.' ? '' : result;
-}
-
-function fileNameWithoutExtension(value) {
-  const text = String(value || '');
-  const api = selectPathApi(text);
-  const name = api.basename(text);
-  return name.slice(0, name.length - api.extname(name).length);
-}
-
-function safeWindowsFileName(value) {
-  const cleaned = String(value || '').replace(/[<>:"\/\\|?*\x00-\x1F]/g, '_');
-  return cleaned.trim() ? cleaned : 'task';
-}
-
-function replaceLiteral(value, search, replacement) {
-  return String(value).split(search).join(String(replacement));
-}
-
 function taskField(task, camelName, pascalName) {
   if (task && Object.prototype.hasOwnProperty.call(task, camelName)) return String(task[camelName] || '');
   if (task && Object.prototype.hasOwnProperty.call(task, pascalName)) return String(task[pascalName] || '');
   return '';
 }
 
-function extractProductNamingParts(productPath, categoriesPath) {
-  const api = selectPathApi(productPath, categoriesPath);
-  const categoriesRoot = String(categoriesPath || '').trim() ? api.resolve(String(categoriesPath)) : '';
-  const fullProduct = api.resolve(String(productPath));
-
-  if (categoriesRoot && fullProduct.toLocaleLowerCase('en-US').startsWith(categoriesRoot.toLocaleLowerCase('en-US'))) {
-    const relative = api.relative(categoriesRoot, fullProduct);
-    const parts = relative.split(/[\\/]/);
-    if (parts.length >= 2) {
-      return [safeWindowsFileName(parts[0]), safeWindowsFileName(parts[1])];
-    }
-    if (parts.length === 1) {
-      const parent = basenameAny(dirnameAny(productPath)) || '品类';
-      return [safeWindowsFileName(parent), safeWindowsFileName(fileNameWithoutExtension(parts[0]))];
-    }
-  }
-
-  const parent = basenameAny(dirnameAny(productPath)) || '品类';
-  return [safeWindowsFileName(parent), safeWindowsFileName(fileNameWithoutExtension(productPath))];
-}
-
-function extractPrintCode(printPath) {
-  const name = fileNameWithoutExtension(printPath);
-  const match = name.match(/\p{Nd}+/u);
-  return match ? match[0] : safeWindowsFileName(name);
-}
-
-function applyMasterPromptTemplate(template, task, categoriesPath = '') {
-  const productPath = taskField(task, 'productPath', 'ProductPath');
-  const printPath = taskField(task, 'printPath', 'PrintPath');
-  const productName = fileNameWithoutExtension(productPath);
-  const printName = fileNameWithoutExtension(printPath);
-  const [categoryName, styleCode] = extractProductNamingParts(productPath, categoriesPath);
-  const printCode = extractPrintCode(printPath);
-
-  let result = String(template || '');
-  result = replaceLiteral(result, '{产品文件名}', productName);
-  result = replaceLiteral(result, '{印花文件名}', printName);
-  result = replaceLiteral(result, '{品类}', categoryName);
-  result = replaceLiteral(result, '{子品类}', styleCode);
-  result = replaceLiteral(result, '{印花编号}', printCode);
-  return result;
-}
-
-function productProfilePromptText(productProfile) {
-  if (typeof productProfile === 'string') return productProfile;
-  if (productProfile && typeof productProfile.ToPromptText === 'function') {
-    return String(productProfile.ToPromptText());
-  }
-  if (productProfile && typeof productProfile.toPromptText === 'function') {
-    return String(productProfile.toPromptText());
-  }
-
-  const dimensions = taskField(productProfile, 'dimensions', 'Dimensions');
-  const material = taskField(productProfile, 'material', 'Material');
-  const lines = [];
-  if (dimensions.trim()) lines.push(`尺寸：${dimensions}`);
-  if (material.trim()) lines.push(`材质：${material}`);
-  return lines.length > 0
-    ? lines.join('\n')
-    : '未提供商品资料。尺寸和材质不得编造；缺资料的信息页应保守处理或复制模板。';
-}
-
-function applyTemplatePathPlaceholders(prompt, job) {
-  const relativeTemplatePath = taskField(job, 'relativeTemplatePath', 'RelativeTemplatePath');
-  const templateImagePath = taskField(job, 'templateImagePath', 'TemplateImagePath');
-  let result = String(prompt);
-  result = replaceLiteral(result, '{模板相对路径}', relativeTemplatePath);
-  result = replaceLiteral(result, '{模板文件名}', basenameAny(templateImagePath));
-  result = replaceLiteral(result, '{模板文件夹}', dirnameAny(relativeTemplatePath));
-  return result;
-}
-
-function TEMPLATE_MIGRATION_PROMPT(job, templateAnalysis, productProfile, action, retryInstruction) {
-  const relativeTemplatePath = taskField(job, 'relativeTemplatePath', 'RelativeTemplatePath');
-  const profileText = productProfilePromptText(productProfile);
-  const retry = retryInstruction == null ? '' : String(retryInstruction);
-  const retryText = retry.trim() ? `上一次 AI 审核未通过，本次必须修正：${retry}` : '';
-
-  const prompt = `你将根据一张“母版商品图”生成当前套图图片。生成阶段只看得到母版图；下面的 JSON 是另一张模板图的文字分析，只用于描述目标图片类型、场景、构图和排版。
-
-最高优先级：
-- 输入图片中的母版商品是唯一商品标准；模板分析只提供“这张图要做什么”，不是商品参考。
-- 不得改变母版商品的品类、横竖比例、外轮廓、门板/抽屉/层板数量、柜脚、把手、边框、印花内容、印花位置、印花颜色、柜体颜色和材质观感。
-- 不得从模板分析里复刻旧商品的图案、尺寸、材质、结构、开合状态、局部装饰或 SKU 商品图。
-- 如果目标用途和母版结构冲突，以母版商品为准，放弃冲突动作；不要编造母版图没有展示的内部结构。
-- 输出画面要完整保留商品主体，禁止裁掉主体，禁止压扁或拉伸商品；商品比例必须和母版一致。
-- 必须完整保留母版商品底部结构：柜体下沿、底部横线、四个柜脚/支撑脚、脚与地面的接触点都要清晰独立可见；不得把柜门印花延伸到柜体下方、地面、阴影或脚之间的空隙。
-- 商品必须自然站立在地面上，柜脚不能融进地面、不能变成黑色拖影、不能被印花覆盖，柜体底部不能出现脏污色块、半透明残影或多余贴图。
-
-当前商品资料：
-${profileText}
-
-模板图文字分析 JSON：
-${String(templateAnalysis || '')}
-
-当前生成动作：${String(action || '')}
-模板相对路径：${relativeTemplatePath}
-
-按动作执行：
-- generate_product_scene：生成母版商品的场景图或主图，只参考 JSON 里的场景、构图、背景、道具和文字区域；商品本体必须来自母版。
-- function_showcase：只展示母版商品真实存在且在母版图中可确认的功能结构；母版图没有展示的开门、开抽屉、层板和内部空间不要新增，宁可保持闭合外观。
-- generate_detail_showcase：从母版商品真实可见局部做细节图，例如印花局部、边框、柜脚、把手、台面或可见纹理；必须放大母版中的真实细节，不要生成模板旧细节，不要把细节图变成完整场景图。
-- generate_dimension_sheet：用母版商品做尺寸/SKU/规格图；只使用商品资料里的真实尺寸，没有尺寸就不要编数字；不要沿用模板旧尺寸和旧 SKU 图。
-- generate_material_sheet：做材质/色卡说明页；只使用商品资料里的材质，没有材质就少写或留作示意；不要复制模板旧商品材质样块；只要模板分析 needs_master_product=true，画面里必须出现母版商品或母版商品的真实可见局部，不能生成纯文字页。
-
-质量底线：
-- 任何时候都不要为了贴合模板而把母版商品改成另一件商品。
-- 模板要求的局部如果母版图里不可见，就选择母版图里最接近的可见局部保守生成，不要想象新结构。
-- 文案和图标可以参考模板排版，但商品相关内容必须来自母版商品和当前商品资料。
-- 迁移到场景时只调整整体透视、光照和接地阴影；不要重新设计柜体底部，不要补画不存在的底板、裙边、抽屉或装饰条。
-- 如果模板是开门/开抽屉/内部收纳展示，而母版图没有清楚展示同样的开启结构，则不要生成打开状态；应保持母版商品闭合外观，只参考模板的说明文字、排版和场景氛围。
-- 如果模板是细节页，但母版图没有对应细节，优先展示母版图可见的真实细节，例如正面印花、边框、把手、柜脚、门缝、台面；不得复制模板旧商品的局部。
-- 如果模板是尺寸/规格页，尺寸数字必须来自商品资料或母版图可读尺寸；没有可靠尺寸时不要编造数字，可以保留排版但弱化具体数值。
-- 如果模板是材质/包装/物流/售后/买家须知/纯文字信息页，且 action=copy_template 或 skip_copy，应保留原模板，不要强行加入母版商品。
-
-${retryText}
-
-直接输出最终成品图，不要输出解释文字。`;
-
-  return applyTemplatePathPlaceholders(prompt, job);
-}
-
-function TEMPLATE_PRINT_PROMPT(job, templateAnalysis, hasMask = false) {
-  // Windows V8 接收 hasMask，但当前提示词正文并未按它分支。
-  void hasMask;
+function TEMPLATE_PRINT_PROMPT(job) {
   const relativeTemplatePath = taskField(job, 'relativeTemplatePath', 'RelativeTemplatePath');
 
-  const prompt = `你将根据输入图生成一张电商套图成品图。
-第一张输入图是原始套图模板图，必须作为画面尺寸、比例、构图、场景、文字、版式、透视和家具结构的唯一模板。
-第二张输入图是原始印花图，必须作为柜门/抽屉/面板表面图案的唯一来源。
+  const prompt = `FOUR_IMAGE_RED_ROI_TEMPLATE_EDIT
+任务：在原套图的指定柜门/抽屉正面更换印花。不是整图重绘，不是产品迁移，不是重新设计海报。
 
-最高优先级：
-- 这是“套图模板换印花”任务，不是重新设计家具，也不是整图重绘。
-- 只在模板分析 JSON 的 replace_area / print_mapping 描述的家具留白表面换成第二张印花图。
-- 模板里图片是什么角度、什么开门状态、什么背面/侧面状态，最终图就保持什么状态；只改变留白家具表面的图案。
-- 除可换印花面板外，整张模板图都应尽量保持像素级不变。
-- 保持第一张模板图的画面尺寸、构图、背景、灯光、阴影、文字、图标、尺寸线、地面、墙面、道具、五金件、柜脚、把手、边框、柜体结构和开合状态不变。
-- 必须把第二张印花当作“一张完整画面”来使用：家具留白表面最终呈现的图案应与第二张印花一致，保持图案主体、相对位置、方向、横竖比例、颜色和完整结构。
-- 禁止把整张印花图当作小 tile 重复平铺；禁止复制多个完整印花主体；禁止把一个卡通人物、动物、建筑、花鸟主视觉重复铺满柜门。
-- 如果留白表面由多扇连续柜门/抽屉组成，优先让一张完整印花跨多个门板连续显示，门缝、抽屉缝和把手保留在印花上方。
-- 如果留白表面是多个互不相连的小面板，应按模板分析的 print_mapping 处理；不确定时保守，不要把印花乱铺到所有位置。
-- 如果柜门区域比印花画面更宽或更窄，优先等比例缩放并居中裁切/延展边缘背景；不能拉伸变形，不能重复主视觉。
-- 只有当原始印花本身就是连续纹理、小碎花、纯几何或明显无缝底纹时，才允许自然延展；即使延展，也不能改变原图元素比例、颜色和方向。
-- forbidden_area 中列出的区域绝对不能被替换、涂抹、重绘或覆盖。
-- 不得替换白墙、白地毯、白色文字区域、白色标签、白色背景、包装盒、说明页留白、抽屉内侧、柜门内侧、背板、阴影或非家具面板区域。
-- 如果 replace_area 是“无”“不确定”或类似“整张图、所有区域、商品整体”的泛化描述，不要强行添加印花，应保守保持模板原图。
-- 印花必须像一整张平面印刷/贴膜一样贴合在柜门或面板表面，跟随模板透视、门缝、抽屉缝、面板边界和遮挡关系；不得变成立体装饰、浮雕、贴纸、挂件、背景图或独立画框。
-- 印花只改变面板表面图案，不改变柜体颜色、材质、门板形状、抽屉形状、边框厚度、开合状态、透视结构和商品尺寸。
-- 保留门缝、抽屉缝、把手、边框、柜体黑色/木色部分、柜脚、内部空间和原有阴影。
-- 如果模板是开抽屉或开柜门，只能替换可见正面外板；不能把印花贴到抽屉内侧、柜门内侧、柜体内部、背板或阴影里。
-- 如果模板是背面图，只能在分析明确写出“背面留白表面可换印花”时处理；否则保持原模板或保守处理。
-- 如果是多宫格、多场景或拼图模板，只处理模板分析 JSON 明确点名的小图区域；没有点名的小图区域保持原样。
-- 如果替换区域被把手、门缝、边框、文字、图标、阴影或前景物体遮挡，遮挡物必须保留在印花上方，不得被印花覆盖。
-- 如果模板分析标记为 copy_template、skip_copy 或 manual_check，本次不应进入生图；如果误进入，仍必须保守处理，不要强行添加印花。
-- 输出文件必须与模板图同版式、同画幅、同商品结构，只改变可印花面板的印花内容。
+输入角色与优先级：
+1. 第一张图是原套图，也是最终画布的唯一标准。画幅、裁切、构图、家具结构、透视、位置、文字、图标、背景、人物、道具和光影都以它为准。
+2. 第二张图是印花母版，只参考印花在同款柜体上的方向、尺度、跨门板连续关系和成品观感。严禁复制它的柜体几何、相机角度、背景、尺寸或构图。
+3. 第三张图是原始印花，是图案内容、颜色、元素、方向和相对布局的唯一来源。不得改成相似图案，不得重绘或拼贴重组。
+4. 第四张图是第一张图的人工红框标注版。红框只表示需要寻找柜体的粗略范围，不是可整体覆盖的矩形，也不是成品元素。
+像素与结构锁定：
+- 第一张图是不可重构的固定画布。不得缩放、裁剪、补帧、扩图、移动、拉伸或改变输出比例。
+- 不得移动、替换或重建柜体；保持柜体轮廓、门数、抽屉数、开合状态、面板尺寸、门缝、边框、把手、柜脚、台面、侧板、内部结构和遮挡关系不变。
+- 红框外的文字、尺寸线、标签、背景、人物、道具、阴影和全部像素必须与第一张图一致。红框不得出现在输出中。
 
-模板图文字分析 JSON：
-${String(templateAnalysis || '')}
+印花贴合方式：
+- 红框只是粗略定位。先理解红框内的场景，再只修改已经可见的柜门、门板或抽屉外侧正面；即使背景、人物、道具、文字或标签位于红框内，也必须保持原样。
+- 禁止把第三张图作为平面矩形直接覆盖或贴纸式粘贴。必须按每块真实面板的透视、弧度、开合角度和遮挡关系进行表面投影。
+- 印花层保留第一张图原有的材质纹理、柔和明暗、边缘压暗和景深，使结果看起来是实际印刷在面板上；但必须压制、归一化会遮掉图案的过曝高光、纯白光柱和强反射，不能在选中柜面留下白洞、未印区域或断裂图案。
+- 红框内仍可见的原有文字、编号、标签、图标和说明标记属于受保护前景，必须保持原字形、内容、颜色和坐标，不得重写、补字或重新排版。
+- 同一柜体的连续门板或抽屉正面应先映射一张完整印花，再由原有门缝自然分割；禁止每个抽屉重新开始、独立居中或重复整张印花。
+- 对打开或透视变化的抽屉，只把该位置对应的图案区段投影到现有外侧正面，不得改变抽屉深度、角度、轨道、内部物品或阴影。
+- 保持第三张图的主视觉、颜色、方向和整体比例。不得拉伸变形，不得重复主体；只有原图本身是无缝纹理时才允许自然延展边缘。
 
-当前模板相对路径：${relativeTemplatePath}
+场景判断规则：
+- 正面完整柜体：把母版中的完整连续印花按原柜门边界、圆角和门缝映射，不能把母版柜体本身覆盖进来。
+- 斜视、侧视或打开抽屉：按每块外侧正面的独立透视投影，但所有抽屉仍共享同一套完整印花坐标，不能每层重复整幅图。
+- 只露出柜脚、底边、顶边、圆角或局部柜面：先用第二张母版的柜脚、上下边缘、圆角、抽屉顺序和门缝定位，只迁移母版中对应位置的图案片段；禁止从印花顶部重新开始或把整幅印花缩进局部。
+- 多宫格、拼图或同页多个场景：每个红框、每个格子中的柜体都是同款产品的独立实例。对每个完整柜体分别从母版顶部到底部映射一次完整印花，所有实例保持相同方向、尺度和落位；不得把一张印花横跨多个格子，也不得把四个柜体分别分配成印花的四个局部。每个独立柜体内部再按原门缝/抽屉缝切分。保持所有格子的原文字、分隔线和版式。
+- 强光、阴影或反射：保留真实体积光影，只降低会吞掉印花的过曝强度；不能把光斑当成未印区域，也不能把印花贴到墙面或窗帘。
+- 柜门被窗光、灯光或高光覆盖：光线属于柜面上方的半透明光影，不是白色柜门内容。先完成连续印花，再叠加柔和光影；禁止出现竖向白带、半扇空白、局部未印、矩形缺口或一半有印花一半仍是白板。
+- 柜面被人物、手臂、手掌、衣服、家具、物品或文字遮挡：把遮挡关系视为真实前后层级，只生成实际可见且未被遮挡的柜面部分。人物和遮挡物必须完整保持在印花前方，其轮廓、肤色、衣服、姿势、位置和像素语义不得改变；不得把印花盖到手、身体、沙发或前景物体上，也不得为了补全图案而重绘遮挡物。
+- 人手正在拉开的抽屉：手和手臂是受保护前景，抽屉内部、木盒、轨道及物品保持原样；只在手后方仍可见的抽屉外侧正面投影该层对应的母版图案条带，隐藏在手后的图案不需要显示。
+- 柜体底部或侧面被衣物堆、收纳物、桌面商品、纸箱、镜子、托盘或其他前景陈列遮挡：严格保持“背景 < 柜体印花 < 前景遮挡物 < 原文字标签”的层级。印花在真实遮挡边界处停止，只处理当前确实可见的柜面；不得跨过衣物或商品继续补全柜门，不得把前景改成柜体、把印花画到前景上，或在前景上方新增假边框、假柜脚、黑块和矩形补丁。
+- 遮挡边缘必须干净稳定：不得在人物、头发、手指、衣服、书本、沙发或柜体轮廓周围生成白边、彩边、破洞、锯齿、涂抹、重影、重复轮廓或错位补丁；不得复制柜脚、边框、门缝或侧板。
+- 任一场景都禁止出现矩形贴图边缘、平面海报覆盖、柜体突然放大、柜体位置变化、背景补帧、文字重排或新增装饰。
 
-直接输出最终成品图，不要输出解释文字。`;
+输出：
+- 输出一张与第一张图同画幅、同像素尺寸、同裁切、同版式的最终套图。
+- 除选中面板表面的印花外，其余内容保持原样。
+- 只输出最终图片，不输出文字说明。
 
-  return applyTemplatePathPlaceholders(prompt, job);
+当前套图路径：${relativeTemplatePath}`;
+  return `${prompt}\n\nMASTER_COORDINATE_REGISTRATION\nUse the second image as the registered full-cabinet artwork map. Locate every visible cabinet fragment in that map by structural anchors such as feet, bottom/top edges, corners, drawer order and seams. Transfer only the matching artwork coordinates. A bottom or edge close-up must use the corresponding bottom or edge portion of the master; never restart from the artwork top, center the full motif, or squeeze the whole artwork into a partial surface.`;
 }
 
-const TEMPLATE_MASTER_PROMPT = `你将根据输入图生成一张“套图换印花母版图”。
-第一张输入图是运营选定的“母版底图”。必须以这张图作为产品底图，只继承它的产品本体结构、门数、正面比例、柜脚、边框、门缝、把手和基础视角。
-第二张输入图是原始印花图，必须作为柜门/抽屉/面板表面图案的唯一来源。
+const TEMPLATE_MASTER_PROMPT = `TWO_IMAGE_WHITE_BACKGROUND_MASTER
+任务：根据柜体参考图和原始印花，生成后续套图使用的纯白底印花柜体母版。先从参考图中提取同一柜体，再做柜体正面表面换印花；不得保留参考图中的场景。
 
-生成要求：
-- 输出一张干净、完整、可作为后续整套图迁移标准的电商产品母版图。
-- 母版图应像一张干净的白底/浅底产品标准图，用来定义后续整套图的商品外观和印花效果。
-- 严格使用第一张母版底图的家具品类、门数、柜体结构、比例、边框、柜脚、把手和门缝关系；不要改成其他套图里的主图造型。
-- 只把可印花的白色/浅色柜门、抽屉或面板表面替换成第二张印花图。
-- 第二张印花必须保持主体元素、颜色、方向、相对位置和完整结构，不得重绘成相似风格，不得拼贴重组，不得改成其他图案。
-- 印花应像平面印刷/贴膜一样贴合在面板上，门缝、把手和边框自然保留在图案上方。
-- 如果第一张母版底图包含尺寸线、标注线、无关标签、水印、营销文字、场景背景、装饰物或人物，不要把这些干扰内容带入母版图；只保留产品本体。
-- 不要添加第一张图中没有的环境道具、文案、贴纸、吊牌、价格、促销语或其他干扰元素。
-- 不要生成多方案、不要输出解释文字，只输出最终母版图。`;
+输入角色：
+1. 第一张图是柜体参考图，只作为产品结构、柜体视角、轮廓、比例、门板/抽屉分区、柜脚、边框和五金的唯一标准。它可能来自客厅、卧室或其他场景。
+2. 第二张图是原始印花，是图案内容、颜色、元素、方向和相对布局的唯一来源。
+
+硬性要求：
+- 只提取第一张图中的完整柜体，保持其结构、纵横比例、视角、轮廓、门数、抽屉数、柜脚、边框、门缝、把手、台面和侧板不变；不得复制参考图的画布和场景构图。
+- 只把第一张图中可印花的白色或浅色柜门、抽屉外侧正面替换为第二张印花；其他区域保持第一张图原有产品材质。
+- 禁止把印花作为矩形图片直接覆盖。必须按面板透视和边界贴合，并保留第一张图原有的材质纹理、明暗渐变、反光、高光、阴影和边缘压暗。
+- 同一柜体的连续门板或抽屉正面使用一张完整印花连续映射，再由原有门缝分割；不得在每个抽屉重复整张印花。
+- 保持第二张图的主视觉、颜色、方向、整体比例和元素关系；不得重绘成相似风格、拉伸变形、重复主体或随意裁掉核心内容。
+- 印花不得覆盖边框、门缝、把手、柜脚、台面、侧板、内部空间、地面和阴影。
+- 删除第一张图中的沙发、窗帘、墙面、地板、窗户、绿植、灯具、音箱、摆件、人物、文字、标签和所有环境元素。
+- 输出背景必须是均匀纯白色 RGB(255,255,255)，柜体完整居中，四周留出自然白边，只允许柜脚下方保留轻微自然接地阴影。
+- 不添加文案、标签、水印、贴纸、装饰物、人物或场景；不输出多方案，不输出室内效果图。
+- 禁止保留或仿造第一张图的客厅、卧室、墙面、地板及任何原背景，即使第一张图本身不是白底图。
+
+输出一张完整柜体与印花结合的纯白底标准产品母版图，只输出最终图片。`;
 
 module.exports = {
-  GLOBAL_NEGATIVE_PROMPT,
-  MASTER_PROMPT_TEMPLATE,
   TEMPLATE_MASTER_PROMPT,
-  TEMPLATE_ANALYSIS_PROMPT,
-  TEMPLATE_MIGRATION_PROMPT,
-  TEMPLATE_PRINT_PROMPT,
-  applyMasterPromptTemplate
+  TEMPLATE_PRINT_PROMPT
 };

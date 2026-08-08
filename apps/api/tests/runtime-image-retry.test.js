@@ -6,6 +6,14 @@ const os = require('node:os');
 const path = require('node:path');
 const sharp = require('sharp');
 
+async function cabinetTemplateBuffer() {
+  const cabinet = Buffer.from('<svg width="72" height="72"><rect width="72" height="72" rx="6" fill="#161616"/><rect x="6" y="6" width="60" height="27" fill="#e5e5e5"/><rect x="6" y="39" width="60" height="27" fill="#ededed"/></svg>');
+  return sharp({ create: { width: 96, height: 96, channels: 3, background: '#b9aa98' } })
+    .composite([{ input: cabinet, left: 12, top: 12 }])
+    .png()
+    .toBuffer();
+}
+
 test('template-print regeneration entrypoints use the image API', async (t) => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'caishen-image-retry-'));
   const resultPng = await sharp({ create: { width: 32, height: 32, channels: 3, background: '#88aaee' } }).png().toBuffer();
@@ -54,12 +62,12 @@ test('template-print regeneration entrypoints use the image API', async (t) => {
   const printPath = path.join(runtime.WORKSPACE_ROOT, 'assets', 'prints', 'print.png');
   await fs.mkdir(templateRoot, { recursive: true });
   await fs.mkdir(path.dirname(printPath), { recursive: true });
-  const templateImage = await sharp({ create: { width: 40, height: 20, channels: 3, background: '#f7f7f7' } }).png().toBuffer();
+  const templateImage = await cabinetTemplateBuffer();
   await fs.writeFile(path.join(templateRoot, '1.png'), templateImage);
   await fs.writeFile(printPath, resultPng);
   await runtime.saveConfig({ outputPath: outputRoot, auditMode: 'economy' });
   await runtime.billing.saveRules({ enabled: true, imageFeeMinor: 1, llmFeeMinor: 1, defaultBalanceMinor: 1000000 });
-  await runtime.saveTemplateConfiguration({
+  await runtime.saveTemplateRegions({
     folder: templateRoot,
     items: [{
       relativePath: '1.png',
@@ -67,7 +75,7 @@ test('template-print regeneration entrypoints use the image API', async (t) => {
       reason: 'front panel can receive print',
       replaceArea: 'front white panel',
       forbiddenArea: 'background and handle',
-      regions: [{ x: 0, y: 0, width: 1, height: 1 }]
+      regions: [{ x: 0.1, y: 0.1, width: 0.8, height: 0.8 }]
     }]
   });
 
@@ -83,11 +91,11 @@ test('template-print regeneration entrypoints use the image API', async (t) => {
   const outputFile = path.join(generated.folder, '1.png');
   await fs.access(outputFile);
   const outputMetadata = await sharp(outputFile).metadata();
-  assert.equal(outputMetadata.width, 40);
-  assert.equal(outputMetadata.height, 20);
+  assert.equal(outputMetadata.width, 96);
+  assert.equal(outputMetadata.height, 96);
   const outputPixel = await sharp(outputFile).removeAlpha().raw().toBuffer();
-  const centerOffset = (10 * 40 + 20) * 3;
-  assert.deepEqual([...outputPixel.subarray(centerOffset, centerOffset + 3)], [0x88, 0xaa, 0xee]);
+  const panelOffset = (28 * 96 + 48) * 3;
+  assert.deepEqual([...outputPixel.subarray(panelOffset, panelOffset + 3)], [0x88, 0xaa, 0xee]);
   assert.equal(generated.summary.apiGenerated, 1);
   const afterInitialBilling = await runtime.billing.getSummary('image-retry');
   assert.equal(afterInitialBilling.account.balanceMinor, 700000);
@@ -171,12 +179,12 @@ test('template-print queue completes all thirty images through the adaptive imag
   const printPath = path.join(runtime.WORKSPACE_ROOT, 'assets', 'prints', 'print.png');
   await fs.mkdir(templateRoot, { recursive: true });
   await fs.mkdir(path.dirname(printPath), { recursive: true });
-  const templateImage = await sharp({ create: { width: 40, height: 20, channels: 3, background: '#f7f7f7' } }).png().toBuffer();
+  const templateImage = await cabinetTemplateBuffer();
   const relativePaths = Array.from({ length: 30 }, (_, index) => `${String(index + 1).padStart(2, '0')}.png`);
   await Promise.all(relativePaths.map(name => fs.writeFile(path.join(templateRoot, name), templateImage)));
   await fs.writeFile(printPath, resultPng);
   await runtime.saveConfig({ outputPath: outputRoot, auditMode: 'economy' });
-  await runtime.saveTemplateConfiguration({
+  await runtime.saveTemplateRegions({
     folder: templateRoot,
     items: relativePaths.map(relativePath => ({
       relativePath,
@@ -184,7 +192,7 @@ test('template-print queue completes all thirty images through the adaptive imag
       reason: 'front panel can receive print',
       replaceArea: 'front white panel',
       forbiddenArea: 'background and handle',
-      regions: [{ x: 0, y: 0, width: 1, height: 1 }]
+      regions: [{ x: 0.1, y: 0.1, width: 0.8, height: 0.8 }]
     }))
   });
 

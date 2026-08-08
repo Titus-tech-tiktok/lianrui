@@ -22,8 +22,8 @@ const assetRoot = () => path.join(runtime.WORKSPACE_ROOT, 'assets');
 const jobRoot = () => path.join(runtime.WORKSPACE_ROOT, 'jobs');
 const thumbnailRoot = () => path.join(runtime.WORKSPACE_ROOT, '.cache', 'thumbnails');
 const LONG_JOB_METHODS = new Set([
-  'analyzeProductProfile', 'analyzeTemplates', 'prepareTemplates', 'generateFree', 'generateTask', 'generateTemplateMaster',
-  'generateTemplates', 'regenerateMaster', 'regenerateTemplate', 'analyzeTemplateItems', 'analyzeTemplateItemWithReference'
+  'prepareTemplates', 'generateFree', 'generateTask', 'generateTemplateMaster',
+  'generateTemplates', 'regenerateTemplate'
 ]);
 const SUPERADMIN_RPC_METHODS = new Set([
   'getApiSettings', 'saveApiSettings', 'testApiSettings', 'testAnalysisApi', 'savePromptSetting', 'resetPromptSetting'
@@ -930,20 +930,7 @@ const rpc = {
   listTemplates: ([folder]) => runtime.listTemplates(workspacePath(folder)),
   getTemplatePreparation: ([folder]) => runtime.getTemplatePreparation(workspacePath(folder)),
   prepareTemplates: ([folder]) => runtime.prepareTemplateFolder(workspacePath(folder)),
-  saveTemplateConfig: ([payload]) => runtime.saveTemplateConfiguration({ ...(payload || {}), folder: workspacePath(payload?.folder) }),
-  analyzeTemplates: ([folder]) => runtime.analyzeTemplateFolder(workspacePath(folder)),
-  analyzeTemplateItems: ([payload], context) => runtime.analyzeTemplateItems({
-    folder: workspacePath(payload?.folder),
-    relativePaths: Array.isArray(payload?.relativePaths) ? payload.relativePaths.map(String) : []
-  }, context || {}),
-  analyzeTemplateItemWithReference: ([payload], context) => runtime.analyzeTemplateItemWithReference({
-    folder: workspacePath(payload?.folder),
-    relativePath: String(payload?.relativePath || ''),
-    referenceRelativePath: String(payload?.referenceRelativePath || '')
-  }, context || {}),
-  getProductProfile: ([folder]) => runtime.loadTemplateProductProfile(workspacePath(folder)),
-  analyzeProductProfile: ([file]) => runtime.analyzeProductProfile(workspacePath(file)),
-  saveProductProfile: ([payload]) => runtime.saveTemplateProductProfile({ ...(payload || {}), folder: workspacePath(payload?.folder) }),
+  saveTemplateRegions: ([payload]) => runtime.saveTemplateRegions({ ...(payload || {}), folder: workspacePath(payload?.folder) }),
   generateFree: ([payload], context) => runtime.generateFree({ ...(payload || {}), sourcePath: workspacePath(payload?.sourcePath) }, context || {}),
   listReviews: () => runtime.reviewFolders(),
   approveReview: ([folder]) => runtime.approveReviewFolder(managedPath(folder)),
@@ -956,12 +943,10 @@ const rpc = {
     }
     return results;
   },
-  regenerateMaster: ([folder]) => runtime.regenerateMasterForReviewFolder(managedPath(folder)),
   regenerateTemplate: ([payload], context) => runtime.regenerateSingleTemplate({
     ...(payload || {}),
     folder: managedPath(payload?.folder),
-    relativePath: String(payload?.relativePath || ''),
-    referenceResultRelativePath: String(payload?.referenceResultRelativePath || '')
+    relativePath: String(payload?.relativePath || '')
   }, context || {}),
   batchApproveReviews: ([folders]) => runtime.batchApproveReviewFolders((folders || []).map(value => managedPath(value))),
   deleteReviews: ([folders]) => runtime.deleteReviewFolders((folders || []).map(value => managedPath(value))),

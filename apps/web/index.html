@@ -99,7 +99,7 @@
               <button id="applyTemplateToSelectedQueueButton">套用到选中任务</button>
               <button id="applyTemplateToAllQueueButton">套用到全部任务</button>
               <details id="queueManageDetails"><summary>批量管理</summary><div><button id="selectAllQueueButton">全选</button><button id="clearQueueSelectionButton">取消</button><button id="duplicateQueueButton">复制选中</button><button id="deleteSelectedQueueButton">删除选中</button><button id="clearQueueButton">清空</button></div></details>
-              <details class="advanced-task-settings"><summary>高级设置</summary><div class="generation-mode-row"><label>生成模式<select id="generationMode"><option value="template_print" selected>模板换印花</option><option value="master">母版生成</option></select></label></div><div class="selection-preview"><div class="preview-slot" id="selectedProduct"><span>款式</span><b>未选择</b></div><div class="join-mark">×</div><div class="preview-slot" id="selectedPrint"><span>印花</span><b>未选择</b></div></div><textarea id="taskNote" rows="3" placeholder="提示词补充（可选）"></textarea></details>
+              <details class="advanced-task-settings"><summary>高级设置</summary><div class="generation-mode-row"><label>生成模式<select id="generationMode"><option value="template_print" selected>模板换印花</option></select></label></div><div class="selection-preview"><div class="preview-slot" id="selectedProduct"><span>款式</span><b>未选择</b></div><div class="join-mark">×</div><div class="preview-slot" id="selectedPrint"><span>印花</span><b>未选择</b></div></div><textarea id="taskNote" rows="3" placeholder="提示词补充（可选）"></textarea></details>
               <p id="generationModeHint"></p>
               <div id="queueList"></div>
             </div>
@@ -186,10 +186,10 @@
           <div class="asset-library-tabs-bar"><div class="asset-preview-tabs" role="tablist" aria-label="素材类型"><button class="active" role="tab" aria-selected="true" data-asset-preview="detailSetsPath">套图模板</button><button role="tab" aria-selected="false" data-asset-preview="printsPath">印花素材</button></div><span>点击标签切换素材库</span></div>
           <div class="asset-source-panels">
             <div class="asset-source-row" data-asset-source="printsPath" hidden><div class="asset-source-copy"><b>印花素材文件夹</b><span id="settingPrintsPath">尚未配置</span><small id="assetStagePrintsPath">选择文件夹后会自动开始扫描。</small></div><div class="asset-source-actions"><button class="secondary" data-stage-asset="printsPath">导入文件夹</button><button class="primary" data-sync-asset="printsPath" disabled hidden>开始扫描</button></div></div>
-            <div class="asset-source-row template-library-source" data-asset-source="detailSetsPath"><div class="asset-source-copy"><b>套图模板文件夹</b><span id="settingDetailSetsPath">尚未导入套图文件夹</span><small id="assetStageDetailSetsPath">选择文件夹后会自动开始导入；点击下方文件夹后查看其中图片。</small></div><div class="asset-source-actions"><button class="secondary" data-stage-asset="detailSetsPath">导入新文件夹</button><button class="primary" data-sync-asset="detailSetsPath" disabled hidden>开始导入</button></div><div class="template-folder-browser" id="templateFolderBrowser"><div class="template-folder-empty">正在读取套图文件夹…</div></div><div class="asset-template-filter" id="assetTemplateFilter" hidden><span>按分析动作筛选</span><div role="toolbar" aria-label="套图分析动作筛选"></div></div></div>
+            <div class="asset-source-row template-library-source" data-asset-source="detailSetsPath"><div class="asset-source-copy"><b>套图模板文件夹</b><span id="settingDetailSetsPath">尚未导入套图文件夹</span><small id="assetStageDetailSetsPath">选择文件夹后会自动开始导入；点击下方文件夹后查看其中图片。</small></div><div class="asset-source-actions"><button class="secondary" data-stage-asset="detailSetsPath">导入新文件夹</button><button class="primary" data-sync-asset="detailSetsPath" disabled hidden>开始导入</button></div><div class="template-folder-browser" id="templateFolderBrowser"><div class="template-folder-empty">正在读取套图文件夹…</div></div><div class="asset-template-filter" id="assetTemplateFilter" hidden><span>按处理方式筛选</span><div role="toolbar" aria-label="套图处理方式筛选"></div></div></div>
           </div>
           <div class="asset-scan-progress" id="assetScanProgress" hidden><div><b id="assetScanProgressTitle">正在扫描素材</b><span id="assetScanProgressText"></span></div><progress id="assetScanProgressBar" max="100" value="0"></progress></div>
-          <div class="asset-preview-head"><div><h2 id="assetPreviewTitle">套图模板</h2><span id="assetPreviewSummary">正在读取素材库…</span></div><div class="asset-preview-actions"><label class="asset-preview-size-control">预览大小 <input id="assetManagementPreviewSize" type="range" min="110" max="240" value="138" aria-label="素材预览大小"></label><span id="assetSelectedCount">支持拖拽添加 · 未选择</span><button class="secondary" id="selectAllAssetsButton">全选</button><button class="primary" id="batchAnalyzeAssetsButton" hidden>批量 AI 分析</button><button class="secondary" id="addAssetFilesButton">添加文件</button><button class="secondary danger-outline" id="deleteSelectedAssetsButton" disabled>删除选中</button></div></div>
+          <div class="asset-preview-head"><div><h2 id="assetPreviewTitle">套图模板</h2><span id="assetPreviewSummary">正在读取素材库…</span></div><div class="asset-preview-actions"><label class="asset-preview-size-control">预览大小 <input id="assetManagementPreviewSize" type="range" min="110" max="240" value="138" aria-label="素材预览大小"></label><span id="assetSelectedCount">支持拖拽添加 · 未选择</span><button class="secondary" id="selectAllAssetsButton">全选</button><button class="secondary" id="addAssetFilesButton">添加文件</button><button class="secondary danger-outline" id="deleteSelectedAssetsButton" disabled>删除选中</button></div></div>
           <div class="asset-management-grid" id="assetManagementGrid"><div class="empty-inline">尚未配置素材库</div></div>
           <div class="settings-foot asset-workspace-foot"><span>扫描一次后素材会保存在主电脑工作区，其他美工刷新网站即可使用。</span></div>
         </div>
@@ -226,7 +226,7 @@
                   <label class="settings-check-row"><input id="allowAdminPromptView" type="checkbox">允许管理员查看网站提示词</label>
                 </section>
                 <section class="settings-card api-connection-card">
-                  <div class="settings-card-head"><div><h3>文字分析 API</h3><p>用于套图分析、商品识别、标题生成和 AI 质检。</p></div><button class="text-button" id="openAnalysisModelsButton" type="button" hidden>查看模型</button></div>
+                  <div class="settings-card-head"><div><h3>文字分析 API</h3><p>用于商品识别、标题生成和可选的生成后 AI 质检；人工框选套图不依赖此密钥。</p></div><button class="text-button" id="openAnalysisModelsButton" type="button" hidden>查看模型</button></div>
                   <label>文字分析密钥<div class="password-input"><input id="analysisApiKey" type="password" placeholder="输入文字模型分组密钥" autocomplete="new-password" spellcheck="false"><button class="text-button" data-toggle-secret="analysisApiKey" type="button">显示</button></div><small id="analysisApiKeyHint">尚未保存文字密钥</small></label>
                   <label>分析模型<input id="analysisModel" list="analysisModelOptions" placeholder="请先读取文字模型" spellcheck="false"></label>
                   <div class="api-test-stack">
@@ -354,16 +354,9 @@
   </div>
   <div class="modal-backdrop" id="templateConfigModal" hidden>
     <section class="modal-card template-result-modal" role="dialog" aria-modal="true" aria-labelledby="templateConfigTitle">
-      <div class="modal-head"><div><span class="eyebrow">ANALYSIS RESULT</span><h2 id="templateConfigTitle">分析结果</h2><p id="templateConfigPath">AI 分析与运营调整会保存在当前工作区。</p></div><button class="icon-button" id="closeTemplateConfigButton" aria-label="关闭">×</button></div>
-      <div class="template-result-content" id="templateAnalysisResult"><div class="empty-state"><b>正在读取分析结果</b><span>请稍候。</span></div></div>
-      <div class="modal-foot"><span id="templateConfigStatus">正在读取…</span><div><button class="primary" id="saveTemplateConfigButton">保存分析结果</button></div></div>
-    </section>
-  </div>
-  <div class="modal-backdrop" id="productProfileModal" hidden>
-    <section class="modal-card profile-modal" role="dialog" aria-modal="true" aria-labelledby="productProfileTitle">
-      <div class="modal-head"><div><span class="eyebrow">PRODUCT PROFILE</span><h2 id="productProfileTitle">填写套图规格资料</h2><p id="productProfilePath">资料保存在当前工作区，后续任务会自动复用。</p></div><button class="icon-button" id="closeProductProfileButton" aria-label="关闭">×</button></div>
-      <div class="profile-form"><label>尺寸<input id="profileDimensions" placeholder="例如：宽 140cm × 深 40cm × 高 80cm"></label><button class="secondary" id="analyzeProductProfileButton">从当前品类图 AI 识别</button><label>材质<input id="profileMaterial" placeholder="仅填写有依据的材质"></label><label>备注（仅运营查看）<textarea id="profileNotes" rows="4" placeholder="缺少信息时可以留空"></textarea></label></div>
-      <div class="modal-foot"><span>至少填写尺寸或材质；缺资料的尺寸/材质页会保守处理。</span><div><button class="secondary" id="cancelProductProfileButton">取消</button><button class="primary" id="saveProductProfileButton">保存</button></div></div>
+      <div class="modal-head"><div><span class="eyebrow">PRINT REGION</span><h2 id="templateConfigTitle">框选换印花区域</h2><p id="templateConfigPath">粗略框住柜体即可，系统会在框内自动细化柜门和抽屉面板。</p></div><button class="icon-button" id="closeTemplateConfigButton" aria-label="关闭">×</button></div>
+      <div class="template-result-content" id="templateRegionResult"><div class="empty-state"><b>正在读取套图</b><span>请稍候。</span></div></div>
+      <div class="modal-foot"><span id="templateConfigStatus">正在读取…</span><div><button class="primary" id="saveTemplateRegionsButton">保存框选结果</button></div></div>
     </section>
   </div>
   <div class="image-hover-preview" id="imageHoverPreview" aria-hidden="true"><img id="imageHoverPreviewImage" alt=""><span id="imageHoverPreviewCaption"></span></div>

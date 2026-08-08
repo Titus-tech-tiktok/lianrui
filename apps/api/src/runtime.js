@@ -25,16 +25,13 @@ const {
   splitTitleRoots
 } = require('./core/title-engine');
 const {
-  createFallbackTemplateAnalysis,
   createManualTemplateAnalysis,
   deserializeTemplateAnalysis,
-  normalizePrintableSurfaces,
   normalizeTemplateProcessingMode,
   parseTemplateAnalysisSummary,
   readValidTemplateAnalysisCache,
   resolveGenerationAction,
   templateCachePaths,
-  validateTemplateAnalysis,
   writeTemplateAnalysisCache
 } = require('./core/template-regions');
 const {
@@ -61,27 +58,9 @@ const {
 } = require('./core/title-task-engine');
 const { createDefaultTitleLibrary } = require('./core/default-title-library');
 const {
-  applyMasterPromptTemplate
-} = require('./core/prompts');
-const {
-  buildTemplateAuditPayload,
-  buildTemplateAuditRecheckPayload,
-  isInvalidAuditRequestingProductReplacement,
-  parseTemplateAuditResult
-} = require('./core/template-audit');
-const {
-  buildProductProfileAnalysisRequest,
-  createTaskProductProfilePayload,
   getTaskProductProfileFile,
-  getTemplateProductProfileFile,
-  loadProductProfileForJob,
-  loadTemplateProductProfile,
   normalizeProductProfile,
-  parseProductProfileChatResponse,
-  readProductProfileFile,
-  shouldRefreshTaskProductProfile,
-  toPromptText,
-  writeProductProfileFile
+  readProductProfileFile
 } = require('./core/product-profile');
 const {
   definitionById: promptDefinitionById,
@@ -95,10 +74,13 @@ const {
   RetryableRequestError,
   parseRetryAfterMs
 } = require('./core/adaptive-image-scheduler');
+const { createImageReferenceCache } = require('./core/image-reference-cache');
 const {
-  createImageReferenceCache,
-  imageApiSizeForDimensions
-} = require('./core/image-reference-cache');
+  createTemplateEditMask,
+  createTemplateRegionAnnotation,
+  detectTemplateLightCabinetPanels,
+  hasSemanticPrintableSurfaces
+} = require('./core/template-mask');
 const {
   TAOBAO_CATEGORY_TEMPLATES,
   classifyTaobaoImages,
@@ -265,7 +247,6 @@ const imageReferenceCache = createImageReferenceCache({
   jpegQuality: 92,
   conversionConcurrency: 2
 });
-const warmingTemplateFolders = new Set();
 
 function getImageSchedulerSnapshot() {
   return imageApiScheduler.snapshot();
@@ -970,19 +951,22 @@ function openDrawerRegisteredPrintPrompt() {
     'An opened stack of drawers is one cabinet facade in different depth positions, not several independent print canvases.',
     'First map the complete reference artwork once onto the cabinet facade as if every drawer were closed. Divide that single mapped facade into ordered horizontal row bands from top drawer to bottom drawer.',
     'Each visible opened drawer front must receive only its own corresponding row band from that one closed-facade mapping: row 1 to drawer 1, row 2 to drawer 2, and so on. Preserve the same global artwork scale and vertical registration across all rows.',
-    'Never restart, duplicate, independently center, independently scale, or fit the full panda artwork on every drawer front. A motif crossing a drawer seam must continue on the adjacent row at the matching horizontal position when mentally closed.',
+    'Never restart, duplicate, independently center, independently scale, or fit the full artwork on every drawer front. A motif crossing a drawer seam must continue on the adjacent row at the matching horizontal position when mentally closed.',
     'After assigning the correct row band, project only that band onto the existing front board plane using its exact camera perspective, foreshortening, opening depth, occlusion and border. Do not alter drawer geometry, spacing, rails, interiors, stored objects or shadows.',
-    'Keep print completely off the drawer interior, inner side walls, wooden box, slide rails, black top edge, black frame and all contents.'
+    'Keep print completely off the drawer interior, inner side walls, wooden box, slide rails, black top edge, black frame and all contents.',
+    'A person, hand, arm, clothing, foreground chair, sofa or object crossing a drawer front is a protected foreground occluder. Preserve it exactly above the print and render only the currently visible exterior-front pixels behind it.',
+    'Foreground piles of clothes, storage items, tabletop goods, boxes, mirrors, trays and merchandise remain above the cabinet print. Stop the print exactly at their true occlusion boundary; never invent cabinet panels, frames, legs, black blocks or rectangular patches over those foreground objects.',
+    'Never print over an occluder, erase it, move it, redraw it, complete a hidden motif through it, or expose cabinet surface that is not visible in the first image.'
   ].join('\n');
 }
 
 function flagshipComplexTemplatePrintPrompt() {
   return [
     'FLAGSHIP_COMPLEX_TEMPLATE_PRINT_MODE',
-    'Use the first input image as the final layout standard. If only two input images are attached, the second input image is the original print pattern reference. If three input images are attached, the second input image is the master product reference and the third input image is the original print pattern reference.',
+    'Use the first input image as the final layout standard. The second image is the master product reference, the third is the original print pattern, and the fourth is the same template with operator-drawn red ROI boxes.',
     'For complex ecommerce templates, preserve every Chinese title, page number, white selling-point label, label position, font style, typography hierarchy and layout from the first input image. Do not rewrite, omit, add, translate or deform text.',
     'Preserve people, open cabinet doors, internal storage, shelves, bottles, cookware, coffee machine, tabletop objects, lamps, curtains, floor, wall, shadows and all props from the first input image.',
-    'Apply the print only to visible cabinet or drawer front surfaces. Never cover cabinet interior, shelves, bottles, cookware, tabletop, wall, floor, legs, handles, black frames, black side panels, door seams, labels or text.',
+    'Within the operator-selected red ROI only, apply the print to visible cabinet or drawer front surfaces. Never cover cabinet interior, shelves, bottles, cookware, tabletop, wall, floor, legs, handles, black frames, black side panels, door seams, labels or text.',
     'The print must follow every door panel perspective, opening angle, seam split, occlusion and handle position. It must not look like one flat sticker pasted across the whole cabinet.',
     'Keep black cabinet frame, black tabletop, black side panels, black bottom edge, legs, handles and all seams crisp and visible above the print.',
     'Output one realistic finished ecommerce product image only.'
@@ -1001,11 +985,20 @@ function detailSliceLayoutProtectionPrompt() {
     'For this slice, keep the original coordinate system of the template: do not shift any text glyph baseline, margins, separators, frame lines, grid cards, icon positions, or white-space bands. If text crosses a boundary, keep it complete with its original x/y offset.',
     'Do not generate the full detail page, do not merge neighboring slices, do not create a new poster, and do not invent content above or below the current canvas.',
     'Do not enlarge, crop, move or restyle Chinese text, titles, subtitles, page numbers, badges, icons, separators, paper texture, rounded cards, background bands, margins or decorative borders from the first input image.',
-    'Only migrate the master product appearance onto visible cabinet, drawer-front, door-front or exterior panel surfaces that are already present in the first input image.',
+    'Only apply the referenced print appearance to visible cabinet, drawer-front, door-front or exterior panel surfaces that are already present in the first input image. Never migrate master-product geometry.',
     'A cropped drawer front or partial cabinet surface is still a valid target when it visibly belongs to the exterior product surface. Process only the visible part inside the current canvas; never invent the missing off-canvas continuation.',
+    'MASTER_COORDINATE_REGISTRATION_MODE',
+    'Treat the second input image as a registered full-facade artwork coordinate map for this same cabinet. Infer where each visible fragment belongs on that complete facade by matching structural anchors in the first image: cabinet feet, bottom edge, top edge, outer corners, drawer order, drawer seams, frame curvature and adjacent side panels.',
+    'Transfer only the corresponding spatial fragment from the master coordinate map. If the template shows only a cabinet foot and part of the bottom panel, use the bottom portion of the master artwork; never restart from the artwork top, center a full motif, or fit the entire artwork into that fragment.',
+    'Likewise, a top-edge crop must use the master top portion, and a left/right edge crop must preserve the matching horizontal registration. Multiple close-ups from the same set must remain mutually consistent when mentally placed back onto the complete cabinet.',
     'For multi-grid pages, each small panel keeps its original crop, camera angle, text area and card frame. Do not merge panels, swap panel order, resize panels or turn the page into a new poster.',
+    'Treat each red ROI or grid cell as a separate instance of the same cabinet. Register and apply the complete master facade independently to every complete cabinet instance; never stretch one artwork across cells or assign different artwork quarters to different cabinets.',
+    'Within each independent cabinet instance, preserve one continuous top-to-bottom artwork registration across its own drawer rows. Do not confuse separate cabinet instances with separate drawers of one cabinet.',
     'A valid output keeps all card frames and all panel borders as-is, and must not output a single merged poster or scene that hides the original tile boundaries.',
     'Keep all non-product details from the first input image unchanged: hands, people, snacks, books, lamps, plants, labels, measurement text, icons, copywriting blocks, shadows, walls, floors and existing empty space.',
+    'When piles of clothes, merchandise, boxes, mirrors, trays or tabletop objects hide the cabinet bottom or side, keep those foreground pixels exactly unchanged and stop the generated facade at the visible occlusion boundary. Do not place print, cabinet geometry, legs, frames, black fill or repair patches over foreground merchandise.',
+    'Treat bright window streaks and lamp highlights as translucent lighting above an already printed facade. No selected exterior front may retain a vertical white strip, half-white panel, unprinted island or rectangular blank patch.',
+    'Preserve occluder silhouettes with clean original edges. Do not create halos, color fringes, tears, holes, smears, duplicate outlines, displaced patches or doubled cabinet frames around people, hands, furniture or product boundaries.',
     'If a product surface is ambiguous, preserve that local area rather than expanding the print into text or background.'
   ].join('\n');
 }
@@ -1618,155 +1611,6 @@ async function imageAsAnalysisDataUrl(file) {
   return `data:image/jpeg;base64,${bytes.toString('base64')}`;
 }
 
-function pixelAverage(data, index) {
-  return (Number(data[index]) + Number(data[index + 1]) + Number(data[index + 2])) / 3;
-}
-
-function pixelSaturation(data, index) {
-  const r = Number(data[index]);
-  const g = Number(data[index + 1]);
-  const b = Number(data[index + 2]);
-  return Math.max(r, g, b) - Math.min(r, g, b);
-}
-
-function countDarkBorderPixels(data, width, height, box) {
-  const x0 = Math.max(0, box.x0 - 2);
-  const y0 = Math.max(0, box.y0 - 2);
-  const x1 = Math.min(width - 1, box.x1 + 2);
-  const y1 = Math.min(height - 1, box.y1 + 2);
-  let dark = 0;
-  let total = 0;
-  for (let x = x0; x <= x1; x += 1) {
-    for (const y of [y0, y1]) {
-      const offset = (y * width + x) * 3;
-      total += 1;
-      if (pixelAverage(data, offset) < 115) dark += 1;
-    }
-  }
-  for (let y = y0 + 1; y < y1; y += 1) {
-    for (const x of [x0, x1]) {
-      const offset = (y * width + x) * 3;
-      total += 1;
-      if (pixelAverage(data, offset) < 115) dark += 1;
-    }
-  }
-  return total ? dark / total : 0;
-}
-
-async function detectTemplateLightCabinetPanels(file) {
-  const { data, info } = await sharp(file, { failOn: 'none', animated: false, limitInputPixels: 120_000_000 })
-    .rotate()
-    .resize({ width: 360, height: 360, fit: 'inside', withoutEnlargement: true })
-    .flatten({ background: '#ffffff' })
-    .removeAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
-  const width = info.width;
-  const height = info.height;
-  const totalPixels = width * height;
-  const candidate = new Uint8Array(totalPixels);
-  for (let y = 0; y < height; y += 1) {
-    const yNorm = y / height;
-    // Cropped detail shots often contain valid drawer fronts touching the top
-    // or bottom of the slice. Keep only a tiny outer guard instead of dropping
-    // the first/last tenth of the image.
-    if (yNorm < 0.01 || yNorm > 0.99) continue;
-    for (let x = 0; x < width; x += 1) {
-      const index = y * width + x;
-      const offset = index * 3;
-      const average = pixelAverage(data, offset);
-      const saturation = pixelSaturation(data, offset);
-      if (average >= 168 && average <= 240 && saturation <= 42) candidate[index] = 1;
-    }
-  }
-
-  const visited = new Uint8Array(totalPixels);
-  const components = [];
-  const stack = [];
-  for (let start = 0; start < totalPixels; start += 1) {
-    if (!candidate[start] || visited[start]) continue;
-    visited[start] = 1;
-    stack.push(start);
-    let area = 0;
-    let x0 = width;
-    let y0 = height;
-    let x1 = 0;
-    let y1 = 0;
-    let brightness = 0;
-    while (stack.length) {
-      const index = stack.pop();
-      const x = index % width;
-      const y = Math.floor(index / width);
-      const offset = index * 3;
-      area += 1;
-      brightness += pixelAverage(data, offset);
-      x0 = Math.min(x0, x);
-      y0 = Math.min(y0, y);
-      x1 = Math.max(x1, x);
-      y1 = Math.max(y1, y);
-      for (const next of [index - 1, index + 1, index - width, index + width]) {
-        if (next < 0 || next >= totalPixels || visited[next] || !candidate[next]) continue;
-        if ((index % width === 0 && next === index - 1) || (index % width === width - 1 && next === index + 1)) continue;
-        visited[next] = 1;
-        stack.push(next);
-      }
-    }
-    const boxWidth = x1 - x0 + 1;
-    const boxHeight = y1 - y0 + 1;
-    const boxArea = boxWidth * boxHeight;
-    const areaRatio = area / totalPixels;
-    const fillRatio = area / Math.max(1, boxArea);
-    const widthRatio = boxWidth / width;
-    const heightRatio = boxHeight / height;
-    const aspect = boxWidth / Math.max(1, boxHeight);
-    const darkBorderRatio = countDarkBorderPixels(data, width, height, { x0, y0, x1, y1 });
-    if (
-      areaRatio >= 0.0018
-      && areaRatio <= 0.55
-      && fillRatio >= 0.45
-      && widthRatio >= 0.035
-      && heightRatio >= 0.04
-      && widthRatio <= 0.92
-      && heightRatio <= 0.88
-      && aspect >= 0.28
-      && aspect <= 5
-      && brightness / Math.max(1, area) <= 236
-      && darkBorderRatio >= 0.015
-    ) {
-      components.push({ x0, y0, x1, y1, area });
-    }
-  }
-
-  const normalizedEdge = (value, total, upper = false) => {
-    if (!upper && value <= Math.max(3, total * 0.02)) return 0;
-    if (upper && value >= total - Math.max(3, total * 0.02)) return 1;
-    return value / total;
-  };
-  return components.map((box, index) => ({
-    id: `local-panel-${index + 1}`,
-    label: `本地检测柜门/抽屉面板 ${index + 1}`,
-    polygon: [
-      [normalizedEdge(box.x0, width), normalizedEdge(box.y0, height)],
-      [normalizedEdge(box.x1 + 1, width, true), normalizedEdge(box.y0, height)],
-      [normalizedEdge(box.x1 + 1, width, true), normalizedEdge(box.y1 + 1, height, true)],
-      [normalizedEdge(box.x0, width), normalizedEdge(box.y1 + 1, height, true)]
-    ],
-    surfaceState: '外侧可见'
-  }));
-}
-
-async function createVisualFallbackTemplateAnalysis(job, reason) {
-  const printableSurfaces = await detectTemplateLightCabinetPanels(job.templatePath).catch(() => []);
-  if (!printableSurfaces.length) return null;
-  const analysis = createManualTemplateAnalysis({
-    action: 'replace_print',
-    reason,
-    replaceArea: 'Auto-detected cabinet product image that should use the master product generation flow',
-    forbiddenArea: 'text, dimension marks, background, frame, seams, handles, legs, shadows and props'
-  });
-  return analysis.action === 'replace_print' ? { ...analysis, printableSurfaces } : null;
-}
-
 function shouldUsePowerShellApiFallback(url, error) {
   return process.platform === 'win32'
     && /change2pro\.com/i.test(String(url || ''))
@@ -2005,29 +1849,6 @@ function normalizeAnalysisResponse(body, wireApi) {
   };
 }
 
-function analysisContentToString(content) {
-  if (typeof content === 'string') return content.trim();
-  if (content == null) return '';
-  if (Array.isArray(content)) {
-    return content.map(item => analysisContentToString(item)).filter(Boolean).join('\n').trim();
-  }
-  if (typeof content === 'object') {
-    const candidates = [
-      content.text,
-      content.value,
-      content.content,
-      content.message,
-      content.output_text,
-      content?.text?.value
-    ];
-    for (const candidate of candidates) {
-      const value = analysisContentToString(candidate);
-      if (value) return value;
-    }
-  }
-  return '';
-}
-
 function isRetryableAnalysisApiFailure(error) {
   const status = Number(error?.status) || 0;
   if ([408, 409, 425, 429].includes(status) || status >= 500) return true;
@@ -2238,6 +2059,7 @@ async function generateImage(prompt, imagePaths, options = {}) {
     if (!isImagePath(file)) throw new Error(`Unsupported image format: ${path.basename(file)}`);
     return imageReferenceCache.prepare(file);
   }));
+  const imageFieldName = preparedImages.length > 1 ? 'image[]' : 'image';
   const maskPath = options.maskPath && fs.existsSync(options.maskPath) ? options.maskPath : '';
   const preparation = {
     originalBytes: preparedImages.reduce((total, item) => total + item.originalBytes, 0),
@@ -2265,7 +2087,7 @@ async function generateImage(prompt, imagePaths, options = {}) {
       for (const prepared of preparedImages) {
         const file = prepared.path;
         files.push({
-          name: 'image',
+          name: imageFieldName,
           path: file,
           fileName: `${path.basename(prepared.sourcePath, path.extname(prepared.sourcePath))}${path.extname(file)}`,
           contentType: imageMimeType(file)
@@ -2277,7 +2099,7 @@ async function generateImage(prompt, imagePaths, options = {}) {
       for (const prepared of preparedImages) {
         const bytes = await fsp.readFile(prepared.path);
         const uploadName = `${path.basename(prepared.sourcePath, path.extname(prepared.sourcePath))}${path.extname(prepared.path)}`;
-        form.append('image', new Blob([bytes], { type: imageMimeType(prepared.path) }), uploadName);
+        form.append(imageFieldName, new Blob([bytes], { type: imageMimeType(prepared.path) }), uploadName);
       }
       if (maskPath) {
         const maskBytes = await fsp.readFile(maskPath);
@@ -2627,122 +2449,19 @@ async function detailSliceNeighborImages(job) {
   return neighbors;
 }
 
-function printableSurfaceArea(polygon = []) {
-  let sum = 0;
-  for (let index = 0; index < polygon.length; index += 1) {
-    const current = polygon[index];
-    const next = polygon[(index + 1) % polygon.length];
-    sum += Number(current?.[0] || 0) * Number(next?.[1] || 0) - Number(next?.[0] || 0) * Number(current?.[1] || 0);
-  }
-  return Math.abs(sum) / 2;
-}
-
-
-function hasSemanticPrintableSurfaces(value) {
-  const summary = typeof value === 'string' ? parseTemplateAnalysisSummary(value) : value || {};
-  const surfaces = Array.isArray(summary.printableSurfaces) ? summary.printableSurfaces : [];
-  return surfaces.some(surface => {
-    if (String(surface?.id || '').startsWith('local-panel-')) return false;
-    const polygon = Array.isArray(surface?.polygon) ? surface.polygon : [];
-    const area = printableSurfaceArea(polygon);
-    return polygon.length >= 3 && area >= 0.003 && area <= 0.72;
-  });
-}
-
-function insetPrintablePolygon(polygon, width, height, insetPixels = 3) {
-  const points = polygon.map(([x, y]) => [
-    Math.min(1, Math.max(0, Number(x))),
-    Math.min(1, Math.max(0, Number(y)))
-  ]);
-  const centerX = points.reduce((sum, point) => sum + point[0], 0) / points.length;
-  const centerY = points.reduce((sum, point) => sum + point[1], 0) / points.length;
-  return points.map(([x, y]) => {
-    const dx = (centerX - x) * width;
-    const dy = (centerY - y) * height;
-    const distance = Math.hypot(dx, dy);
-    const ratio = distance > 0 ? Math.min(1, insetPixels / distance) : 0;
-    const insetX = x + (centerX - x) * ratio;
-    const insetY = y + (centerY - y) * ratio;
-    // A surface cut by the source crop must remain editable through that crop
-    // edge, otherwise a visible strip of the old blank panel is left behind.
-    return [x <= 0.005 || x >= 0.995 ? x : insetX, y <= 0.005 || y >= 0.995 ? y : insetY];
-  });
-}
-
-async function createTemplateEditMask(job, analysis) {
-  const summary = parseTemplateAnalysisSummary(analysis);
-  if (resolveGenerationAction(analysis) !== 'replace_print') return '';
-  let surfaces = (Array.isArray(summary.printableSurfaces) ? summary.printableSurfaces : [])
-    .filter(surface => !String(surface?.id || '').startsWith('local-panel-'));
-  // A dedicated semantic extraction is preferred. For legacy caches where it
-  // still produced no polygon, use only conservative local components fully
-  // inside the page. Components touching a page edge are commonly windows,
-  // paper backgrounds or rugs and must never unlock the whole composition.
-  if (!surfaces.length) {
-    surfaces = (await detectTemplateLightCabinetPanels(job.templatePath).catch(() => []))
-      .filter(surface => {
-        const polygon = Array.isArray(surface?.polygon) ? surface.polygon : [];
-        return polygon.length >= 3 && polygon.every(([x, y]) => x > 0.01 && x < 0.99 && y > 0.01 && y < 0.99);
-      });
-  }
-  const polygons = surfaces
-    .map(surface => Array.isArray(surface?.polygon) ? surface.polygon : [])
-    .filter(polygon => polygon.length >= 3 && printableSurfaceArea(polygon) >= 0.003 && printableSurfaceArea(polygon) <= 0.72);
-  if (!polygons.length) return '';
-
-  const metadata = await sharp(job.templatePath, { failOn: 'none' }).rotate().metadata();
-  const width = Math.max(1, Number(metadata.width) || 1);
-  const height = Math.max(1, Number(metadata.height) || 1);
-  const points = polygons.map(polygon => insetPrintablePolygon(polygon, width, height)
-    .map(([x, y]) => `${Math.round(Math.min(1, Math.max(0, Number(x))) * width)},${Math.round(Math.min(1, Math.max(0, Number(y))) * height)}`)
-    .join(' '));
+async function templateConfigurationForJob(job) {
   const cache = templateCachePaths(job.templateRoot, job.relativePath);
-  const fingerprint = crypto.createHash('sha1').update(JSON.stringify({ version: 2, width, height, points })).digest('hex').slice(0, 12);
-  const maskPath = path.join(cache.cacheFolder, `${path.basename(cache.analysisFile, '.json')}-${fingerprint}.mask.png`);
-  if (fs.existsSync(maskPath)) return maskPath;
-  await fsp.mkdir(path.dirname(maskPath), { recursive: true });
-  // OpenAI image-edit masks use transparent pixels as editable areas. Build a
-  // real alpha cut-out; drawing a transparent polygon over an opaque white
-  // rectangle does not erase that rectangle and produces a fully locked mask.
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><defs><mask id="editable-cutout"><rect width="100%" height="100%" fill="#ffffff"/><g fill="#000000">${points.map(value => `<polygon points="${value}"/>`).join('')}</g></mask></defs><rect width="100%" height="100%" fill="#ffffff" mask="url(#editable-cutout)"/></svg>`;
-  await sharp(Buffer.from(svg)).png().toFile(maskPath);
-  return maskPath;
-}
-
-async function compositeTemplateEditResult(job, generatedBytes, maskPath) {
-  if (!maskPath || !fs.existsSync(maskPath)) return generatedBytes;
-  const metadata = await sharp(job.templatePath, { failOn: 'none' }).metadata();
-  const width = Math.max(1, Number(metadata.width) || 1);
-  const height = Math.max(1, Number(metadata.height) || 1);
-  const candidate = await sharp(generatedBytes, { failOn: 'none' })
-    .resize({ width, height, fit: 'fill' })
-    .removeAlpha()
-    .raw()
-    .toBuffer();
-  const editableAlpha = await sharp(maskPath, { failOn: 'none' })
-    .resize({ width, height, fit: 'fill' })
-    .ensureAlpha()
-    .extractChannel(3)
-    .negate()
-    .raw()
-    .toBuffer();
-  const editableOverlay = await sharp(candidate, { raw: { width, height, channels: 3 } })
-    .joinChannel(editableAlpha, { raw: { width, height, channels: 1 } })
-    .png()
-    .toBuffer();
-  return sharp(job.templatePath, { failOn: 'none' })
-    .rotate()
-    .resize({ width, height, fit: 'fill' })
-    .composite([{ input: editableOverlay, blend: 'over' }])
-    .png()
-    .toBuffer();
-}
-
-async function templateAnalysisForJob(job) {
-  const cache = templateCachePaths(job.templateRoot, job.relativePath);
-  const analysis = await readValidTemplateAnalysisCache({ cacheFile: cache.analysisFile, templateImagePath: job.templatePath });
-  const value = analysis || JSON.stringify(createFallbackTemplateAnalysis());
-  return { cache, analysis: value, summary: parseTemplateAnalysisSummary(value), cached: Boolean(analysis) };
+  const savedConfiguration = await readValidTemplateAnalysisCache({ cacheFile: cache.analysisFile, templateImagePath: job.templatePath });
+  const value = savedConfiguration || JSON.stringify(createManualTemplateAnalysis({
+    action: 'copy_original',
+    reason: '未框选区域，按原图复制'
+  }));
+  return {
+    cache,
+    configuration: value,
+    summary: parseTemplateAnalysisSummary(value),
+    saved: Boolean(savedConfiguration)
+  };
 }
 
 function templateRelativeKey(value) {
@@ -2761,7 +2480,7 @@ async function planTemplateOutputJobs(templateFolderPath, selectedPaths = null) 
   let matchedSelection = selected.size === 0;
 
   for (const job of jobs) {
-    const details = await templateAnalysisForJob(job);
+    const details = await templateConfigurationForJob(job);
     const action = normalizeTemplateProcessingMode(details.summary.action);
     const relativeKey = templateRelativeKey(job.relativePath);
     if (selected.has(relativeKey)) matchedSelection = true;
@@ -2801,31 +2520,13 @@ async function planTemplateOutputJobs(templateFolderPath, selectedPaths = null) 
   };
 }
 
-function templateAnalysisStatusFile(job) {
-  return `${templateCachePaths(job.templateRoot, job.relativePath).analysisFile}.status.json`;
-}
-
-async function writeTemplateAnalysisStatus(job, value) {
-  return writeJsonFile(templateAnalysisStatusFile(job), {
-    relativePath: job.relativePath,
-    updatedAt: new Date().toISOString(),
-    ...value
-  });
-}
-
 async function collectTemplateItems(templateRoot) {
   const jobs = await buildTemplateJobs(templateRoot);
   const items = [];
   for (const job of jobs) {
-    const { cache, summary, cached } = await templateAnalysisForJob(job);
+    const { summary } = await templateConfigurationForJob(job);
     const stat = await fsp.stat(job.templatePath).catch(() => null);
     const version = stat ? `${Math.trunc(stat.mtimeMs)}-${stat.size}` : '1';
-    const recordedStatus = await readJsonFile(templateAnalysisStatusFile(job), {});
-    const analysisStatus = cached
-      ? 'success'
-      : recordedStatus.status === 'failed' || recordedStatus.status === 'running'
-        ? recordedStatus.status
-        : 'idle';
     const displayFolder = path.dirname(normalizeTemplateRelativePath(job.relativePath));
     items.push({
       relativePath: job.relativePath,
@@ -2842,11 +2543,7 @@ async function collectTemplateItems(templateRoot) {
       reason: summary.reason,
       replaceArea: summary.replaceArea,
       forbiddenArea: summary.forbiddenArea,
-      regions: summary.regions,
-      analysisPending: !cached,
-      analysisStatus,
-      analysisError: analysisStatus === 'failed' ? String(recordedStatus.error || 'AI 分析失败') : '',
-      analysisAttempts: Number(recordedStatus.attempts || 0)
+      regions: summary.regions
     });
   }
   return { jobs, items };
@@ -2971,7 +2668,7 @@ function summarizeTemplatePreparation(folder, items, extra = {}) {
   };
   counts.copyTemplate = counts.copyOriginal;
   counts.skipCopy = counts.exclude;
-  const pending = items.filter(item => item.analysisPending).length;
+  const pending = 0;
   return {
     folder,
     total: items.length,
@@ -2997,58 +2694,38 @@ async function getTemplatePreparation(folderValue) {
   return summarizeTemplatePreparation(folder, items);
 }
 
-async function waitForTemplateWarmup(folder, timeoutMs = 10 * 60 * 1000) {
-  const deadline = Date.now() + timeoutMs;
-  while (warmingTemplateFolders.has(folder) && Date.now() < deadline) await randomDelay(400, 400);
-  if (warmingTemplateFolders.has(folder)) throw new Error('套图自动识别仍在执行，请稍后重试。');
-}
-
 async function prepareTemplateFolder(folderValue) {
   const folder = String(folderValue || '');
   if (!folder || !fs.existsSync(folder)) throw new Error('套图文件夹不存在');
-  await waitForTemplateWarmup(folder);
   const { jobs } = await collectTemplateItems(folder);
   if (!jobs.length) return summarizeTemplatePreparation(folder, [], { analyzed: 0, reused: 0, failed: 0 });
-  const missing = [];
-  for (const job of jobs) {
-    if (!(await templateAnalysisForJob(job)).cached) missing.push(job);
-  }
-  const results = missing.length
-    ? await runWithConcurrency(missing, await activeApiConcurrencyLimit(missing.length), job => analyzeTemplateJobWithRetry(job))
-    : [];
-  const failed = results.filter(result => !result.ok || !result.value?.ok);
   const { items } = await collectTemplateItems(folder);
   return summarizeTemplatePreparation(folder, items, {
-    analyzed: results.length - failed.length,
-    reused: jobs.length - missing.length,
-    failed: failed.length,
-    failures: failed.slice(0, 10).map(result => result.value?.error || result.error?.message || String(result.error || '识别失败'))
+    analyzed: 0,
+    reused: jobs.length,
+    failed: 0,
+    failures: []
   });
 }
 
-async function saveTemplateConfiguration(payload) {
+async function saveTemplateRegions(payload) {
   const folder = String(payload?.folder || '');
   const jobs = await buildTemplateJobs(folder);
-  const byRelative = new Map(jobs.map(job => [job.relativePath.replaceAll('\\', '/').toLocaleLowerCase('zh-CN'), job]));
-  const pack = await activeModelPackage();
+  const byRelative = new Map(jobs.map(job => [templateRelativeKey(job.relativePath), job]));
   for (const item of payload?.items || []) {
-    const key = String(item.relativePath || '').replaceAll('\\', '/').toLocaleLowerCase('zh-CN');
-    const job = byRelative.get(key);
+    const job = byRelative.get(templateRelativeKey(item.relativePath));
     if (!job) throw new Error(`模板不存在：${item.relativePath}`);
+    const regions = Array.isArray(item.regions) ? item.regions : [];
+    const requestedAction = normalizeTemplateProcessingMode(item.action);
+    const action = regions.length ? 'replace_print' : requestedAction === 'exclude' ? 'exclude' : 'copy_original';
     const analysis = createManualTemplateAnalysis({
-      action: item.action,
-      reason: item.reason,
-      replaceArea: item.replaceArea,
-      forbiddenArea: item.forbiddenArea
+      action,
+      reason: regions.length ? '运营人工框选柜体区域' : action === 'exclude' ? '运营人工排除' : '未框选区域，按原图复制',
+      replaceArea: regions.length ? '人工粗框内由 Image2 判断的可见柜门或抽屉正面' : '无',
+      forbiddenArea: '粗框外全部区域，以及框内背景、人物、文字、边框、门缝、把手、柜脚、内侧和道具',
+      regions
     });
     const cache = templateCachePaths(folder, job.relativePath);
-    const reservation = packageIsFlagship(pack) ? null : await billing.reserve(currentWorkspaceId(), 'llm', {
-      ...packageBillingRange(pack, 'analysis'),
-      description: 'AI 分析结果人工重设',
-      reference: job.relativePath,
-      onceKey: billingOnceKey('llm:manual-template-analysis', folder, job.relativePath, Date.now(), crypto.randomUUID())
-    });
-    try {
     await writeTemplateAnalysisCache({
       cacheFile: cache.analysisFile,
       templateRoot: folder,
@@ -3057,381 +2734,21 @@ async function saveTemplateConfiguration(payload) {
       analysis: JSON.stringify(analysis),
       manualOverride: true
     });
-    await writeTemplateAnalysisStatus(job, { status: 'success', source: 'manual', attempts: 0, error: '' });
-      if (reservation) await billing.commit(reservation);
-    } catch (error) {
-      if (reservation) await billing.release(reservation).catch(() => {});
-      throw error;
-    }
   }
   return listTemplates(folder);
 }
 
-async function analyzeTemplateJob(job, options = {}) {
-  const api = await activeApiConfig('analysis');
-  const prompt = await getPromptValue('templateAnalysis');
-  const messageContent = [{ type: 'text', text: prompt }];
-  if (options.referenceJob) {
-    messageContent.push({
-      type: 'text',
-      text: [
-        'Reference analysis guidance:',
-        `Reference relative path: ${options.referenceJob.relativePath}`,
-        `Reference analysis JSON: ${String(options.referenceAnalysis || '').slice(0, 12000)}`,
-        'Use the reference only to understand how a similar ecommerce cabinet image was interpreted.',
-        'Do not copy reference coordinates, panel count, door count, proportions, or replace areas.',
-        'Analyze the target image independently and only decide whether it should use the master product generation flow.'
-      ].join('\n')
-    });
-    messageContent.push({ type: 'image_url', image_url: { url: options.referenceImageDataUrl || await imageAsAnalysisDataUrl(options.referenceJob.templatePath) } });
-    messageContent.push({ type: 'text', text: `Target image to analyze independently: ${job.relativePath}` });
-  }
-  const neighborImages = options.neighborImages || await detailSliceNeighborImages(job);
-  if (neighborImages.length) {
-    messageContent.push({
-      type: 'text',
-      text: [
-        'Detail page slice context:',
-        `Current target slice: ${job.relativePath}`,
-        'The following neighbor slices are context only. They help identify cabinets, drawer fronts, door fronts or product surfaces that may be cut by the current image edge.',
-        'Do not copy their text, layout, crop, product geometry, scene elements or off-canvas content into the target analysis.',
-        'Analyze and output JSON only for the current target slice.'
-      ].join('\n')
-    });
-    for (const neighbor of neighborImages) {
-      messageContent.push({ type: 'text', text: `${neighbor.label}: ${neighbor.relativePath}` });
-      messageContent.push({
-        type: 'image_url',
-        image_url: { url: neighbor.imageDataUrl || await imageAsAnalysisDataUrl(neighbor.templatePath) }
-      });
-    }
-    messageContent.push({
-      type: 'text',
-      text: [
-        `Target current slice: ${job.relativePath}`,
-        'Neighbor slices are context only. Judge cropped drawer fronts, half cabinet doors and partial exterior cabinet surfaces in this current image as valid replace_print targets when visible.'
-      ].join('\n')
-    });
-  }
-  if (options.forceReplacePrint) {
-    messageContent.push({
-      type: 'text',
-      text: [
-        'Force replace print guidance:',
-        'Treat visible cabinet exterior surfaces as replace_print targets when they are drawer fronts, cabinet doors, side exterior panels, or cropped exterior product panels.',
-        'For open drawers or storage-detail images, replace only visible drawer exterior/front panels and cabinet exterior surfaces.',
-        'Preserve drawer interiors, stored items, rails, handles, seams, text, background, wall, floor, props, people, packaging, and all non-printable internal structure.',
-        'If a cabinet exterior panel is visible even partially, output processingMode/action replace_print and describe the visible exterior printable area.',
-        'For every editable drawer front or cabinet-door face, printableSurfaces MUST contain a separate normalized polygon with at least four points. Never return one large polygon around the whole cabinet, page, card, or multi-grid layout. Keep every polygon inside the visible panel face and exclude frames, seams, handles, side panels, feet, shadows and text.'
-      ].join('\n')
-    });
-  }
-  messageContent.push({ type: 'image_url', image_url: { url: options.imageDataUrl || await imageAsAnalysisDataUrl(job.templatePath) } });
-  const body = await analysisApiJson(api, {
-    model: resolveAnalysisModel(api),
-    messages: [{
-      role: 'user',
-      content: messageContent
-    }],
-    max_tokens: 6000
-  }, (api.requestTimeoutSeconds || 300) * 1000, {
-    description: '套图模板 AI 分析',
-    reference: job.relativePath,
-    onceKey: billingOnceKey('llm:template-analysis', job.templateRoot, job.relativePath)
-  });
-  const choice = body?.choices?.[0] || {};
-  const content = choice?.message?.content ?? choice?.delta?.content ?? choice?.text ?? body?.output_text ?? body?.content;
-  const analysisText = analysisContentToString(content);
-  if (!analysisText) {
-    const fallbackCache = templateCachePaths(job.templateRoot, job.relativePath);
-    const visualFallback = await createVisualFallbackTemplateAnalysis(job, 'AI returned no readable template analysis; local visual panel detection was used.');
-    const fallback = visualFallback || createManualTemplateAnalysis({
-      action: 'manual_check',
-      reason: 'AI 接口已返回但没有可读取的分析文本，请人工确认。',
-      replaceArea: '不确定',
-      forbiddenArea: '背景、文字、墙面、地面、柜脚、把手、抽屉内侧、柜门内侧、包装、留白等非可印花面板区域',
-      regions: []
-    });
-    await writeTemplateAnalysisCache({
-      cacheFile: fallbackCache.analysisFile,
-      templateRoot: job.templateRoot,
-      templateImagePath: job.templatePath,
-      relativeTemplatePath: job.relativePath,
-      analysis: JSON.stringify(fallback),
-      manualOverride: false
-    });
-    return parseTemplateAnalysisSummary(fallback);
-  }
-  const cache = templateCachePaths(job.templateRoot, job.relativePath);
-  let validated = validateTemplateAnalysis(analysisText, { source: 'ai' });
-  if (validated.action === 'manual_check' || validated.action === 'copy_original' || (validated.action === 'replace_print' && !validated.printableSurfaces?.length && !options.requireSemanticSurfaces)) {
-    const visualFallback = await createVisualFallbackTemplateAnalysis(
-      job,
-      validated.action === 'copy_original'
-        ? 'AI marked this template as copy_original, but local visual panel detection found executable light cabinet panels.'
-        : validated.action === 'replace_print'
-          ? 'AI selected replace_print without panel coordinates; local visual panel detection supplied conservative editable polygons.'
-          : 'AI marked this template for manual check; local visual panel detection found executable light cabinet panels.'
-    );
-    if (visualFallback) validated = visualFallback;
-  }
-  if (options.requireSemanticSurfaces && validated.action === 'replace_print' && !hasSemanticPrintableSurfaces(validated)) {
-    throw new Error('AI 未返回可靠的柜门/抽屉面板坐标，已拒绝无蒙版整图生成。');
-  }
-  const normalizedAnalysis = JSON.stringify(validated);
-  await writeTemplateAnalysisCache({
-    cacheFile: cache.analysisFile,
-    templateRoot: job.templateRoot,
-    templateImagePath: job.templatePath,
-    relativeTemplatePath: job.relativePath,
-    analysis: normalizedAnalysis,
-    manualOverride: false
-  });
-  return parseTemplateAnalysisSummary(normalizedAnalysis);
-}
-
-async function analyzeTemplateJobWithRetry(job, retries = 3, onProgress = async () => {}, analyzeOptions = {}) {
-  const maximumAttempts = Math.max(1, Number(retries) + 1);
-  let lastError;
-  let attemptsUsed = 0;
-  await writeTemplateAnalysisStatus(job, { status: 'running', attempts: 0, error: '' });
-  let imageDataUrl;
-  try { imageDataUrl = await imageAsAnalysisDataUrl(job.templatePath); }
-  catch (error) {
-    const message = `图片预处理失败：${error?.message || error}`;
-    await writeTemplateAnalysisStatus(job, { status: 'failed', source: 'ai', attempts: 0, error: message });
-    return { ok: false, relativePath: job.relativePath, attempts: 0, error: message };
-  }
-  for (let attempt = 1; attempt <= maximumAttempts; attempt += 1) {
-    attemptsUsed = attempt;
-    await onProgress({ phase: 'analyzing', relativePath: job.relativePath, attempt, maximumAttempts });
-    try {
-      const summary = await analyzeTemplateJob(job, { ...analyzeOptions, imageDataUrl });
-      await writeTemplateAnalysisStatus(job, { status: 'success', source: 'ai', attempts: attempt, error: '' });
-      return { ok: true, relativePath: job.relativePath, attempts: attempt, summary };
-    } catch (error) {
-      lastError = error;
-      // Retryable transport/API errors have already been retried by the shared analysis queue.
-      // Retrying the whole job again would create a second burst after the queue gives up.
-      if (error instanceof RetryableRequestError || error?.retryable === true) break;
-      if (attempt < maximumAttempts) {
-        await onProgress({ phase: 'retrying', relativePath: job.relativePath, attempt, maximumAttempts, error: error?.message || String(error) });
-        await randomDelay(ANALYSIS_RETRY_BASE_MS * attempt, ANALYSIS_RETRY_BASE_MS * 2 * attempt);
-      }
-    }
-  }
-  const message = lastError?.message || String(lastError || 'AI 分析失败');
-  await writeTemplateAnalysisStatus(job, { status: 'failed', source: 'ai', attempts: attemptsUsed, error: message });
-  return { ok: false, relativePath: job.relativePath, attempts: attemptsUsed, error: message };
-}
-
-async function analyzeTemplateItemWithReference(payload = {}, options = {}) {
-  const folder = String(payload.folder || '');
-  if (!folder || !fs.existsSync(folder)) throw new Error('套图文件夹不存在。');
-  const relativePath = String(payload.relativePath || '');
-  const referenceRelativePath = String(payload.referenceRelativePath || '');
-  const forceReplacePrint = payload.forceReplacePrint === true;
-  if (!relativePath || (!referenceRelativePath && !forceReplacePrint)) throw new Error('缺少目标图或参考图。');
-  const byKey = new Map((await buildTemplateJobs(folder)).map(job => [templateRelativeKey(job.relativePath), job]));
-  const job = byKey.get(templateRelativeKey(relativePath));
-  const referenceJob = referenceRelativePath ? byKey.get(templateRelativeKey(referenceRelativePath)) : null;
-  if (!job) throw new Error('没有找到目标套图图片。');
-  if (referenceRelativePath && !referenceJob) throw new Error('没有找到参考套图图片。');
-  const referenceDetails = referenceJob ? await templateAnalysisForJob(referenceJob) : null;
-  const report = typeof options.reportProgress === 'function' ? options.reportProgress : async () => {};
-  await report({ phase: 'queued', current: 0, total: 1, failed: 0, concurrency: 1, message: '参考重析已排队' });
-  const result = await analyzeTemplateJobWithRetry(job, 3, async progress => {
-    await report({ ...progress, current: 0, total: 1, failed: 0, concurrency: 1, referenceRelativePath: referenceJob?.relativePath || '' });
-  }, {
-    referenceJob,
-    referenceAnalysis: referenceDetails?.analysis || '',
-    referenceImageDataUrl: referenceJob ? await imageAsAnalysisDataUrl(referenceJob.templatePath) : '',
-    forceReplacePrint
-  });
-  await report({
-    phase: 'completed',
-    current: 1,
-    total: 1,
-    failed: result.ok ? 0 : 1,
-    concurrency: 1,
-    completedRelativePath: job.relativePath,
-    completedStatus: result.ok ? 'success' : 'failed',
-    referenceRelativePath: referenceJob?.relativePath || '',
-    message: result.ok ? '参考重析已完成' : `参考重析失败：${result.error}`
-  });
-  return {
-    total: 1,
-    completed: 1,
-    failed: result.ok ? 0 : 1,
-    referenceRelativePath: referenceJob?.relativePath || '',
-    failures: result.ok ? [] : [{ relativePath: result.relativePath, error: result.error, attempts: result.attempts }],
-    items: await listTemplates(folder)
-  };
-}
-
-async function analyzeTemplateItems(payload = {}, options = {}) {
-  const folder = String(payload.folder || '');
-  if (!folder || !fs.existsSync(folder)) throw new Error('套图文件夹不存在');
-  const requested = new Set((payload.relativePaths || []).map(value => String(value).replaceAll('\\', '/').toLocaleLowerCase('zh-CN')));
-  if (!requested.size) throw new Error('请先选择需要 AI 分析的图片');
-  const jobs = (await buildTemplateJobs(folder)).filter(job => requested.has(job.relativePath.replaceAll('\\', '/').toLocaleLowerCase('zh-CN')));
-  if (!jobs.length) throw new Error('没有找到需要分析的套图图片');
-  const concurrency = await activeApiConcurrencyLimit(jobs.length);
-  let completed = 0;
-  let failed = 0;
-  const report = typeof options.reportProgress === 'function' ? options.reportProgress : async () => {};
-  await report({ phase: 'queued', current: 0, total: jobs.length, failed: 0, concurrency, message: `已排队 ${jobs.length} 张，并发 ${concurrency}` });
-  const analyzeJob = job => analyzeTemplateJobWithRetry(job, 3, async progress => {
-    await report({ ...progress, current: completed, total: jobs.length, failed, concurrency, message: progress.phase === 'retrying' ? `分析失败，正在自动重试：${job.relativePath}` : `正在分析：${job.relativePath}` });
-  }).then(async result => {
-    completed += 1;
-    if (!result.ok) failed += 1;
-    await report({
-      phase: completed === jobs.length ? 'completed' : 'analyzing',
-      current: completed,
-      total: jobs.length,
-      failed,
-      concurrency,
-      completedRelativePath: job.relativePath,
-      completedStatus: result.ok ? 'success' : 'failed',
-      message: result.ok ? `已完成 ${completed}/${jobs.length}` : `分析失败：${job.relativePath}`
-    });
-    return result;
-  });
-  const results = await runWithConcurrency(jobs, concurrency, analyzeJob);
-  const values = results.map(result => result.value).filter(Boolean);
-  return {
-    total: jobs.length,
-    completed,
-    failed,
-    concurrency,
-    failures: values.filter(result => !result.ok).map(result => ({ relativePath: result.relativePath, error: result.error, attempts: result.attempts })),
-    items: await listTemplates(folder)
-  };
-}
-
-async function analyzeTemplateFolder(folder) {
-  if (warmingTemplateFolders.has(folder)) throw new Error('当前套图正在后台分析，请稍后重新打开配置窗口。');
-  const jobs = await buildTemplateJobs(folder);
-  const results = await runWithConcurrency(jobs, await activeApiConcurrencyLimit(jobs.length), job => analyzeTemplateJobWithRetry(job));
-  const failed = results.filter(result => !result.ok || !result.value?.ok);
-  if (failed.length === jobs.length && jobs.length) throw new Error(failed[0].value?.error || failed[0].error?.message || 'AI 分析失败');
-  return listTemplates(folder);
-}
-
-async function enrichTemplateAnalysisWithSurfacePolygons(job, current) {
-  if (resolveGenerationAction(current.analysis) !== 'replace_print' || hasSemanticPrintableSurfaces(current.summary)) return current;
-  const result = await analyzeTemplateJobWithRetry(job, 1, async () => {}, {
-    forceReplacePrint: true,
-    requireSemanticSurfaces: true
-  });
-  if (!result.ok) {
-    throw new Error(`柜门/抽屉正面蒙版分析失败：${result.error || 'AI 未返回有效面板坐标'}`);
-  }
-  const refreshed = await templateAnalysisForJob(job);
-  if (!hasSemanticPrintableSurfaces(refreshed.summary)) {
-    throw new Error('柜门/抽屉正面蒙版分析失败：AI 未返回有效面板坐标');
-  }
-  return refreshed;
-}
-
-async function ensureTemplateAnalysisForJob(job) {
-  const current = await templateAnalysisForJob(job);
-  // Existing V11 caches may classify the image correctly but omit panel
-  // coordinates. Enrich those caches before generation so the image endpoint
-  // always receives a safe edit mask and never redraws or zooms the full page.
-  // Generation must never wait for a second coordinate-analysis pass. Some
-  // vision providers classify templates correctly but cannot return stable
-  // polygons; using those coordinates caused slow batches, mass failures and
-  // misplaced drawer artwork. Keep the existing executable classification.
-  if (current.cached) return current;
-  const result = await analyzeTemplateJobWithRetry(job);
-  if (!result.ok) throw new Error(result.error || 'AI 分析失败');
-  const refreshed = await templateAnalysisForJob(job);
-  return refreshed;
-}
-
-function startTemplateAnalysisWarmup(folder, knownJobs = null) {
-  if (!folder || warmingTemplateFolders.has(folder)) return;
-  warmingTemplateFolders.add(folder);
-  void (async () => {
-    const jobs = knownJobs || await buildTemplateJobs(folder);
-    const missing = [];
-    for (const job of jobs) {
-      if (!(await templateAnalysisForJob(job)).cached) missing.push(job);
-    }
-    if (missing.length) await runWithConcurrency(missing, await activeApiConcurrencyLimit(missing.length), job => analyzeTemplateJobWithRetry(job));
-  })().catch(() => {}).finally(() => warmingTemplateFolders.delete(folder));
-}
-
-async function analyzeProductProfile(productPath) {
-  if (!productPath || !fs.existsSync(productPath)) return normalizeProductProfile({});
-  const api = await activeApiConfig('analysis');
-  const response = await analysisApiJson(api, buildProductProfileAnalysisRequest({
-    model: resolveAnalysisModel(api),
-    imageDataUrl: await imageAsDataUrl(productPath),
-    prompt: await getPromptValue('productProfileAnalysis')
-  }), (api.requestTimeoutSeconds || 300) * 1000, {
-    description: '商品图片理解',
-    reference: path.basename(productPath),
-    onceKey: billingOnceKey('llm:product-profile', productPath)
-  });
-  return parseProductProfileChatResponse(response);
-}
-
-async function ensureTemplateProductProfile(templateFolderPath, productPath = '') {
-  const file = getTemplateProductProfileFile(templateFolderPath);
-  let profile = await readProductProfileFile(file);
-  if (!profile) {
-    profile = normalizeProductProfile({});
-    await writeProductProfileFile(file, profile);
-  }
-  if (!profile.dimensions && productPath && fs.existsSync(productPath)) {
-    try {
-      const detected = await analyzeProductProfile(productPath);
-      if (detected.dimensions) {
-        profile.dimensions = detected.dimensions;
-        await writeProductProfileFile(file, profile);
-      }
-    } catch {}
-  }
-  return profile;
-}
-
-async function ensureTaskProductProfile(outputRoot, source) {
-  const file = getTaskProductProfileFile(outputRoot);
-  const profileStat = await fsp.stat(file).catch(() => null);
-  const productStat = source.productPath ? await fsp.stat(source.productPath).catch(() => null) : null;
-  if (!shouldRefreshTaskProductProfile({
-    profileExists: Boolean(profileStat),
-    productExists: Boolean(productStat),
-    profileLastWriteMs: profileStat?.mtimeMs,
-    productLastWriteMs: productStat?.mtimeMs
-  })) return readProductProfileFile(file);
-  let profile = normalizeProductProfile({});
-  if (productStat) {
-    try { profile = await analyzeProductProfile(source.productPath); } catch {}
-  }
-  await writeJsonFile(file, createTaskProductProfilePayload(profile, {
-    sourceProductPath: source.productPath,
-    sourceProductLastWriteUtc: productStat?.mtime?.toISOString?.() || '',
-    updatedAt: new Date().toISOString()
-  }));
-  return profile;
-}
-
-async function saveTemplateProductProfile(payload) {
-  const folder = String(payload?.folder || '');
-  if (!folder || !fs.existsSync(folder)) throw new Error('套图文件夹不存在');
-  const profile = normalizeProductProfile(payload?.profile || {});
-  if (!profile.dimensions && !profile.material) throw new Error('至少填写尺寸或材质');
-  await writeProductProfileFile(getTemplateProductProfileFile(folder), profile);
-  return profile;
+async function loadManualTemplateConfigForJob(job) {
+  const current = await templateConfigurationForJob(job);
+  // Generation reads only the saved operator decision and regions. It never
+  // starts template analysis or waits for AI-generated coordinates.
+  return current;
 }
 
 async function templateOutputSize(job) {
   const metadata = await sharp(job.templatePath, { failOn: 'none' }).metadata();
-  return imageApiSizeForDimensions(metadata.width, metadata.height);
+  const align = value => Math.max(16, Math.ceil(Math.max(1, Number(value) || 1) / 16) * 16);
+  return `${align(metadata.width)}x${align(metadata.height)}`;
 }
 
 
@@ -3450,11 +2767,10 @@ async function prepareTemplateGenerationCanvas(job, maskPath = '') {
   // Never enlarge a designer-prepared slice before sending it to the API.
   // Detail text therefore keeps its original pixel scale; only oversized
   // source files are reduced to fit the supported transport canvas.
-  // Keep an immutable registration frame around every template. A full-bleed
-  // 1:1 API canvas encourages image-edit models to zoom/recompose by a few
-  // percent even when the returned pixel dimensions are correct.
-  const safeInsetX = Math.max(24, Math.round(canvas.width * 0.04));
-  const safeInsetY = Math.max(24, Math.round(canvas.height * 0.04));
+  // Custom Image2 canvases preserve designer pixels at 1:1 scale. Dimensions
+  // that are not divisible by 16 receive only a centered transport margin.
+  const safeInsetX = 0;
+  const safeInsetY = 0;
   const scale = Math.min(
     1,
     Math.max(1, canvas.width - safeInsetX * 2) / sourceWidth,
@@ -3548,27 +2864,6 @@ async function restoreTemplateGenerationCanvas(bytes, plan) {
   return restored;
 }
 
-function containsAny(value, candidates) {
-  const text = String(value || '').toLocaleLowerCase('zh-CN');
-  return candidates.some(candidate => text.includes(String(candidate).toLocaleLowerCase('zh-CN')));
-}
-
-function resolveActionWithProductProfile(action, templateAnalysis, productProfile, job) {
-  const pathText = String(job?.relativePath || '');
-  const templateText = `${pathText}\n${String(templateAnalysis || '')}`;
-  const isPureInfoPage = containsAny(templateText, ['包装', '运输', '物流', '安装', '售后', '买家须知', '纯文字', '服务承诺', '注意事项', '装饰横幅', '品牌底图']);
-  if (action === 'copy_template') {
-    if (/"needs_master_product"\s*:\s*false/i.test(String(templateAnalysis || ''))) return 'copy_template';
-    if (containsAny(pathText, ['sku', '尺寸', '参数', '规格'])) return 'generate_dimension_sheet';
-    if (containsAny(pathText, ['细节', '局部', '特写', '边角', '台面', '门板', '纹理', '五金', '厚度', '工艺'])) return 'generate_detail_showcase';
-    if (containsAny(pathText, ['材质', '板材', '色卡'])) return 'generate_material_sheet';
-    if (!isPureInfoPage) return 'generate_product_scene';
-  }
-  if (action === 'generate_dimension_sheet' && !normalizeProductProfile(productProfile).dimensions) return 'generate_dimension_sheet';
-  if (action === 'generate_material_sheet' && !normalizeProductProfile(productProfile).material) return 'generate_material_sheet';
-  return action;
-}
-
 async function replaceOutputFile(outputPath, writeNext) {
   await fsp.mkdir(path.dirname(outputPath), { recursive: true });
   const extension = path.extname(outputPath);
@@ -3637,89 +2932,16 @@ async function writeTemplateAudit(job, value) {
   await writeJsonFile(metadataPaths(job.outputRoot, job.relativePath).templateAudit, value);
 }
 
-async function auditGeneratedTemplate(masterImage, job, templateAnalysis) {
-  const api = await activeApiConfig('analysis');
-  const [firstPromptTemplate, recheckPromptTemplate] = await Promise.all([
-    getPromptValue('templateAudit'),
-    getPromptValue('templateAuditRecheck')
-  ]);
-  const common = {
-    templateAnalysis,
-    masterImageDataUrl: await imageAsDataUrl(masterImage),
-    templateImageDataUrl: await imageAsDataUrl(job.templatePath),
-    generatedImageDataUrl: await imageAsDataUrl(job.outputPath)
-  };
-  let first;
-  let rawText = '';
-  try {
-    const response = await analysisApiJson(api,
-      buildTemplateAuditPayload({
-        ...common,
-        model: resolveAnalysisModel(api),
-        fallbackModel: resolveAnalysisModel(api),
-        promptTemplate: firstPromptTemplate
-      }),
-      (api.requestTimeoutSeconds || 300) * 1000,
-      {
-        description: '生成结果 AI 质检',
-        reference: job.relativePath,
-        onceKey: billingOnceKey('llm:template-audit', job.outputRoot, job.relativePath)
-      });
-    rawText = String(response?.choices?.[0]?.message?.content || '').trim();
-    first = parseTemplateAuditResult(rawText);
-  } catch (error) {
-    first = { passed: true, reason: '审核接口不可用，保留生成结果。', retryInstruction: '', rawText: JSON.stringify({ passed: true, reason: `审核接口不可用，保留生成结果：${error.message}`, retry_instruction: '' }) };
-  }
-  let final = first;
-  if (isInvalidAuditRequestingProductReplacement(first)) {
-    final = { passed: true, reason: '审核误判：审核意见要求替换母版商品，已按母版唯一标准保留结果。', retryInstruction: '', rawText: JSON.stringify({ passed: true, reason: '审核误判：审核意见要求替换母版商品，已按母版唯一标准保留结果。', retry_instruction: '' }) };
-  } else if (!first.passed) {
-    try {
-      const response = await analysisApiJson(api,
-        buildTemplateAuditRecheckPayload({
-          ...common,
-          model: resolveAnalysisModel(api),
-          fallbackModel: resolveAnalysisModel(api),
-          firstAudit: first,
-          promptTemplate: recheckPromptTemplate
-        }),
-        (api.requestTimeoutSeconds || 300) * 1000,
-        {
-          description: '生成结果 AI 复核',
-          reference: job.relativePath,
-          onceKey: billingOnceKey('llm:template-audit-recheck', job.outputRoot, job.relativePath)
-        });
-      const content = String(response?.choices?.[0]?.message?.content || '').trim();
-      const recheck = parseTemplateAuditResult(content);
-      final = isInvalidAuditRequestingProductReplacement(recheck)
-        ? { passed: true, reason: '复核通过：审核意见要求替换母版商品，已按母版唯一标准保留结果。', retryInstruction: '', rawText: content }
-        : { ...recheck, rawText: content };
-    } catch {
-      final = first;
-    }
-  }
-  const output = final.rawText?.trim() || rawText || JSON.stringify({ passed: final.passed, reason: final.reason, retry_instruction: final.retryInstruction || '' });
-  const auditFile = metadataPaths(job.outputRoot, job.relativePath).templateAudit;
-  await fsp.mkdir(path.dirname(auditFile), { recursive: true });
-  await fsp.writeFile(auditFile, output, 'utf8');
-  return final;
-}
-
 async function generateTemplateJob(job, source, config, options = {}) {
-  const { analysis, cache } = await ensureTemplateAnalysisForJob(job);
-  let action = resolveGenerationAction(analysis);
-  if (source.generationMode === 'template_print') action = normalizeTemplateProcessingMode(action);
-  let profile = null;
-  if (source.generationMode !== 'template_print') {
-    profile = await loadProductProfileForJob({ outputRoot: job.outputRoot, templateFolderPath: source.templateFolderPath });
-    action = resolveActionWithProductProfile(action, analysis, profile, job);
-  }
+  if (source.generationMode !== 'template_print') throw new Error('只支持人工框选套图生成流程');
+  const { configuration, cache } = await loadManualTemplateConfigForJob(job);
+  const action = normalizeTemplateProcessingMode(resolveGenerationAction(configuration));
   const paths = metadataPaths(job.outputRoot, job.relativePath);
   await fsp.rm(paths.manualReview, { force: true }).catch(() => {});
   if (action === 'manual_check') {
-    await writeTemplateAudit(job, { passed: false, reason: '模板分析需要人工确认，未自动生成。', retry_instruction: '请人工确认可替换印花区域后再单独重生成此图。', action });
+    await writeTemplateAudit(job, { passed: false, reason: '尚未保存人工处理方式，未自动生成。', retry_instruction: '请人工框选需要换印花的柜体，或明确选择保留原图/不输出。', action });
     await fsp.mkdir(path.dirname(paths.manualReview), { recursive: true });
-    await fsp.writeFile(paths.manualReview, analysis, 'utf8');
+    await fsp.writeFile(paths.manualReview, configuration, 'utf8');
     throw new Error(`需要人工确认：${job.relativePath}`);
   }
   if (action === 'exclude') {
@@ -3737,79 +2959,30 @@ async function generateTemplateJob(job, source, config, options = {}) {
   }
   if (action === 'copy_template') {
     await replaceOutputFile(job.outputPath, nextPath => fsp.copyFile(job.templatePath, nextPath));
-    await writeTemplateAudit(job, { passed: true, reason: source.generationMode === 'template_print' ? '模板换印花直接复制：copy_template' : '已按模板配置直接复制：copy_template', retry_instruction: '', action });
+    await writeTemplateAudit(job, { passed: true, reason: '模板换印花直接复制：copy_template', retry_instruction: '', action });
     return { action, outputPath: job.outputPath };
   }
 
   const activePack = await activeModelPackage();
-  const useMasterReference = source.generationMode === 'template_print' ? packageUsesMasterReference(activePack) : true;
-  if (source.generationMode === 'template_print' && !useMasterReference) source = { ...source, masterImagePath: source.printPath };
-  let prompt;
-  let imagePaths;
-  if (source.generationMode === 'template_print') {
-    if (!source.printPath || !fs.existsSync(source.printPath)) throw new Error('原始印花图不存在');
-    if (!source.masterImagePath || !fs.existsSync(source.masterImagePath)) throw new Error('请先生成当前任务的母版图');
-    prompt = renderPromptTemplate(await getPromptValue('templatePrint'), {
-      templateAnalysis: analysis,
-      templatePath: job.relativePath
-    });
-    prompt += '\n\n本次输入图顺序：第一张是不可重构的当前套图模板图，第二张母版产品图仅用于参考印花在面板上的外观与落位，第三张原始印花图用于核对图案细节。不得迁移母版的柜体结构、尺寸、比例、视角或场景；不得替换或重新生成第一张图中的家具。最终结果只允许修改第一张图现有柜门或抽屉正面蒙版内的表面纹理，其余画布必须保持原图。';
-    prompt += '\n\n硬性质量要求：印花只能落在柜门或抽屉的正面可替换面板内部，必须完整保留家具黑色外框、黑色门缝/分隔线、黑色侧板、黑色台面、黑色底边、柜脚、把手、阴影和所有场景物品。不得让印花跨过或覆盖任何黑色边框黑边，不得把黑框染成印花，不得延伸到地面、墙面、台面、咖啡机、杯子、人物或其他道具。';
-    prompt += '\n\nPIXEL_LOCKED_SURFACE_EDIT: The first image is the immutable final canvas, not a scene to recreate. Do not transplant, replace, resize, reshape, move or regenerate the cabinet or any object. Keep the exact original cabinet silhouette, dimensions, perspective, drawer count, panel seams, crop and coordinates. The master image is only a reference for print appearance and placement; it is never a source of furniture geometry. Edit only the already-visible front-panel surface inside the transparent mask. Every pixel outside the transparent mask is out of scope and must remain identical to the first image. Never add canvas, padding, white space, or outpaint beyond the original frame.';
-    prompt += '\n\nCOMPLETE_VISIBLE_FACE_COVERAGE: Apply the print to every visible exterior drawer front and cabinet-door face in the first image, including narrow fronts of open drawers, partially cropped faces, panels split by slice boundaries, and every separate cabinet occurrence inside a multi-grid page. Cover each visible face from edge to edge while preserving seams, frames, handles, perspective and occlusion. Do not leave any original blank/white front panel unchanged merely because the cabinet is open, cropped, repeated, small, or divided across cards.';
-    if (isComplexTemplatePrintAnalysis(analysis, job)) {
-      prompt += `\n\n${flagshipComplexTemplatePrintPrompt()}`;
-    }
-    // Apply the registered row-band rule to every cabinet template. Closed
-    // drawers are the trivial case; opened drawers then cannot be treated as
-    // independent canvases or have their physical geometry regenerated.
-    prompt += `\n\n${openDrawerRegisteredPrintPrompt()}`;
-    if (isDetailSliceTemplate(job, analysis)) {
-      prompt += `\n\n${detailSliceLayoutProtectionPrompt()}`;
-    }
-    if (options.referenceResultPath && fs.existsSync(options.referenceResultPath)) {
-      prompt += '\n\n第四张输入图是运营选定的合格参考结果图。只参考它如何保留黑色边框、黑色侧板、台面、柜脚、门缝以及印花在柜门面板内的落位方式；不要复制它的构图、视角、家具尺寸、场景元素或具体像素。当前第一张套图模板仍然是最终构图标准。';
-    }
-    imagePaths = useMasterReference
-      ? [job.templatePath, source.masterImagePath, source.printPath]
-      : [job.templatePath, source.printPath];
-    if (options.referenceResultPath && fs.existsSync(options.referenceResultPath)) imagePaths.push(options.referenceResultPath);
-  } else {
-    const masterImage = (await fsp.readdir(job.outputRoot).catch(() => [])).map(name => path.join(job.outputRoot, name)).find(file => isImagePath(file) && path.basename(file, path.extname(file)) === '母版图');
-    if (!masterImage || !fs.existsSync(masterImage)) throw new Error('母版图不存在');
-    prompt = renderPromptTemplate(await getPromptValue('templateMigration'), {
-      templateAnalysis: analysis,
-      productProfile: toPromptText(profile),
-      action,
-      retryInstruction: options.extraInstruction
-        ? `上一次 AI 审核未通过，本次必须修正：${String(options.extraInstruction).trim()}`
-        : '',
-      templatePath: job.relativePath
-    });
-    prompt += '\n\n本次输入图顺序：第一张输入图是当前套图模板图，第二张输入图是已生成的母版产品图，第三张输入图是原始印花图。当前套图模板图是最终画幅、版式、文字、标签、场景、构图和透视标准；母版产品图是商品结构、柜门图案、颜色、材质和印花落位的唯一商品标准；原始印花图只用于核对图案细节、颜色和主体完整性。最终结果必须把母版产品迁移到当前模板图的版式/场景中，不得继承模板旧商品结构、旧图案、旧尺寸或旧 SKU。';
-    prompt += '\n\n硬性质量要求：保留当前模板图的中文标题、卖点标签、SKU 标签、尺寸标注、图标、页面编号、背景、道具、人物、光影和排版层级；商品本体必须来自母版产品图。印花只能落在柜门或抽屉的正面可替换面板内部，必须完整保留家具边框、门缝/抽屉缝、侧板、台面、底边、柜脚、把手、阴影和所有场景物品。不得让印花覆盖文字、标签、边框、把手、柜脚、地面、墙面、人物或道具。';
-    if (isComplexTemplatePrintAnalysis(analysis, job)) {
-      prompt += `\n\n${flagshipComplexTemplatePrintPrompt()}`;
-    }
-    prompt += `\n\n${openDrawerRegisteredPrintPrompt()}`;
-    if (isDetailSliceTemplate(job, analysis)) {
-      prompt += `\n\n${detailSliceLayoutProtectionPrompt()}`;
-    }
-    imagePaths = [job.templatePath, masterImage, source.printPath];
-  }
-  if (options.extraInstruction && source.generationMode === 'template_print') prompt += `\n\n本次运营补充要求：${String(options.extraInstruction).trim()}`;
-  if (options.includePreviousResult && fs.existsSync(job.outputPath)) imagePaths.push(job.outputPath);
-  // Do not feed AI-produced panel coordinates into image generation. The
-  // configured analysis model does not return them consistently, and an
-  // incorrect mask is worse than no mask: it moves artwork onto drawer
-  // interiors and rejects most of the set before Image2 is even called.
-  const maskPath = '';
-  if (maskPath) {
-    prompt += '\n\n锁定画布模式：本次请求附带透明编辑蒙版。只允许修改蒙版透明区域内已可见的柜门或抽屉外侧面板；蒙版不透明区域的像素、文字、尺寸线、边框、门缝、把手、柜脚、背景、道具及裁切边界必须与第一张模板图保持完全一致。不得补全被裁掉的柜体，不得重构页面或生成新的海报。';
-  }
+  if (!source.printPath || !fs.existsSync(source.printPath)) throw new Error('原始印花图不存在');
+  if (!source.masterImagePath || !fs.existsSync(source.masterImagePath)) throw new Error('请先生成当前任务的母版图');
+  let prompt = renderPromptTemplate(await getPromptValue('templatePrint'), {
+    templatePath: job.relativePath
+  });
+  let imagePaths = [job.templatePath, source.masterImagePath, source.printPath];
+  if (options.extraInstruction) prompt += `\n\n本次运营补充要求：${String(options.extraInstruction).trim()}`;
+  const summary = parseTemplateAnalysisSummary(configuration);
+  const regions = Array.isArray(summary.regions) ? summary.regions : [];
+  if (!regions.length) throw new Error(`未框选需要换印花的柜体区域：${job.relativePath}`);
+  const maskPath = await createTemplateEditMask(job, configuration);
+  if (!maskPath) throw new Error(`框选区域无法形成有效保护范围，请人工复核：${job.relativePath}`);
   const generationCanvas = await prepareTemplateGenerationCanvas(job, maskPath);
   imagePaths[0] = generationCanvas.templatePath;
-  prompt += '\n\nTRANSPORT_CANVAS_LOCK: The first image contains the original template centered inside a neutral transport margin. The transport margin is not part of the design and will be removed after generation. Preserve the complete centered template region at its exact scale and coordinates. Do not zoom, crop, enlarge, reflow or move any text, furniture, labels or page elements. Do not extend design content into the outer transport margin.';
+  const annotationPath = await createTemplateRegionAnnotation(job, configuration, generationCanvas);
+  imagePaths = imagePaths.slice(0, 3);
+  imagePaths.push(annotationPath);
+  const requestImageContract = 'The request contains exactly four images in this fixed order: locked template canvas, print master reference, original print artwork, and red-ROI annotation. Never swap, omit, duplicate or reinterpret their roles.';
+  prompt += `\n\nCURRENT_REQUEST_EXECUTION_CONTRACT\n${requestImageContract} Use image 1 as the locked output canvas. Use image 2 to understand the complete print placement on this cabinet and image 3 as the original artwork source. Image 4 only marks the approximate cabinet search area; the red box is not a paste rectangle and must not appear in the output. Apply the complete registered print only to visible cabinet or drawer exterior fronts inside that area. Preserve the original canvas, crop, layout, text, labels, background, people, props, foreground occluders, cabinet frame, seams, handles, legs, sides, drawer interiors and lighting. For opened drawers, keep one continuous facade registration and project each corresponding row onto its existing exterior front. For partial cabinet views, transfer only the matching master-image fragment. Never paste a flat rectangle, redraw the page, change cabinet geometry, zoom, crop, pad or outpaint. Output one finished image at the same composition and dimensions as image 1.`;
   const isRegeneration = Boolean(options.isRegeneration || options.extraInstruction);
   let bytes = await generateImage(prompt, imagePaths, {
     size: generationCanvas.size,
@@ -3821,16 +2994,14 @@ async function generateTemplateJob(job, source, config, options = {}) {
       ? billingOnceKey('image:template-job-regenerate', job.outputRoot, job.relativePath, Date.now(), crypto.randomUUID())
       : billingOnceKey('image:template-job', job.outputRoot, job.relativePath, Date.now(), crypto.randomUUID()),
     skipBilling: isRegeneration && packageIsFlagship(activePack),
-    maskPath: generationCanvas.maskPath,
     signal: options.signal,
     onRequestState: options.onRequestState
   });
   const billedMinor = Math.max(0, Number(bytes.billingAmountMinor) || 0);
   bytes = await restoreTemplateGenerationCanvas(bytes, generationCanvas);
-  bytes = await compositeTemplateEditResult(job, bytes, maskPath);
-  const strictLayoutCheck = isDetailSliceTemplate(job, analysis);
+  const strictLayoutCheck = isDetailSliceTemplate(job, configuration);
   if (strictLayoutCheck) {
-    const check = await validateTemplateOutputLayout(job, bytes, analysis);
+    const check = await validateTemplateOutputLayout(job, bytes, configuration);
     if (!check.passed) {
       await writeTemplateAudit(job, { passed: false, reason: `生成结果不满足固定版式约束：${check.reason}`, retry_instruction: '请重新生图；不要改版式和边界裁切。', action });
       throw new Error(check.reason);
@@ -3857,9 +3028,9 @@ async function runWithConcurrency(items, limit, worker) {
 
 async function generateTemplateSetForFolder(folder, onlyMissing = true, relativePaths = null, options = {}) {
   const source = await readSourceMetadata(folder);
+  if (source.generationMode !== 'template_print') throw new Error('只支持人工框选套图生成流程');
   if (!source.templateFolderPath || !fs.existsSync(source.templateFolderPath)) throw new Error('任务缺少套图文件夹');
   const config = await loadConfig();
-  if (source.generationMode !== 'template_print') await ensureTaskProductProfile(folder, source);
   let jobs = await buildTemplateJobs(source.templateFolderPath, folder);
   const selectedPaths = relativePaths?.length ? relativePaths : source.templateRelativePaths;
   if (selectedPaths?.length) {
@@ -3914,70 +3085,6 @@ async function generateTemplateSetForFolder(folder, onlyMissing = true, relative
     return { folder, generated: 0, failures: [], summary };
   }
   if (options.signal?.aborted) throw new Error('任务已取消');
-  const analysisJobs = [];
-  for (const job of jobs) {
-    const cacheState = await templateAnalysisForJob(job);
-    if (!cacheState.cached) analysisJobs.push(job);
-  }
-  if (analysisJobs.length) {
-    const analysisConcurrency = await activeApiConcurrencyLimit(jobs.length);
-    let analysisCompleted = 0;
-    let analysisFailed = 0;
-    await publishProgress({
-      phase: 'queued',
-      total: analysisJobs.length,
-      current: 0,
-      failed: 0,
-      percent: 0,
-      apiGenerated: 0,
-      copied: 0,
-      excluded: Math.max(0, Number(options.excludedCount) || 0),
-      skipped: 0,
-      waitingUpstream: 0,
-      billingCostMinor: 0,
-      pending: analysisJobs.length,
-      message: `AI 分析已排队 ${analysisJobs.length} 张，按最大并发 ${analysisConcurrency} 进行`
-    });
-    const analyzeWithProgress = (job) => analyzeTemplateJobWithRetry(job, 3, async progress => {
-      await publishProgress({
-        phase: 'analyzing',
-        total: jobs.length,
-        current: analysisCompleted,
-        failed: analysisFailed,
-        percent: Math.round(Math.min(100, analysisCompleted / Math.max(1, jobs.length) * 100)),
-        apiGenerated: 0,
-        copied: 0,
-        excluded: Math.max(0, Number(options.excludedCount) || 0),
-        skipped: 0,
-        waitingUpstream: 0,
-        billingCostMinor: 0,
-        pending: Math.max(0, analysisJobs.length - analysisCompleted),
-        message: progress.phase === 'retrying'
-          ? `AI 分析失败，正在重试：${job.relativePath}`
-          : `正在分析：${job.relativePath}`
-      });
-    }).then(async result => {
-      analysisCompleted += 1;
-      if (!result.ok) analysisFailed += 1;
-      await publishProgress({
-        phase: analysisCompleted === analysisJobs.length ? 'analyzing' : 'analyzing',
-        total: jobs.length,
-        current: analysisCompleted,
-        failed: analysisFailed,
-        percent: Math.round(Math.min(100, analysisCompleted / Math.max(1, jobs.length) * 100)),
-        apiGenerated: 0,
-        copied: 0,
-        excluded: Math.max(0, Number(options.excludedCount) || 0),
-        skipped: 0,
-        waitingUpstream: 0,
-        billingCostMinor: 0,
-        pending: Math.max(0, jobs.length - analysisCompleted),
-        message: result.ok ? `AI 分析完成 ${analysisCompleted}/${jobs.length}` : `AI 分析失败：${job.relativePath}`
-      });
-      return result;
-    });
-    await runWithConcurrency(analysisJobs, analysisConcurrency, analyzeWithProgress);
-  }
   const startLabel = options.initial ? '开始生成套图' : onlyMissing ? '开始补生成缺失套图' : '开始重新生成整套图';
   await addOperationLog(folder, `${startLabel}：${jobs.length} 张`);
   const live = { total: jobs.length, current: 0, apiGenerated: 0, copied: 0, excluded: Math.max(0, Number(options.excludedCount) || 0), skipped: 0, failed: 0, waitingUpstream: 0, billingCostMinor: 0 };
@@ -4058,31 +3165,14 @@ async function generateTemplateSetForFolder(folder, onlyMissing = true, relative
   });
   await imageEventWrite;
   const failures = results.map((result, index) => result.ok ? null : `${jobs[index].relativePath}: ${result.error?.message || result.error}`).filter(Boolean);
-  let rejected = 0;
-  if (!failures.length && source.generationMode !== 'template_print' && config.auditMode === 'quality') {
-    const masterImage = (await fsp.readdir(folder).catch(() => [])).map(name => path.join(folder, name)).find(file => isImagePath(file) && path.basename(file, path.extname(file)) === '母版图');
-    const auditJobs = [];
-    const productProfile = await loadProductProfileForJob({ outputRoot: folder, templateFolderPath: source.templateFolderPath });
-    for (const job of jobs) {
-      if (!fs.existsSync(job.outputPath)) continue;
-      const { analysis } = await templateAnalysisForJob(job);
-      const action = resolveActionWithProductProfile(resolveGenerationAction(analysis), analysis, productProfile, job);
-      if (!['copy_template', 'skip_copy', 'manual_check'].includes(action)) auditJobs.push({ job, analysis });
-    }
-    if (masterImage && auditJobs.length) {
-      await addOperationLog(folder, `开始 AI 质检：${auditJobs.length} 张`);
-      await publishProgress({ ...live, phase: 'auditing', percent: 100, message: `图片处理完成，正在 AI 质检 ${auditJobs.length} 张` });
-      const audits = await runWithConcurrency(auditJobs, await activeApiConcurrencyLimit(auditJobs.length), item => auditGeneratedTemplate(masterImage, item.job, item.analysis));
-      rejected = audits.filter(result => !result.ok || result.value?.passed === false).length;
-    }
-  }
+  const rejected = 0;
   if (failures.length) {
     await writeJsonFile(metadataPaths(folder).generationErrors, { updated_at: new Date().toISOString(), count: failures.length, failures });
     await addOperationLog(folder, `套图生成完成，但有 ${failures.length} 张失败：${failures.slice(0, 3).join('；')}`);
   } else {
     await fsp.rm(metadataPaths(folder).generationErrors, { force: true }).catch(() => {});
     const breakdown = `API 生成 ${live.apiGenerated} 张，直接复制 ${live.copied} 张，跳过 ${live.skipped} 张`;
-    await addOperationLog(folder, rejected > 0 ? `套图处理完成：${breakdown}，AI 不通过 ${rejected} 张` : `套图处理完成：${breakdown}，待人工确认`);
+    await addOperationLog(folder, `套图处理完成：${breakdown}，待人工确认`);
   }
   const summary = {
     total: live.total,
@@ -4110,14 +3200,10 @@ async function generateTemplateSetForFolder(folder, onlyMissing = true, relative
 async function regenerateSingleTemplate(payload, options = {}) {
   const folder = String(payload?.folder || '');
   const source = await readSourceMetadata(folder);
+  if (source.generationMode !== 'template_print') throw new Error('只支持人工框选套图生成流程');
   const job = await findReviewJob(folder, payload?.relativePath);
   const config = await loadConfig();
-  if (source.generationMode !== 'template_print') await ensureTaskProductProfile(folder, source);
-  const auditFile = metadataPaths(folder, job.relativePath).templateAudit;
-  const auditText = await fsp.readFile(auditFile, 'utf8').catch(() => '');
-  const audit = parseTemplateAuditResult(auditText);
-  const extraInstruction = String(payload?.extraInstruction || audit.retryInstruction || '').trim();
-  const referenceResultPath = await resolveReviewReferenceResultPath(folder, payload?.referenceResultRelativePath || '');
+  const extraInstruction = String(payload?.extraInstruction || '').trim();
   const progressFile = metadataPaths(folder).generationProgress;
   const activeProgress = await readJsonFile(progressFile, {});
   const activePhase = String(activeProgress?.phase || '');
@@ -4159,7 +3245,6 @@ async function regenerateSingleTemplate(payload, options = {}) {
     return next;
   };
   await addOperationLog(folder, `开始重新生成单张：${job.relativePath}${extraInstruction ? '（含修正要求）' : ''}`);
-  await addOperationLog(folder, `开始重新生成图片：${job.relativePath}${referenceResultPath ? `（参考结果图：${path.basename(referenceResultPath)}）` : ''}${extraInstruction ? '（含修正要求）' : ''}`);
   await publishSingleProgress({
     phase: 'generating',
     pending: 1,
@@ -4168,8 +3253,6 @@ async function regenerateSingleTemplate(payload, options = {}) {
   const generated = await generateTemplateJob(job, source, config, {
     extraInstruction,
     isRegeneration: true,
-    includePreviousResult: Boolean(payload?.includePreviousResult),
-    referenceResultPath,
     signal: options.signal,
     onRequestState: event => {
       void publishSingleProgress({
@@ -4182,18 +3265,6 @@ async function regenerateSingleTemplate(payload, options = {}) {
       }).catch(() => {});
     }
   });
-  if (source.generationMode !== 'template_print'
-      && config.auditMode === 'quality'
-      && generated.outputPath
-      && !['copy_template', 'skip_copy', 'manual_check'].includes(generated.action)) {
-    const masterImage = (await fsp.readdir(folder).catch(() => []))
-      .map(name => path.join(folder, name))
-      .find(file => isImagePath(file) && path.basename(file, path.extname(file)) === '母版图');
-    if (masterImage) {
-      const { analysis } = await templateAnalysisForJob(job);
-      await auditGeneratedTemplate(masterImage, job, analysis);
-    }
-  }
   const generationErrorsFile = metadataPaths(folder).generationErrors;
   const generationErrors = await readJsonFile(generationErrorsFile, {});
   const failurePrefix = `${job.relativePath}:`;
@@ -4223,28 +3294,7 @@ async function regenerateSingleTemplate(payload, options = {}) {
   return { folder, relativePath: job.relativePath, outputPath: job.outputPath };
 }
 
-async function regenerateMasterForReviewFolder(folderValue) {
-  const folder = String(folderValue || '');
-  const source = await readSourceMetadata(folder);
-  if (!source.productPath || !fs.existsSync(source.productPath) || !source.printPath || !fs.existsSync(source.printPath)) {
-    throw new Error('当前文件夹没有找到原始品类图和印花图记录。');
-  }
-  await addOperationLog(folder, '开始重新生成母版图');
-  const result = await generateMaster({
-    taskNumber: source.taskNumber,
-    productPath: source.productPath,
-    printPath: source.printPath,
-    templateFolderPath: source.templateFolderPath,
-    generationMode: 'master',
-    note: source.note || ''
-  });
-  await addOperationLog(folder, `重新生成母版图完成，新任务：${path.basename(result.folder)}`);
-  return result;
-}
-
 async function generateDirectTemplateTask(task, options = {}) {
-  const activePack = await activeModelPackage();
-  if (packageIsFlagship(activePack) && !packageUsesMasterReference(activePack)) task = { ...task, masterImagePath: task?.printPath };
   if (!task?.printPath || !fs.existsSync(task.printPath)) throw new Error('印花图不存在');
   if (!task?.templateFolderPath || !fs.existsSync(task.templateFolderPath)) throw new Error('套图文件夹不存在');
   if (!task?.masterImagePath || !fs.existsSync(task.masterImagePath)) throw new Error('请先生成当前任务的母版图');
@@ -4282,8 +3332,9 @@ async function generateTemplateTaskMaster(task = {}, options = {}) {
     await options.reportProgress({ phase: 'generating', current: 0, total: 1, percent: 10, message: '正在生成母版图…' });
   }
   const pack = await activeModelPackage();
-  const prompt = String(await getPromptValue('templateMasterGeneration') || '').trim();
-  const bytes = await generateImage(prompt || '根据第一张产品参考图和第二张印花图生成标准电商母版图。', [referencePath, task.printPath], {
+  let prompt = String(await getPromptValue('templateMasterGeneration') || '').trim();
+  prompt = `${prompt || '根据第一张产品参考图和第二张印花图生成标准电商母版图。'}\n\nCURRENT_MASTER_REQUEST_CONTRACT\nThe request contains exactly two images in this fixed order: image 1 is the cabinet product reference and image 2 is the original print artwork. Never swap their roles. Image 1 may contain a living room, bedroom, furniture, curtains, floor, wall, plants, lamps, speakers, props, people, text or labels. Preserve only the same complete cabinet structure from image 1, remove every environmental element, apply image 2 only to the cabinet's printable exterior fronts with physical perspective and continuous registration, and output a centered complete cabinet on a uniform pure white RGB(255,255,255) background with only a subtle natural grounding shadow. Never preserve, recreate or extend the source scene. This contract overrides any conflicting optional instruction.`;
+  const bytes = await generateImage(prompt, [referencePath, task.printPath], {
     size: config.imageSize || '1024x1024',
     quality: config.imageQuality || 'high',
     billingDescription: '套图母版生成',
@@ -4310,43 +3361,11 @@ async function generateTemplateTaskMaster(task = {}, options = {}) {
 }
 
 async function generateTask(task, options = {}) {
-  if (task?.generationMode !== 'template_print') return generateMaster(task, options);
+  if (task?.generationMode !== 'template_print') throw new Error('只支持人工框选套图生成流程');
   if (typeof options.reportProgress === 'function') {
     await options.reportProgress({ phase: 'queued', current: 0, total: 0, percent: 0, message: '已进入套图处理队列' });
   }
   return generateDirectTemplateTask(task, options);
-}
-
-async function generateMaster(task, options = {}) {
-  if (!task?.productPath || !fs.existsSync(task.productPath)) throw new Error('品类款式图不存在');
-  if (!task?.printPath || !fs.existsSync(task.printPath)) throw new Error('印花图不存在');
-  if (!task?.templateFolderPath || !fs.existsSync(task.templateFolderPath)) throw new Error('套图文件夹不存在');
-  const config = await loadConfig();
-  if (typeof options.reportProgress === 'function') {
-    await options.reportProgress({ phase: 'generating', current: 0, total: 1, percent: 10, apiGenerated: 0, copied: 0, skipped: 0, failed: 0, message: '正在生成母版图…' });
-  }
-  const folder = await nextTaskFolder(config);
-  await fsp.mkdir(folder, { recursive: true });
-  await writeTaskSource(folder, task, 'master');
-  ensureTemplateProductProfile(task.templateFolderPath, task.productPath).catch(() => {});
-  const prompt = applyMasterPromptTemplate(await getPromptValue('masterGeneration'), task, config.categoriesPath);
-  const bytes = await generateImage(prompt, [task.productPath, task.printPath], {
-    size: config.imageSize || '1024x1024',
-    quality: config.imageQuality || 'high',
-    billingDescription: '母版图生成',
-    billingReference: task.id || path.basename(task.productPath),
-    billingOnceKey: billingOnceKey('image:master', folder),
-    signal: options.signal,
-    onRequestState: options.onRequestState
-  });
-  const outputPath = path.join(folder, '母版图.png');
-  await fsp.writeFile(outputPath, bytes);
-  await addOperationLog(folder, `生成母版图完成：${path.basename(outputPath)}`);
-  const summary = { total: 1, current: 1, percent: 100, apiGenerated: 1, copied: 0, skipped: 0, failed: 0, pending: 0 };
-  if (typeof options.reportProgress === 'function') {
-    await options.reportProgress({ ...summary, folder, phase: 'completed', message: '母版图生成完成' });
-  }
-  return { folder, outputPath, url: imageUrl(outputPath), summary };
 }
 
 async function reviewFolders() {
@@ -4374,7 +3393,7 @@ async function reviewFolders() {
         const legacyImage = legacyReviewImages.get(job.relativePath.replaceAll('\\', '/').toLocaleLowerCase('zh-CN'));
         if (!Object.keys(manualReview || {}).length && legacyImage?.manualStatus) manualReview = { status: legacyImage.manualStatus, updatedAt: legacyImage.reviewedAt };
         if (!Object.keys(audit || {}).length && legacyImage?.auditStatus) audit = { status: legacyImage.auditStatus };
-        const { summary } = await templateAnalysisForJob(job);
+        const { summary } = await templateConfigurationForJob(job);
         const record = {
           relativePath: job.relativePath,
           templateImagePath: job.templatePath,
@@ -4859,16 +3878,6 @@ async function findReviewJob(folder, relativePath) {
   return job;
 }
 
-async function resolveReviewReferenceResultPath(folder, relativePath) {
-  const value = String(relativePath || '').trim();
-  if (!value) return '';
-  const referenceJob = await findReviewJob(folder, value);
-  if (!referenceJob.outputPath || !fs.existsSync(referenceJob.outputPath)) {
-    throw new Error(`参考结果图尚未生成：${referenceJob.relativePath}`);
-  }
-  return referenceJob.outputPath;
-}
-
 async function setTemplateManualStatus(payload) {
   const folder = String(payload?.folder || '');
   if (!folder || !fs.existsSync(folder)) throw new Error('任务文件夹不存在');
@@ -4899,7 +3908,7 @@ async function approveReviewFolder(folder, allowSkip = false) {
     .filter(job => !selectedPaths.size || selectedPaths.has(job.relativePath.replaceAll('\\', '/').toLocaleLowerCase('zh-CN')));
   const actionableJobs = [];
   for (const job of jobs) {
-    const { summary } = await templateAnalysisForJob(job);
+    const { summary } = await templateConfigurationForJob(job);
     if (summary.action !== 'skip_copy') actionableJobs.push(job);
   }
   const missing = actionableJobs.filter(job => !fs.existsSync(job.outputPath));
@@ -5012,15 +4021,10 @@ async function initializeRuntime() {
 
 const runtimeExports = {
   DATA_ROOT,
-  analyzeProductProfile,
-  analyzeTemplateItemWithReference,
-  analyzeTemplateItems,
-  analyzeTemplateFolder,
   apiSettingsStatus,
   approveReviewFolder,
   batchApproveReviewFolders,
   billing,
-  compositeTemplateEditResult,
   createTemplateEditMask,
   deleteTemplateFolder,
   detectTemplateLightCabinetPanels,
@@ -5056,14 +4060,12 @@ const runtimeExports = {
   loadApiSettings,
   loadConfig,
   loadPromptSettings,
-  loadTemplateProductProfile,
   loadTitleLibrary,
   planTemplateOutputJobs,
   publicTitleLibrary,
   runWithWorkspace,
   prepareTemplateFolder,
   prepareTemplateStructure,
-  regenerateMasterForReviewFolder,
   regenerateSingleTemplate,
   resetConfig,
   resetPromptSetting,
@@ -5078,8 +4080,7 @@ const runtimeExports = {
   saveTaobaoPublishSettings,
   saveTitleForTask,
   canAdminViewPromptSettings,
-  saveTemplateConfiguration,
-  saveTemplateProductProfile,
+  saveTemplateRegions,
   saveTitleSetup,
   scanImages,
   setTemplateManualStatus,

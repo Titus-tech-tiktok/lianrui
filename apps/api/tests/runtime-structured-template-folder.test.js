@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const sharp = require('sharp');
 
-test('structured template folders expose main, 3-4 main, and sliced full detail page jobs', async (t) => {
+test('structured template folders preserve designer-prepared main, ratio and detail images', async (t) => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'caishen-structured-template-'));
 
   process.env.CAISHEN_DATA_DIR = path.join(temp, 'data');
@@ -41,13 +41,10 @@ test('structured template folders expose main, 3-4 main, and sliced full detail 
   assert.deepEqual(relativePaths, [
     '主图/1.jpg',
     '3-4主图/1.jpg',
-    '详情页/01.jpg',
-    '详情页/02.jpg',
-    '详情页/03.jpg'
+    '详情页/detail-full.jpg'
   ]);
-  assert.equal(items.some(item => item.relativePath === '详情页/detail-full.jpg'), false);
-  const detailItem = items.find(item => item.relativePath === '详情页/01.jpg');
-  assert.equal(detailItem.name, '01.jpg');
+  const detailItem = items.find(item => item.relativePath === '详情页/detail-full.jpg');
+  assert.equal(detailItem.name, 'detail-full.jpg');
   assert.equal(detailItem.folder, '详情页');
-  assert.match(detailItem.templatePath, /[\\\/]\.caishen-meta[\\\/]detail-full-slices[\\\/]/);
+  assert.equal(detailItem.templatePath, path.join(folder, '详情页', 'detail-full.jpg'));
 });

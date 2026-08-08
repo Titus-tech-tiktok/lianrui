@@ -23,7 +23,11 @@ test('本地工作区配置可以保存并重新读取', async () => {
   await fs.writeFile(externalImage, Buffer.from('preview'));
   assert.equal(runtime.fileFromToken(runtime.fileToken(externalImage)), externalImage);
   const defaults = await runtime.loadPromptSettings();
-  assert.equal(defaults.prompts.length, 9);
+  assert.deepEqual(defaults.prompts.map(item => item.id), [
+    'templatePrint',
+    'templateMasterGeneration',
+    'freeImageDefault'
+  ]);
   await runtime.savePromptSetting('freeImageDefault', '保持商品结构不变');
   let prompts = await runtime.loadPromptSettings();
   assert.equal(prompts.prompts.find(item => item.id === 'freeImageDefault').value, '保持商品结构不变');

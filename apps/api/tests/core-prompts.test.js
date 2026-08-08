@@ -2,124 +2,52 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-  GLOBAL_NEGATIVE_PROMPT,
-  MASTER_PROMPT_TEMPLATE,
-  TEMPLATE_ANALYSIS_PROMPT,
-  TEMPLATE_MIGRATION_PROMPT,
-  TEMPLATE_PRINT_PROMPT,
-  applyMasterPromptTemplate
+  TEMPLATE_MASTER_PROMPT,
+  TEMPLATE_PRINT_PROMPT
 } = require('../src/core/prompts');
 
-test('全局负向词和母版提示词保持 Windows V8 的边界文本', () => {
-  assert.equal(GLOBAL_NEGATIVE_PROMPT, `全局负向约束：
-不得改变家具主体结构、品类、比例、柜门、抽屉、层板、柜脚、把手、边框、五金件和可见尺寸关系。
-不得改变印花内容、颜色、明暗、饱和度、元素、文字、布局和相对位置。
-不得只截取印花局部，不得把印花变成浮雕、3D凸起、悬浮物、雕刻件、挂件或真实装饰件。
-不得让光影改变家具本体颜色和印花颜色。
-不得出现货不对板、结构错乱、门数错误、柜脚缺失、边框变形、印花错位、白边、黑边、脏边、残影、断裂、局部缺失。`);
-  assert.equal(MASTER_PROMPT_TEMPLATE.startsWith('你是母版图生成前的提示词反推模型。'), true);
-  assert.equal(MASTER_PROMPT_TEMPLATE.endsWith(GLOBAL_NEGATIVE_PROMPT), true);
-  assert.equal(MASTER_PROMPT_TEMPLATE.includes('\n\n全局负向约束：'), true);
+test('template print prompt uses the current four-image red-ROI contract', () => {
+  const prompt = TEMPLATE_PRINT_PROMPT({ RelativeTemplatePath: 'set\\main-1.jpg' });
+
+  assert.match(prompt, /FOUR_IMAGE_RED_ROI_TEMPLATE_EDIT/);
+  assert.match(prompt, /set\\main-1\.jpg/);
+  assert.match(prompt, /\u7b2c\u4e00\u5f20\u56fe/);
+  assert.match(prompt, /\u7b2c\u4e8c\u5f20\u56fe/);
+  assert.match(prompt, /\u7b2c\u4e09\u5f20\u56fe/);
+  assert.match(prompt, /\u7b2c\u56db\u5f20\u56fe/);
+  assert.doesNotMatch(prompt, /\u900f\u660e\u8499\u7248/);
+  assert.match(prompt, /\u7981\u6b62\u628a\u7b2c\u4e09\u5f20\u56fe\u4f5c\u4e3a\u5e73\u9762\u77e9\u5f62\u76f4\u63a5\u8986\u76d6/);
+  assert.match(prompt, /\u4e0d\u5f97\u7f29\u653e\u3001\u88c1\u526a\u3001\u8865\u5e27\u3001\u6269\u56fe/);
+  assert.match(prompt, /MASTER_COORDINATE_REGISTRATION/);
+  assert.match(prompt, /bottom or edge close-up must use the corresponding bottom or edge portion/i);
+  assert.match(prompt, /\u4efb\u4e00\u573a\u666f\u90fd\u7981\u6b62\u51fa\u73b0\u77e9\u5f62\u8d34\u56fe\u8fb9\u7f18/);
 });
 
-test('母版模板按 Windows 顺序替换任务占位符', () => {
-  const template = [
-    '{产品文件名}',
-    '{印花文件名}',
-    '{品类}',
-    '{子品类}',
-    '{印花编号}',
-    '{产品文件名}'
-  ].join('|');
-  const result = applyMasterPromptTemplate(template, {
-    productPath: '/素材/餐边柜/款式01.png',
-    printPath: '/印花/print-002-final.jpg'
-  }, '/素材');
+test('template print prompt contains no removed AI-analysis semantics', () => {
+  const prompt = TEMPLATE_PRINT_PROMPT({ relativeTemplatePath: 'main.jpg' });
 
-  assert.equal(result, '款式01|print-002-final|餐边柜|款式01.png|002|款式01');
+  assert.doesNotMatch(prompt, /templateAnalysis|\u6a21\u677f\u5206\u6790 JSON|print_mapping|replace_area|forbidden_area|AI \u8d28\u68c0/);
+  assert.match(prompt, /\u6bcd\u7248\u53ea\u51b3\u5b9a\u5370\u82b1\u843d\u4f4d\u89c2\u611f|\u53ea\u53c2\u8003\u5370\u82b1\u5728\u540c\u6b3e\u67dc\u4f53\u4e0a\u7684\u65b9\u5411/);
+  assert.match(prompt, /\u4e25\u7981\u590d\u5236\u5b83\u7684\u67dc\u4f53\u51e0\u4f55/);
 });
 
-test('母版模板兼容 Windows 路径和 PascalCase 任务字段', () => {
-  const result = applyMasterPromptTemplate('{品类}|{子品类}|{印花编号}', {
-    ProductPath: 'C:\\素材\\玄关柜\\竖款.png',
-    PrintPath: 'C:\\印花\\花鸟图.jpg'
-  }, 'c:\\素材');
-
-  assert.equal(result, '玄关柜|竖款.png|花鸟图');
+test('template print prompt handles opened drawers, occluders, lighting and independent grid instances', () => {
+  const prompt = TEMPLATE_PRINT_PROMPT({ relativeTemplatePath: '详情/多宫格.jpg' });
+  assert.match(prompt, /每个红框、每个格子中的柜体都是同款产品的独立实例/);
+  assert.match(prompt, /窗光、灯光或高光/);
+  assert.match(prompt, /竖向白带、半扇空白、局部未印/);
+  assert.match(prompt, /手和手臂是受保护前景/);
+  assert.match(prompt, /衣物堆、收纳物、桌面商品、纸箱、镜子、托盘/);
+  assert.match(prompt, /背景 < 柜体印花 < 前景遮挡物 < 原文字标签/);
+  assert.match(prompt, /白边、彩边、破洞、锯齿、涂抹、重影/);
 });
 
-test('未配置品类根目录时从产品父目录和文件名推导', () => {
-  const result = applyMasterPromptTemplate('{品类}|{子品类}', {
-    productPath: '/用户/桌面/斗柜/奶油风.webp',
-    printPath: '/印花/11.png'
-  });
-
-  assert.equal(result, '斗柜|奶油风');
-});
-
-test('模板分析提示词使用生产导向 V11 契约并限制人工确认兜底', () => {
-  assert.equal(TEMPLATE_ANALYSIS_PROMPT.startsWith('请把这张电商套图模板图分析成可复用的“模板换印花说明书”。'), true);
-  assert.equal(TEMPLATE_ANALYSIS_PROMPT.includes('"version": 11'), true);
-  assert.equal(TEMPLATE_ANALYSIS_PROMPT.includes('"processingMode": "replace_print/copy_original/manual_check"'), true);
-  assert.equal(TEMPLATE_ANALYSIS_PROMPT.includes('"printableSurfaces"'), true);
-  assert.equal(TEMPLATE_ANALYSIS_PROMPT.includes('AI 不允许选择 exclude'), true);
-  assert.equal(TEMPLATE_ANALYSIS_PROMPT.includes('V11 结构中的字段应尽量完整输出'), true);
-  assert.equal(TEMPLATE_ANALYSIS_PROMPT.includes('必须输出 printableSurfaces'), true);
-  assert.equal(TEMPLATE_ANALYSIS_PROMPT.includes('不要因为图片是多宫格、尺寸图、场景图或有人物遮挡就直接人工确认'), true);
-  assert.equal(TEMPLATE_ANALYSIS_PROMPT.includes('只要小图需要展示换印花后的母版商品，就判定为 replace_print'), true);
-  assert.equal(TEMPLATE_ANALYSIS_PROMPT.includes('只要画面主体需要替换为母版商品，就判定为 replace_print'), true);
-  assert.equal(TEMPLATE_ANALYSIS_PROMPT.includes('如果仍需要展示母版商品的外观效果，判定为 replace_print'), true);
-  assert.equal(TEMPLATE_ANALYSIS_PROMPT.includes('只要画面同时出现可见白色/浅色柜门正面或门板外表面，就必须 replace_print'), true);
-  assert.equal(TEMPLATE_ANALYSIS_PROMPT.includes('如果图片看起来是完整详情页被上下切开的局部切片'), true);
-  assert.equal(TEMPLATE_ANALYSIS_PROMPT.includes('被边缘裁掉的半个抽屉、半扇柜门或局部柜体也必须继续视为需要母版商品迁移'), true);
-  assert.equal(TEMPLATE_ANALYSIS_PROMPT.includes('confidence 只表示判断把握，不作为自动降级人工确认的硬门槛'), true);
-  assert.equal(TEMPLATE_ANALYSIS_PROMPT.endsWith('只有图像损坏、主体完全不可判断时，才使用 manual_check。'), true);
-});
-
-test('套图换印花提示词替换相对路径占位符且 hasMask 不改变 Windows 文本', () => {
-  const job = {
-    RelativeTemplatePath: '套图\\主图1.jpg',
-    TemplateImagePath: 'C:\\模板\\套图\\主图1.jpg'
-  };
-  const analysis = '{"relative":"{模板相对路径}","file":"{模板文件名}","folder":"{模板文件夹}"}';
-  const withoutMask = TEMPLATE_PRINT_PROMPT(job, analysis, false);
-  const withMask = TEMPLATE_PRINT_PROMPT(job, analysis, true);
-
-  assert.equal(withMask, withoutMask);
-  assert.equal(withoutMask.includes('{模板相对路径}'), false);
-  assert.equal(withoutMask.includes('{模板文件名}'), false);
-  assert.equal(withoutMask.includes('{模板文件夹}'), false);
-  assert.equal(withoutMask.includes('{"relative":"套图\\主图1.jpg","file":"主图1.jpg","folder":"套图"}'), true);
-  assert.equal(withoutMask.includes('当前模板相对路径：套图\\主图1.jpg'), true);
-  assert.equal(withoutMask.startsWith('你将根据输入图生成一张电商套图成品图。'), true);
-  assert.equal(withoutMask.endsWith('直接输出最终成品图，不要输出解释文字。'), true);
-});
-
-test('母版迁移提示词按 ProductProfile 规则生成资料并加入审核重试要求', () => {
-  const prompt = TEMPLATE_MIGRATION_PROMPT({
-    relativeTemplatePath: '餐边柜/主图2.png',
-    templateImagePath: '/模板/餐边柜/主图2.png'
-  }, '{"source":"{模板文件名}"}', {
-    dimensions: '120×40×90cm',
-    material: '实木多层板',
-    sellingPoints: ['不应进入提示词']
-  }, 'generate_product_scene', '保留{模板文件夹}里的文字区');
-
-  assert.equal(prompt.startsWith('你将根据一张“母版商品图”生成当前套图图片。'), true);
-  assert.equal(prompt.includes('当前商品资料：\n尺寸：120×40×90cm\n材质：实木多层板'), true);
-  assert.equal(prompt.includes('模板图文字分析 JSON：\n{"source":"主图2.png"}'), true);
-  assert.equal(prompt.includes('当前生成动作：generate_product_scene'), true);
-  assert.equal(prompt.includes('上一次 AI 审核未通过，本次必须修正：保留餐边柜里的文字区'), true);
-  assert.equal(prompt.includes('不应进入提示词'), false);
-  assert.equal(prompt.endsWith('直接输出最终成品图，不要输出解释文字。'), true);
-});
-
-test('空白重试要求与 Windows 一样不产生审核修正文案', () => {
-  const prompt = TEMPLATE_MIGRATION_PROMPT({
-    RelativeTemplatePath: '主图1.jpg',
-    TemplateImagePath: 'C:\\模板\\主图1.jpg'
-  }, '{}', {}, 'copy_template', '  \n ');
-
-  assert.equal(prompt.includes('上一次 AI 审核未通过'), false);
-  assert.equal(prompt.includes('未提供商品资料。尺寸和材质不得编造；缺资料的信息页应保守处理或复制模板。'), true);
+test('master prompt extracts the cabinet onto pure white and prevents flat overlays', () => {
+  assert.match(TEMPLATE_MASTER_PROMPT, /TWO_IMAGE_WHITE_BACKGROUND_MASTER/);
+  assert.match(TEMPLATE_MASTER_PROMPT, /\u7b2c\u4e00\u5f20\u56fe\u662f\u67dc\u4f53\u53c2\u8003\u56fe/);
+  assert.match(TEMPLATE_MASTER_PROMPT, /\u7981\u6b62\u628a\u5370\u82b1\u4f5c\u4e3a\u77e9\u5f62\u56fe\u7247\u76f4\u63a5\u8986\u76d6/);
+  assert.match(TEMPLATE_MASTER_PROMPT, /RGB\(255,255,255\)/);
+  assert.match(TEMPLATE_MASTER_PROMPT, /\u5220\u9664\u7b2c\u4e00\u5f20\u56fe\u4e2d\u7684\u6c99\u53d1\u3001\u7a97\u5e18\u3001\u5899\u9762\u3001\u5730\u677f/);
+  assert.match(TEMPLATE_MASTER_PROMPT, /\u7981\u6b62\u4fdd\u7559\u6216\u4eff\u9020\u7b2c\u4e00\u5f20\u56fe\u7684\u5ba2\u5385\u3001\u5367\u5ba4/);
+  assert.doesNotMatch(TEMPLATE_MASTER_PROMPT, /\u767d\u5e95\u6216\u539f\u6d45\u8272\u5e95/);
 });

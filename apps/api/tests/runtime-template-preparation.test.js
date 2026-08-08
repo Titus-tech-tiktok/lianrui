@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const sharp = require('sharp');
 
-test('套图自动识别结果会复用缓存，仅新增或变化图片需要再次识别', async () => {
+test('套图人工框选配置会持久化，源图变化后默认安全复制原图', async () => {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'caishen-template-preparation-'));
   process.env.CAISHEN_DATA_DIR = path.join(temp, 'data');
   process.env.CAISHEN_WORKSPACE_ID = 'template-preparation';
@@ -20,7 +20,7 @@ test('套图自动识别结果会复用缓存，仅新增或变化图片需要�
     fs.writeFile(path.join(folder, '02-说明页.png'), image)
   ]);
 
-  await runtime.saveTemplateConfiguration({
+  await runtime.saveTemplateRegions({
     folder,
     items: [
       { relativePath: '01-主图.png', action: 'replace_print', reason: '家具面板需要换印花', regions: [{ x: 0, y: 0, width: 1, height: 1 }] },
@@ -43,9 +43,11 @@ test('套图自动识别结果会复用缓存，仅新增或变化图片需要�
 
   await fs.writeFile(path.join(folder, '01-主图.png'), Buffer.concat([image, Buffer.from('\nchanged')]));
   const changed = await runtime.getTemplatePreparation(folder);
-  assert.equal(changed.pending, 1);
-  assert.equal(changed.cached, 1);
-  assert.equal(changed.generationReady, false);
+  assert.equal(changed.pending, 0);
+  assert.equal(changed.cached, 2);
+  assert.equal(changed.generationReady, true);
+  assert.equal(changed.counts.replacePrint, 0);
+  assert.equal(changed.counts.copyOriginal, 2);
 
   const copyFolder = path.join(runtime.WORKSPACE_ROOT, 'assets', 'templates', '直接复制套图');
   const printPath = path.join(runtime.WORKSPACE_ROOT, 'assets', 'prints', '印花.png');
@@ -54,7 +56,7 @@ test('套图自动识别结果会复用缓存，仅新增或变化图片需要�
   await fs.writeFile(path.join(copyFolder, '无需换印花.png'), image);
   await fs.writeFile(path.join(copyFolder, '未选择.png'), image);
   await fs.writeFile(printPath, image);
-  await runtime.saveTemplateConfiguration({
+  await runtime.saveTemplateRegions({
     folder: copyFolder,
     items: [
       { relativePath: '无需换印花.png', action: 'copy_original', reason: '无需调用 API' },

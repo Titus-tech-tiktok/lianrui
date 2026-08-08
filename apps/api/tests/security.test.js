@@ -53,7 +53,7 @@ test('role access separates prompt management from API management', () => {
   }
   assert.equal(canAccessRpc(member, 'getConfig'), true);
   assert.equal(canAccessRpc(member, 'generateTitles'), true);
-  for (const method of ['analyzeTemplateItems', 'analyzeTemplateItemWithReference', 'generateTask', 'regenerateTemplate']) {
+  for (const method of ['generateTask', 'regenerateTemplate']) {
     assert.equal(canAccessRpc(member, method), true);
     assert.equal(canAccessRpc(admin, method), true);
     assert.equal(canAccessRpc(superadmin, method), true);

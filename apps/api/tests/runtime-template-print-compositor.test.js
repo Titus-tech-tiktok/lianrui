@@ -8,10 +8,10 @@ const sharp = require('sharp');
 
 async function writeTemplate(file, accent) {
   await fs.mkdir(path.dirname(file), { recursive: true });
-  await sharp({ create: { width: 80, height: 60, channels: 4, background: '#d2d2d2' } })
+  await sharp({ create: { width: 240, height: 180, channels: 4, background: '#b9aa98' } })
     .composite([
-      { input: Buffer.from('<svg width="64" height="42"><rect width="64" height="42" fill="#f7f7f7"/></svg>'), left: 8, top: 9 },
-      { input: Buffer.from(`<svg width="4" height="42"><rect width="4" height="42" fill="${accent}"/></svg>`), left: 38, top: 9 }
+      { input: Buffer.from('<svg width="180" height="144"><rect width="180" height="144" rx="8" fill="#151515"/><rect x="8" y="8" width="164" height="60" fill="#e8e8e8"/><rect x="8" y="76" width="164" height="60" fill="#ededed"/></svg>'), left: 30, top: 18 },
+      { input: Buffer.from(`<svg width="8" height="144"><rect width="8" height="144" fill="${accent}"/></svg>`), left: 116, top: 18 }
     ])
     .png()
     .toFile(file);
@@ -74,29 +74,16 @@ test('template-print planner expands copies and sends replace_print through imag
       reason: 'white front panels are printable',
       replaceArea: 'front white panels',
       forbiddenArea: 'background, frame, seam and handle',
-      regions: [{ x: 0.1, y: 0.15, width: 0.8, height: 0.7 }]
+      regions: [{ x: 0.12, y: 0.08, width: 0.76, height: 0.84 }]
     },
     { relativePath: '02-logistics.png', action: 'copy_original', reason: 'required logistics page' },
-    { relativePath: '03-side.png', action: 'manual_check', reason: 'operator must decide' },
+    { relativePath: '03-side.png', action: 'copy_original', reason: 'required side page' },
     { relativePath: '04-internal-note.png', action: 'exclude', reason: 'operator explicitly excluded it' }
   ];
-  await runtime.saveTemplateConfiguration({ folder: templateRoot, items: configuration });
+  await runtime.saveTemplateRegions({ folder: templateRoot, items: configuration });
   const outputRoot = path.join(temp, 'outputs');
   await fs.mkdir(outputRoot, { recursive: true });
   await runtime.saveConfig({ outputPath: outputRoot });
-
-  await assert.rejects(
-    runtime.generateTask({
-      taskNumber: 1,
-      generationMode: 'template_print',
-      printPath,
-      masterImagePath: path.join(templateRoot, '01-main.png'),
-      templateFolderPath: templateRoot,
-      templateRelativePaths: ['03-side.png']
-    }),
-    /03-side\.png/
-  );
-  assert.deepEqual(await fs.readdir(outputRoot), [], 'selected manual work must block before a task folder is created');
 
   const partial = await runtime.generateTask({
     taskNumber: 1,
@@ -107,16 +94,12 @@ test('template-print planner expands copies and sends replace_print through imag
     templateRelativePaths: ['01-main.png']
   });
   assert.equal(partial.summary.apiGenerated, 1);
-  assert.equal(partial.summary.copied, 1);
+  assert.equal(partial.summary.copied, 2);
   assert.equal(partial.summary.excluded, 1);
   assert.equal(requests, 1);
   assert.deepEqual(await fs.readFile(path.join(partial.folder, '02-logistics.png')), await fs.readFile(copyPath));
-  await assert.rejects(fs.access(path.join(partial.folder, '03-side.png')));
+  assert.deepEqual(await fs.readFile(path.join(partial.folder, '03-side.png')), await fs.readFile(unresolvedPath));
 
-  await runtime.saveTemplateConfiguration({
-    folder: templateRoot,
-    items: [{ relativePath: '03-side.png', action: 'copy_original', reason: 'keep this required side page unchanged' }]
-  });
   const plan = await runtime.planTemplateOutputJobs(templateRoot, ['01-main.png']);
   assert.deepEqual(plan.relativePaths, ['01-main.png', '02-logistics.png', '03-side.png']);
   assert.deepEqual(plan.excludedRelativePaths, ['04-internal-note.png']);
@@ -137,7 +120,7 @@ test('template-print planner expands copies and sends replace_print through imag
   assert.deepEqual(await fs.readFile(path.join(generated.folder, '03-side.png')), await fs.readFile(unresolvedPath));
   await assert.rejects(fs.access(path.join(generated.folder, '04-internal-note.png')));
   const outputMetadata = await sharp(path.join(generated.folder, '01-main.png')).metadata();
-  assert.deepEqual([outputMetadata.width, outputMetadata.height], [80, 60]);
+  assert.deepEqual([outputMetadata.width, outputMetadata.height], [240, 180]);
   const source = JSON.parse(await fs.readFile(path.join(generated.folder, '.caishen-source.json'), 'utf8'));
   assert.deepEqual(source.templateRelativePaths, ['01-main.png', '02-logistics.png', '03-side.png']);
 });

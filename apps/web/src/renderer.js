@@ -138,7 +138,6 @@ const state = {
   printSort: 'name-asc',
   templateFilter: 'all',
   templatePreparation: null,
-  templatePreparing: false,
   reviews: [],
   activeReview: null,
   reviewTaskActivated: false,
@@ -188,8 +187,6 @@ const state = {
   assetTemplateFilter: 'all',
   selectedAssetPaths: new Set(),
   assetUploading: false,
-  assetAnalysisProgress: new Map(),
-  assetAnalysisRunning: 0,
   activeTemplatePath: ''
 };
 
@@ -1647,8 +1644,6 @@ async function deleteTemplateFolder(folderPath) {
   const runningTasks = state.queue.filter(task => task.templateFolderPath === folderPath && task.status === '生成中').length;
   if (runningTasks) return toast('该套图正在生成任务，完成后才能删除', true);
   const pendingTasks = state.queue.filter(task => task.templateFolderPath === folderPath).length;
-  const analyzing = [...state.assetAnalysisProgress.keys()].some(file => file === folderPath || file.startsWith(`${folderPath}/`));
-  if (analyzing) return toast('该套图正在进行 AI 分析，完成后才能删除', true);
   const taskNotice = pendingTasks ? `\n同时会移除使用该套图的 ${pendingTasks} 个待生成任务。` : '';
   if (!window.confirm(`确定删除套图文件夹“${folder.name}”及其中 ${folder.count} 张图片吗？${taskNotice}\n此操作不可撤销。`)) return;
   try {
@@ -1709,11 +1704,11 @@ function renderTemplateWorkflow() {
     templatePreview.dataset.previewSignature = previewSignature;
     templatePreview.innerHTML = replaceItems.length
       ? renderTaskTemplateTree(replaceItems, taskViewAll)
-      : `<div class="empty-state"><b>${folderReady ? '没有“换印花”图片' : '选择一个套图文件夹'}</b><span>${folderReady ? '请到素材资产中运行 AI 分析或调整图片动作。' : '点击右上角“更换文件夹”进行选择。'}</span></div>`;
+      : `<div class="empty-state"><b>${folderReady ? '没有已框选的换印花图片' : '选择一个套图文件夹'}</b><span>${folderReady ? '请到素材资产中框选需要换印花的柜体，其余图片会保留原图。' : '点击右上角“更换文件夹”进行选择。'}</span></div>`;
   }
 
   $('#generateAllButton').textContent = runningTasks.length ? '正在生成…' : allCompleted ? '查看筛图结果' : '开始生成';
-  $('#generateAllButton').disabled = state.templatePreparing || Boolean(runningTasks.length) || !runnableTasks.length || (!allCompleted && !analysisReady && !individuallySelectedTemplates);
+  $('#generateAllButton').disabled = Boolean(runningTasks.length) || !runnableTasks.length || (!allCompleted && !analysisReady && !individuallySelectedTemplates);
   $('#masterCandidateCount').textContent = `${state.templateMasterCandidates.length} 项`;
   renderTemplateMasterWorkflow();
 }
@@ -1771,7 +1766,7 @@ function renderTemplateMasterWorkflow() {
   }
 }
 
-async function loadTemplatePreparation({ autoPrepare = false } = {}) {
+async function loadTemplatePreparation() {
   const folder = state.config?.detailSetsPath || '';
   if (!folder) {
     state.templatePreparation = null;
@@ -1790,7 +1785,6 @@ async function loadTemplatePreparation({ autoPrepare = false } = {}) {
     state.taskTemplateItems = items;
     syncTaskTemplateSelection();
     renderTemplateWorkflow();
-    if (autoPrepare && state.templatePreparation.pending > 0) return prepareCurrentTemplateFolder();
     return state.templatePreparation;
   } catch (error) {
     state.templatePreparation = null;
@@ -1798,27 +1792,6 @@ async function loadTemplatePreparation({ autoPrepare = false } = {}) {
     renderTemplateWorkflow();
     toast(errorText(error), true);
     return null;
-  }
-}
-
-async function prepareCurrentTemplateFolder() {
-  const folder = state.config?.detailSetsPath || '';
-  if (!folder || state.templatePreparing) return null;
-  state.templatePreparing = true;
-  renderTemplateWorkflow();
-  try {
-    state.templatePreparation = await window.caishen.prepareTemplates(folder);
-    state.taskTemplateItems = await listTaskTemplateItemsForCurrentView();
-    syncTaskTemplateSelection();
-    const failed = Number(state.templatePreparation.failed || 0);
-    toast(failed ? `识别完成，${failed} 张失败，请查看配置` : `套图识别完成：${state.templatePreparation.total} 张`, failed > 0);
-    return state.templatePreparation;
-  } catch (error) {
-    toast(errorText(error), true);
-    return null;
-  } finally {
-    state.templatePreparing = false;
-    renderTemplateWorkflow();
   }
 }
 
@@ -1908,11 +1881,7 @@ function renderAssetSelectionState() {
   $('#assetSelectedCount').textContent = count ? `已选择 ${count} 张` : '支持拖拽添加 · 未选择';
   $('#selectAllAssetsButton').textContent = allVisibleSelected ? '取消全选' : '全选';
   $('#selectAllAssetsButton').disabled = visiblePaths.length === 0 || state.assetUploading;
-  const canBatchAnalyze = state.assetPreviewKey === 'detailSetsPath' && count > 1;
-  $('#batchAnalyzeAssetsButton').hidden = !canBatchAnalyze;
-  $('#batchAnalyzeAssetsButton').disabled = !canBatchAnalyze || state.assetAnalysisRunning;
-  $('#batchAnalyzeAssetsButton').textContent = state.assetAnalysisRunning ? '批量分析中…' : `批量 AI 分析${count ? `（${count}）` : ''}`;
-  $('#deleteSelectedAssetsButton').disabled = count === 0 || state.assetUploading || state.assetAnalysisRunning;
+  $('#deleteSelectedAssetsButton').disabled = count === 0 || state.assetUploading;
   $('#addAssetFilesButton').disabled = state.assetUploading || viewingAllTemplates;
   $('#addAssetFilesButton').title = viewingAllTemplates ? '请先选择一个具体套图文件夹，再添加图片' : '';
 }
@@ -1934,8 +1903,7 @@ const ASSET_TEMPLATE_FILTERS = [
   ['replace_print', '强制换印花'],
   ['copy_original', '保留原图'],
   ['exclude', '不输出'],
-  ['manual_check', '人工确认'],
-  ['needs_analysis', '未完成分析']
+  ['manual_check', '人工确认']
 ];
 
 function normalizeTemplateUiAction(action) {
@@ -1944,19 +1912,9 @@ function normalizeTemplateUiAction(action) {
   return action || 'manual_check';
 }
 
-function assetItemAnalysisStatus(item) {
-  const progress = state.assetAnalysisProgress.get(item.path);
-  return progress?.status || item.analysisStatus || (item.analysisPending ? 'idle' : 'success');
-}
-
-function assetItemAnalyzed(item) {
-  return assetItemAnalysisStatus(item) === 'success' && !item.analysisPending;
-}
-
 function filteredAssetPreviewItems() {
   if (state.assetPreviewKey !== 'detailSetsPath' || state.assetTemplateFilter === 'all') return state.assetPreviewItems;
-  if (state.assetTemplateFilter === 'needs_analysis') return state.assetPreviewItems.filter(item => !assetItemAnalyzed(item));
-  return state.assetPreviewItems.filter(item => assetItemAnalyzed(item) && normalizeTemplateUiAction(item.action) === state.assetTemplateFilter);
+  return state.assetPreviewItems.filter(item => normalizeTemplateUiAction(item.action) === state.assetTemplateFilter);
 }
 
 function visibleAssetPreviewItems() {
@@ -1972,10 +1930,9 @@ function renderAssetTemplateFilters() {
   counts.all = state.assetPreviewItems.length;
   for (const item of state.assetPreviewItems) {
     const action = normalizeTemplateUiAction(item.action);
-    if (assetItemAnalyzed(item) && counts[action] !== undefined) counts[action] += 1;
-    else if (!assetItemAnalyzed(item)) counts.needs_analysis += 1;
+    if (counts[action] !== undefined) counts[action] += 1;
   }
-  filter.querySelector('div').innerHTML = ASSET_TEMPLATE_FILTERS.map(([value, label]) => `<button class="asset-filter-button${state.assetTemplateFilter === value ? ' active' : ''}${value === 'needs_analysis' && counts[value] ? ' attention' : ''}" type="button" data-asset-template-filter="${value}" aria-pressed="${state.assetTemplateFilter === value}"><span>${label}</span><b>${counts[value]}</b></button>`).join('');
+  filter.querySelector('div').innerHTML = ASSET_TEMPLATE_FILTERS.map(([value, label]) => `<button class="asset-filter-button${state.assetTemplateFilter === value ? ' active' : ''}" type="button" data-asset-template-filter="${value}" aria-pressed="${state.assetTemplateFilter === value}"><span>${label}</span><b>${counts[value]}</b></button>`).join('');
 }
 
 function renderAssetManagementGrid() {
@@ -1992,20 +1949,12 @@ function renderAssetManagementGrid() {
     ? visible.map(item => {
       const selected = state.selectedAssetPaths.has(item.path);
       const template = state.assetPreviewKey === 'detailSetsPath';
-      const progress = state.assetAnalysisProgress.get(item.path);
-      const analysisStatus = assetItemAnalysisStatus(item);
-      const analyzed = assetItemAnalyzed(item);
       const actionLabel = ({ replace_print: '强制换印花', copy_original: '保留原图', exclude: '不输出', manual_check: '人工确认' })[normalizeTemplateUiAction(item.action)] || '待确认';
-      const statusText = analysisStatus === 'queued' ? '等待 AI 分析'
-        : analysisStatus === 'running' ? `AI 分析中${progress?.attempt ? ` · 第 ${progress.attempt} 次` : ''}`
-          : analysisStatus === 'failed' ? `分析失败 · 点击 AI 分析重试${item.analysisAttempts ? `（已尝试 ${item.analysisAttempts} 次）` : ''}`
-            : analysisStatus === 'success' ? `已分析 · ${actionLabel}` : '尚未分析 · 请先运行 AI 分析';
-      const attentionClass = template && !analyzed ? analysisStatus === 'failed' ? ' analysis-failed' : ' needs-analysis' : '';
-      const attentionBadge = template && !analyzed && !['queued', 'running'].includes(analysisStatus)
-        ? `<span class="asset-analysis-alert ${analysisStatus === 'failed' ? 'failed' : ''}">${analysisStatus === 'failed' ? '分析失败' : '未分析'}</span>` : '';
-      return `<article class="asset-management-card${selected ? ' selected' : ''}${template ? ' template-asset-card' : ''}${attentionClass}" data-asset-path="${escapeHtml(item.path)}" title="${escapeHtml(item.path)}">${attentionBadge}
+      const regionCount = Array.isArray(item.regions) ? item.regions.length : 0;
+      const statusText = regionCount ? `已框选 ${regionCount} 个区域 · ${actionLabel}` : actionLabel;
+      return `<article class="asset-management-card${selected ? ' selected' : ''}${template ? ' template-asset-card' : ''}" data-asset-path="${escapeHtml(item.path)}" title="${escapeHtml(item.path)}">
         <button class="asset-card-select" type="button" data-asset-select aria-pressed="${selected}"><span class="asset-select-mark">${selected ? '✓' : ''}</span><img loading="lazy" decoding="async" src="${escapeHtml(item.thumbnailUrl || item.url)}" data-preview-src="${escapeHtml(item.previewUrl || item.url)}" alt="${escapeHtml(item.name)}"><span class="asset-card-caption"><b>${escapeHtml(item.name)}</b><small>${escapeHtml(template && currentTemplateFolderView() === 'all' ? `${item.templateFolderName || '套图'} · ${item.folder}` : item.folder)}</small></span></button>
-        ${template ? `<div class="asset-analysis-actions"><button class="secondary" type="button" data-template-ai="${escapeHtml(item.path)}"${progress ? ' disabled' : ''}>${progress ? '分析中…' : 'AI 分析'}</button><button class="secondary" type="button" data-template-result="${escapeHtml(item.path)}">分析结果</button></div><small class="asset-analysis-status ${analysisStatus}" title="${escapeHtml(item.analysisError || '')}">${escapeHtml(statusText)}</small>` : ''}
+        ${template ? `<div class="asset-analysis-actions"><button class="secondary" type="button" data-template-result="${escapeHtml(item.path)}">框选区域</button></div><small class="asset-analysis-status manual">${escapeHtml(statusText)}</small>` : ''}
       </article>`;
     }).join('')
     : state.assetPreviewItems.length && state.assetPreviewKey === 'detailSetsPath'
@@ -2201,22 +2150,6 @@ function normalizedRelativePath(value = '') {
   return String(value || '').replaceAll('\\', '/').toLocaleLowerCase('zh-CN');
 }
 
-function reviewRegenerationReferenceCandidates(item, currentJob) {
-  const current = normalizedRelativePath(currentJob?.relativePath);
-  return (item?.jobs || [])
-    .filter(job => job?.outputUrl && normalizedRelativePath(job.relativePath) !== current)
-    .filter(job => {
-      const action = normalizeTemplateUiAction(job.action);
-      return action !== 'exclude' && action !== 'copy_original';
-    })
-    .map(job => ({
-      relativePath: job.relativePath,
-      outputUrl: job.outputUrl,
-      templateUrl: job.templateUrl,
-      status: job.status || ''
-    }));
-}
-
 function closeReviewRegenerationDialog(result = null) {
   const dialog = state.reviewRegenerationDialog;
   if (!dialog) return;
@@ -2225,9 +2158,8 @@ function closeReviewRegenerationDialog(result = null) {
   dialog.resolve(result);
 }
 
-function openReviewRegenerationDialog(item, job) {
+function openReviewRegenerationDialog(job) {
   if (state.reviewRegenerationDialog) closeReviewRegenerationDialog(null);
-  const candidates = reviewRegenerationReferenceCandidates(item, job);
   const element = document.createElement('div');
   element.className = 'review-regenerate-modal-backdrop';
   element.innerHTML = `<section class="review-regenerate-modal" role="dialog" aria-modal="true" aria-labelledby="reviewRegenerateTitle">
@@ -2237,21 +2169,7 @@ function openReviewRegenerationDialog(item, job) {
     </header>
     <div class="review-regenerate-body">
       <label class="review-regenerate-field"><b>本次额外要求</b><textarea data-review-regenerate-note rows="4" placeholder="例如：印花只能覆盖柜门面板，不能盖住黑色边框、台面、侧板、柜脚和场景物品。"></textarea></label>
-      <label class="review-regenerate-check"><input type="checkbox" data-review-regenerate-previous ${job.outputUrl ? '' : 'disabled'}>参考当前这张不合格结果，只修正问题</label>
-      <div class="review-regenerate-reference">
-        <div><b>可选参考结果图</b><span>只参考印花落位和黑边保留方式，不复制参考图的构图或尺寸。</span></div>
-        <div class="review-regenerate-reference-list">
-          <label class="review-regenerate-reference-card selected">
-            <input type="radio" name="review-regenerate-reference" value="" checked>
-            <span>不使用其他参考图</span>
-          </label>
-          ${candidates.map(candidate => `<label class="review-regenerate-reference-card">
-            <input type="radio" name="review-regenerate-reference" value="${escapeHtml(candidate.relativePath)}">
-            <img src="${escapeHtml(candidate.outputUrl)}" data-preview-src="${escapeHtml(candidate.outputUrl)}" alt="${escapeHtml(candidate.relativePath)} 参考结果">
-            <span><b>${escapeHtml(candidate.relativePath)}</b><small>${escapeHtml(candidate.status || '已生成')}</small></span>
-          </label>`).join('')}
-        </div>
-      </div>
+      <p class="review-regenerate-note">重新生成仍固定使用四张输入：套图原图、母版图、印花原图、红框标注图。</p>
     </div>
     <footer><button class="secondary" type="button" data-review-regenerate-cancel>取消</button><button class="primary" type="button" data-review-regenerate-submit>提交重新生成</button></footer>
   </section>`;
@@ -2262,19 +2180,9 @@ function openReviewRegenerationDialog(item, job) {
       closeReviewRegenerationDialog(null);
       return;
     }
-    const card = event.target.closest('.review-regenerate-reference-card');
-    if (card) {
-      element.querySelectorAll('.review-regenerate-reference-card').forEach(item => item.classList.remove('selected'));
-      card.classList.add('selected');
-      const input = card.querySelector('input[type="radio"]');
-      if (input) input.checked = true;
-    }
     if (event.target.closest('[data-review-regenerate-submit]')) {
-      const reference = element.querySelector('input[name="review-regenerate-reference"]:checked')?.value || '';
       closeReviewRegenerationDialog({
-        extraInstruction: element.querySelector('[data-review-regenerate-note]')?.value || '',
-        includePreviousResult: Boolean(element.querySelector('[data-review-regenerate-previous]')?.checked),
-        referenceResultRelativePath: reference
+        extraInstruction: element.querySelector('[data-review-regenerate-note]')?.value || ''
       });
     }
   });
@@ -2589,7 +2497,7 @@ function renderQueueItem(task, index) {
     ? `<div class="queue-preview-pair">${queuePreviewFigure(task.masterImageUrl || task.masterImagePreviewUrl || '', task.masterImagePreviewUrl || task.masterImageUrl || '', task.masterImagePath ? '已生成母版' : '未生成母版', '母版图')}<span class="queue-preview-plus" aria-hidden="true">+</span>${queuePreviewFigure(previews.sourceThumbnailUrl, previews.sourcePreviewUrl, previews.sourceName, '套图页')}</div>`
     : `<div class="queue-preview-pair">${queuePreviewFigure(previews.sourceThumbnailUrl, previews.sourcePreviewUrl, previews.sourceName, '款式')}<span class="queue-preview-plus" aria-hidden="true">+</span>${queuePreviewFigure(previews.printThumbnailUrl, previews.printPreviewUrl, task.printName, '印花')}</div>`;
   const templateControl = task.templateRelativePath ? '' : `<div class="queue-template-row"><span>已选择套图</span><button class="secondary" data-queue-template-index="${index}">更换套图</button></div>`;
-  return `<div class="queue-item" data-queue-index="${index}"><div class="queue-item-head"><input type="checkbox" aria-label="选择任务 ${index + 1}" title="勾选后参与批量操作" data-queue-select="${index}"${task.selected ? ' checked' : ''}><b>${String(index + 1).padStart(2, '0')} · ${escapeHtml(task.productName)}</b><button class="queue-delete-button" type="button" data-queue-delete="${index}"${task.status === '生成中' ? ' disabled title="生成中的任务暂不能删除"' : ''}>删除</button></div><div class="queue-item-body">${previewPair}<div class="queue-item-copy"><span>${task.generationMode === 'template_print' ? '母版迁移到套图页' : '母版生成'}</span>${templateControl}${progressMarkup}<span class="status${task.status === '失败' ? ' error' : ''}">${escapeHtml(task.error || task.status)}</span></div></div></div>`;
+  return `<div class="queue-item" data-queue-index="${index}"><div class="queue-item-head"><input type="checkbox" aria-label="选择任务 ${index + 1}" title="勾选后参与批量操作" data-queue-select="${index}"${task.selected ? ' checked' : ''}><b>${String(index + 1).padStart(2, '0')} · ${escapeHtml(task.productName)}</b><button class="queue-delete-button" type="button" data-queue-delete="${index}"${task.status === '生成中' ? ' disabled title="生成中的任务暂不能删除"' : ''}>删除</button></div><div class="queue-item-body">${previewPair}<div class="queue-item-copy"><span>${task.generationMode === 'template_print' ? '按人工框选区域换印花' : '母版生成'}</span>${templateControl}${progressMarkup}<span class="status${task.status === '失败' ? ' error' : ''}">${escapeHtml(task.error || task.status)}</span></div></div></div>`;
 }
 
 function renderQueue() {
@@ -2803,7 +2711,7 @@ async function generateQueue(options = {}) {
   if (!runnable.length) return toast('请先为任务生成母版图', true);
   if (missingMaster.length) toast(`已跳过 ${missingMaster.length} 个未生成母版的任务`);
   if (runnable.some(task => task.generationMode === 'template_print' && !task.templateRelativePath) && !state.templatePreparation?.ready) {
-    return toast(state.templatePreparation?.counts?.manualCheck ? '套图中还有需要人工确认的图片，请先查看识别结果' : '请先完成套图自动识别', true);
+    return toast(state.templatePreparation?.counts?.manualCheck ? '套图中还有未确认处理方式的图片，请先完成人工框选' : '请先在素材资产中保存人工框选结果', true);
   }
   $('#generateAllButton').disabled = true;
   runnable.forEach(task => {
@@ -3334,7 +3242,7 @@ function renderReviewStage() {
       return `<figure class="review-image comparison${skipped ? ' skipped' : ''}${copied ? ' copied' : ''}${regenerating ? ' regenerating' : ''}" data-review-job="${index}"><div class="review-image-status"><b>${escapeHtml(job.relativePath)}</b><span>${escapeHtml(regenerating ? '重新生成中' : job.status)}</span></div><div class="review-compare"><div class="review-compare-side"><span>原套图模板</span><div class="review-compare-frame"><img loading="lazy" decoding="async" src="${templateThumbUrl}" data-preview-src="${templatePreviewUrl}" alt="${escapeHtml(job.relativePath)} 原套图模板"></div></div><div class="review-compare-side result"><span>${escapeHtml(displayResultLabel)}</span><div class="review-compare-frame">${resultPreview}</div></div></div><figcaption>${regenerating ? '已提交重新生成，完成后会自动刷新右侧结果' : skipped ? '此图按规则不输出，不进入最终套图' : job.outputUrl ? (copied ? '原图直接复制，未调用 API' : '左侧原模板，右侧本次生成结果') : '生成完成后会在右侧自动显示结果'}</figcaption>${actions}</figure>`;
     }).join('')
     : item.images.map(image => `<figure class="review-image legacy"><img loading="lazy" decoding="async" src="${image.url}" data-preview-src="${image.url}" alt="${escapeHtml(image.name)}"><figcaption>${escapeHtml(image.name)}</figcaption></figure>`).join('');
-  const master = item.masterImage ? `<section class="master-review-strip"><img src="${item.masterImage.url}" alt="母版图"><div><b>母版图</b><span>${escapeHtml(item.masterStatus || '母版已生成')}</span>${item.source?.generationMode !== 'template_print' ? '<button class="secondary" id="regenerateMasterButton">重新生成母版图</button>' : ''}</div></section>` : '';
+  const master = item.masterImage ? `<section class="master-review-strip"><img src="${item.masterImage.url}" alt="母版图"><div><b>母版图</b><span>${escapeHtml(item.masterStatus || '母版已生成')}</span></div></section>` : '';
   const progressTitle = running ? '正在处理套图' : needsAttention ? '套图处理完成，但有图片需要处理' : noApiGeneration ? '本任务没有调用生图 API' : '套图已生成，请逐张确认';
   const progressDetail = running
     ? (summary.message || (summary.waitingUpstream
@@ -3364,16 +3272,6 @@ function renderReviewStage() {
       openTemplateConfig();
     };
   });
-  if ($('#regenerateMasterButton')) $('#regenerateMasterButton').onclick = async () => {
-    if (!window.confirm('确定重新生成当前母版图吗？')) return;
-    try {
-      const result = await window.caishen.regenerateMaster(item.folder);
-      state.activeReview = result?.folder ? { folder: result.folder } : state.activeReview;
-      toast(`母版图已重新生成：${result?.folder?.split('/').pop() || ''}`);
-      await loadReviews();
-    }
-    catch (error) { toast(errorText(error), true); }
-  };
   $('#approveReview').onclick = async () => {
     try {
       const result = await window.caishen.approveReview(item.folder);
@@ -3396,17 +3294,19 @@ function renderReviewStage() {
           return;
         }
         if (button.dataset.jobAction === 'regenerate') {
-          const regenerationOptions = await openReviewRegenerationDialog(item, job);
+          const regenerationOptions = await openReviewRegenerationDialog(job);
           if (!regenerationOptions) return;
           const regenExtraInstruction = regenerationOptions.extraInstruction || '';
-          const regenIncludePreviousResult = Boolean(regenerationOptions.includePreviousResult);
-          const regenReferenceResultRelativePath = regenerationOptions.referenceResultRelativePath || '';
           const reviewRegenerateKey = reviewJobActionKey(item, job);
           const regenerationRecord = createReviewRegenerationRecord(item, job);
           state.regeneratingReviewJobs.add(reviewRegenerateKey);
           renderReviewStagePreservingScroll();
           toast(`已提交重新生成：${job.relativePath} ${formatRegenerationAttempt(regenerationRecord.attempt)}`);
-          await window.caishen.regenerateTemplate({ folder: item.folder, relativePath: job.relativePath, extraInstruction: regenExtraInstruction, includePreviousResult: regenIncludePreviousResult, referenceResultRelativePath: regenReferenceResultRelativePath }, progress => {
+          await window.caishen.regenerateTemplate({
+            folder: item.folder,
+            relativePath: job.relativePath,
+            extraInstruction: regenExtraInstruction
+          }, progress => {
             if (!state.activeReview || state.activeReview.folder !== item.folder) return;
             updateReviewRegenerationRecord(regenerationRecord, 'running');
             state.activeReview.generationProgress = {
@@ -4152,7 +4052,7 @@ async function openTemplateConfig() {
   if (!state.config.detailSetsPath) return toast('请先选择套图文件夹', true);
   setPage('assets');
   await loadAssetLibraryPreview('detailSetsPath');
-  toast('请在每张套图下方查看或重新运行 AI 分析');
+  toast('请打开每张套图，拖拽框选需要换印花的柜体');
 }
 
 function closeTemplateConfig() {
@@ -4164,83 +4064,156 @@ function activeTemplateItem() {
   return state.templateItems.find(item => item.path === state.activeTemplatePath) || null;
 }
 
-function templateDirectoryKey(item) {
-  const normalized = String(item?.relativePath || '').replaceAll('\\', '/');
-  return normalized.includes('/') ? normalized.slice(0, normalized.lastIndexOf('/')) : '';
-}
-
-function templateNameTokens(value) {
-  return new Set(String(value || '').toLowerCase().split(/[^a-z0-9\u4e00-\u9fa5]+/).filter(token => token.length >= 2));
-}
-
-function templateReferenceCandidates(item) {
-  if (!item) return [];
-  const activeFolder = templateDirectoryKey(item);
-  const activeTokens = templateNameTokens(item.relativePath);
-  return state.templateItems
-    .filter(candidate => candidate.path !== item.path && normalizeTemplateUiAction(candidate.action) === 'replace_print')
-    .map(candidate => {
-      const candidateTokens = templateNameTokens(candidate.relativePath);
-      let tokenMatches = 0;
-      for (const token of activeTokens) if (candidateTokens.has(token)) tokenMatches += 1;
-      const sameFolder = templateDirectoryKey(candidate) === activeFolder ? 1 : 0;
-      const confidence = Number(candidate.confidence || 0);
-      return { candidate, score: sameFolder * 100 + tokenMatches * 8 + confidence };
-    })
-    .sort((left, right) => right.score - left.score || String(left.candidate.relativePath).localeCompare(String(right.candidate.relativePath), 'zh-CN', { numeric: true }))
-    .slice(0, 8)
-    .map(entry => entry.candidate);
-}
-
-function renderTemplateReferencePanel(item) {
-  const candidates = templateReferenceCandidates(item);
-  if (!candidates.length) {
-    return `<aside class="template-reference-panel"><div class="template-reference-head"><b>参考重析</b><span>暂无可参考的换印花图片。</span></div></aside>`;
+function drawTemplateRegions(canvas, regions, draft = null) {
+  if (!canvas) return;
+  const context = canvas.getContext('2d');
+  const ratio = window.devicePixelRatio || 1;
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.save();
+  context.scale(ratio, ratio);
+  context.strokeStyle = '#ff4d4f';
+  context.fillStyle = 'rgba(255, 77, 79, 0.12)';
+  context.lineWidth = 3;
+  for (const region of [...(regions || []), ...(draft ? [draft] : [])]) {
+    const x = region.x * canvas.clientWidth;
+    const y = region.y * canvas.clientHeight;
+    const width = region.width * canvas.clientWidth;
+    const height = region.height * canvas.clientHeight;
+    context.fillRect(x, y, width, height);
+    context.strokeRect(x, y, width, height);
   }
-  return `<aside class="template-reference-panel">
-    <div class="template-reference-head"><b>参考重析</b><span>参考图只帮助 AI 判断动作，不复制区域。</span></div>
-    <div class="template-reference-list">
-      ${candidates.map(candidate => `<article class="template-reference-card">
-        <img src="${escapeHtml(candidate.thumbnailUrl || candidate.previewUrl || candidate.templateUrl)}" alt="${escapeHtml(candidate.relativePath)}">
-        <div><b>${escapeHtml(candidate.name)}</b><span>${escapeHtml(candidate.relativePath)}</span><small>${escapeHtml(templateActionHint(candidate.action))}</small></div>
-        <button class="secondary" type="button" data-reference-analysis="${escapeHtml(candidate.path)}">参考重析</button>
-      </article>`).join('')}
-    </div>
-  </aside>`;
+  context.restore();
 }
 
-function renderTemplateAnalysisResult() {
+function initializeTemplateRegionEditor(item) {
+  const image = $('#templateRegionImage');
+  const canvas = $('#templateRegionCanvas');
+  if (!image || !canvas) return;
+  const editor = image.closest('.template-region-editor');
+  const figure = image.closest('.template-region-figure');
+  item.regions = Array.isArray(item.regions) ? item.regions : [];
+  const syncCanvas = () => {
+    const rectangle = image.getBoundingClientRect();
+    const ratio = window.devicePixelRatio || 1;
+    canvas.style.width = `${rectangle.width}px`;
+    canvas.style.height = `${rectangle.height}px`;
+    canvas.width = Math.max(1, Math.round(rectangle.width * ratio));
+    canvas.height = Math.max(1, Math.round(rectangle.height * ratio));
+    drawTemplateRegions(canvas, item.regions);
+  };
+  const fitEditorToViewport = () => {
+    if (!editor || !figure || !image.naturalWidth || !image.naturalHeight) return;
+    const layout = figure.closest('.template-result-layout');
+    const caption = figure.querySelector('figcaption');
+    const availableWidth = Math.max(1, figure.clientWidth);
+    const availableHeight = Math.max(160, (layout?.clientHeight || figure.clientHeight) - (caption?.offsetHeight || 0) - 10);
+    const sourceRatio = image.naturalWidth / image.naturalHeight;
+    let width = Math.min(availableWidth, availableHeight * sourceRatio);
+    let height = width / sourceRatio;
+    if (height > availableHeight) {
+      height = availableHeight;
+      width = height * sourceRatio;
+    }
+    editor.style.width = `${Math.max(1, Math.floor(width))}px`;
+    editor.style.height = `${Math.max(1, Math.floor(height))}px`;
+    image.style.width = '100%';
+    image.style.height = '100%';
+    syncCanvas();
+  };
+  if (image.complete) requestAnimationFrame(fitEditorToViewport);
+  else image.addEventListener('load', fitEditorToViewport, { once: true });
+  const observer = new ResizeObserver(fitEditorToViewport);
+  observer.observe(figure || image);
+
+  let start = null;
+  const pointForEvent = event => {
+    const rectangle = canvas.getBoundingClientRect();
+    return {
+      x: Math.max(0, Math.min(1, (event.clientX - rectangle.left) / Math.max(1, rectangle.width))),
+      y: Math.max(0, Math.min(1, (event.clientY - rectangle.top) / Math.max(1, rectangle.height)))
+    };
+  };
+  const regionFromPoints = (first, second) => ({
+    x: Math.min(first.x, second.x),
+    y: Math.min(first.y, second.y),
+    width: Math.abs(first.x - second.x),
+    height: Math.abs(first.y - second.y)
+  });
+  const startRegion = event => {
+    start = pointForEvent(event);
+    canvas.setPointerCapture?.(event.pointerId);
+  };
+  const moveRegion = event => {
+    if (!start) return;
+    drawTemplateRegions(canvas, item.regions, regionFromPoints(start, pointForEvent(event)));
+  };
+  const finishRegion = event => {
+    if (!start) return;
+    const region = regionFromPoints(start, pointForEvent(event));
+    start = null;
+    if (region.width >= 0.01 && region.height >= 0.01) {
+      item.regions.push(region);
+      item.action = 'replace_print';
+      applyTemplateActionDefaults(item, document.querySelector('#templateRegionResult [data-template-index]'));
+      renderTemplateRegionResult();
+    } else {
+      drawTemplateRegions(canvas, item.regions);
+    }
+  };
+  const cancelRegion = () => {
+    start = null;
+    drawTemplateRegions(canvas, item.regions);
+  };
+  if (typeof window.PointerEvent === 'function') {
+    canvas.onpointerdown = startRegion;
+    canvas.onpointermove = moveRegion;
+    canvas.onpointerup = finishRegion;
+    canvas.onpointercancel = cancelRegion;
+  } else {
+    canvas.onmousedown = event => {
+      startRegion(event);
+      window.addEventListener('mouseup', finishRegion, { once: true });
+    };
+    canvas.onmousemove = moveRegion;
+    canvas.onmouseup = finishRegion;
+    canvas.onmouseleave = event => {
+      if (start && event.buttons === 0) cancelRegion();
+    };
+  }
+}
+
+function renderTemplateRegionResult() {
   const item = activeTemplateItem();
-  const container = $('#templateAnalysisResult');
+  const container = $('#templateRegionResult');
   if (!item) {
     container.innerHTML = '<div class="empty-state"><b>没有找到这张套图</b><span>请关闭后刷新素材库。</span></div>';
-    $('#templateConfigStatus').textContent = '分析结果不存在';
-    $('#saveTemplateConfigButton').disabled = true;
+    $('#templateConfigStatus').textContent = '套图不存在';
+    $('#saveTemplateRegionsButton').disabled = true;
     return;
   }
   const itemIndex = state.templateItems.indexOf(item);
-  const failed = item.analysisStatus === 'failed';
-  const pending = item.analysisPending && !failed;
-  $('#templateConfigTitle').textContent = `分析结果 · ${item.name}`;
+  item.regions = Array.isArray(item.regions) ? item.regions : [];
+  $('#templateConfigTitle').textContent = `框选区域 · ${item.name}`;
   $('#templateConfigPath').textContent = item.relativePath;
-  $('#templateConfigStatus').textContent = failed
-    ? `AI 分析失败：${item.analysisError || '请单独重新运行 AI 分析'}`
-    : pending ? '这张图片尚未完成 AI 分析，可以直接修改并保存为人工配置。'
-      : `已分析 · 置信度 ${Number(item.confidence || 0).toFixed(2)}`;
-  $('#saveTemplateConfigButton').disabled = false;
+  $('#templateConfigStatus').textContent = item.regions.length
+    ? `已框选 ${item.regions.length} 个区域，Image2 将识别框内可见柜面`
+    : normalizeTemplateUiAction(item.action) === 'exclude' ? '这张图片不会输出' : '未框选，将原图直接复制到成品';
+  $('#saveTemplateRegionsButton').disabled = false;
   container.innerHTML = `<div class="template-result-layout">
-    <figure><img src="${escapeHtml(item.previewUrl || item.templateUrl)}" alt="${escapeHtml(item.relativePath)}"><figcaption>${escapeHtml(item.relativePath)}</figcaption></figure>
-    <div class="template-result-fields" data-template-index="${itemIndex}">
-<label class="template-result-action"><span>操作</span><div class="template-action-toolbar"><select data-template-field="action">${TEMPLATE_ACTIONS.map(([value, label]) => `<option value="${value}"${normalizeTemplateUiAction(item.action) === value ? ' selected' : ''}>${label}</option>`).join('')}</select><button class="secondary mini" type="button" data-template-set-action="replace_print">强制换印花</button><button class="secondary mini" type="button" data-template-set-action="copy_original">保留原图</button></div><small class="template-action-hint">${escapeHtml(templateActionHint(item.action))}</small></label>
-      <label><span>图片理解</span><textarea rows="3" data-template-field="reason" placeholder="AI 对画面内容和用途的理解">${escapeHtml(item.reason)}</textarea></label>
-      <label><span>生成目标</span><textarea rows="2" data-template-field="replaceArea" placeholder="这张图应如何使用母版商品">${escapeHtml(item.replaceArea)}</textarea></label>
-      <label><span>不可修改</span><textarea rows="2" data-template-field="forbiddenArea" placeholder="人物、文字、背景等必须保留的区域">${escapeHtml(item.forbiddenArea)}</textarea></label>
-    </div>
+    <figure class="template-region-figure"><div class="template-region-editor"><img id="templateRegionImage" src="${escapeHtml(item.previewUrl || item.templateUrl)}" alt="${escapeHtml(item.relativePath)}"><canvas id="templateRegionCanvas" aria-label="拖拽框选柜体区域"></canvas></div><figcaption>${escapeHtml(item.relativePath)}</figcaption></figure>
+    <section class="template-region-tools" data-template-index="${itemIndex}">
+      <span class="eyebrow">MANUAL ROI</span><h3>粗框柜体，不要细描边</h3>
+      <p>按住鼠标拖拽，可添加多个红框。红框只用于告诉 Image2 在哪里寻找柜门或抽屉正面，不是整块覆盖范围；框外像素会在生成后恢复为原图。</p>
+      <div class="template-region-count"><b>${item.regions.length}</b><span>个已保存区域</span></div>
+      <div class="template-region-actions"><button class="secondary" type="button" data-region-undo${item.regions.length ? '' : ' disabled'}>撤销上一个</button><button class="secondary" type="button" data-region-clear${item.regions.length ? '' : ' disabled'}>清空框选</button></div>
+      <div class="template-region-output-actions"><button class="${normalizeTemplateUiAction(item.action) === 'copy_original' && !item.regions.length ? 'primary' : 'secondary'}" type="button" data-template-set-action="copy_original">保留原图</button><button class="${normalizeTemplateUiAction(item.action) === 'exclude' ? 'primary' : 'secondary'}" type="button" data-template-set-action="exclude">不输出</button></div>
+      <small>有红框：调用 Image2。无红框：逐字节复制原图，不调用生图 API。</small>
+    </section>
   </div>`;
-  container.querySelector('.template-result-layout')?.insertAdjacentHTML('beforeend', renderTemplateReferencePanel(item));
+  initializeTemplateRegionEditor(item);
 }
 
-async function openTemplateAnalysisResult(pathValue) {
+async function openTemplateRegionEditor(pathValue) {
   const path = String(pathValue || '');
   if (!path) return;
   if (!state.templateItems.some(item => item.path === path)) {
@@ -4248,133 +4221,37 @@ async function openTemplateAnalysisResult(pathValue) {
   }
   state.activeTemplatePath = path;
   $('#templateConfigModal').hidden = false;
-  renderTemplateAnalysisResult();
+  renderTemplateRegionResult();
 }
 
-async function saveTemplateConfig() {
+async function saveTemplateRegions() {
   const item = activeTemplateItem();
-  if (!item) return toast('没有可保存的分析结果', true);
-  $('#saveTemplateConfigButton').disabled = true;
+  if (!item) return toast('没有可保存的框选结果', true);
+  $('#saveTemplateRegionsButton').disabled = true;
   try {
     const folder = templateFolderPathForItem(item);
-    await window.caishen.saveTemplateConfig({
+    await window.caishen.saveTemplateRegions({
       folder,
       items: [{
         relativePath: item.relativePath,
-        action: normalizeTemplateUiAction(item.action),
+        action: item.regions?.length ? 'replace_print' : normalizeTemplateUiAction(item.action),
         reason: item.reason,
         replaceArea: item.replaceArea,
-        forbiddenArea: item.forbiddenArea
+        forbiddenArea: item.forbiddenArea,
+        regions: item.regions
       }]
     });
     state.assetPreviewCache.delete('detailSetsPath');
     await loadAssetLibraryPreview('detailSetsPath', { preserveSelection: true, force: true });
-    renderTemplateAnalysisResult();
+    renderTemplateRegionResult();
     if (folder === state.config.detailSetsPath) await loadTemplatePreparation();
-    $('#templateConfigStatus').textContent = '分析结果已保存';
-    toast('分析结果已保存');
+    $('#templateConfigStatus').textContent = '框选结果已保存';
+    toast('框选结果已保存');
   } catch (error) {
     toast(errorText(error), true);
   } finally {
-    $('#saveTemplateConfigButton').disabled = false;
+    $('#saveTemplateRegionsButton').disabled = false;
   }
-}
-
-async function analyzeActiveTemplateWithReference(referencePath) {
-  const item = activeTemplateItem();
-  const reference = state.templateItems.find(candidate => candidate.path === referencePath);
-  if (!item || !reference) return toast('请先选择参考图片。', true);
-  if (normalizeTemplateUiAction(reference.action) !== 'replace_print') return toast('参考图必须已经识别为换印花。', true);
-  const folder = templateFolderPathForItem(item);
-  $('#templateConfigStatus').textContent = `正在参考“${reference.name}”重新分析`;
-  state.assetAnalysisProgress.set(item.path, { status: 'running', attempt: 1 });
-  renderAssetManagementGrid();
-  try {
-    await window.caishen.analyzeTemplateItemWithReference({
-      folder,
-      relativePath: item.relativePath,
-      referenceRelativePath: reference.relativePath
-    }, progress => {
-      const attempt = Number(progress.attempt || 0);
-      $('#templateConfigStatus').textContent = attempt
-        ? `正在参考“${reference.name}”重新分析 · 第 ${attempt} 次`
-        : `正在参考“${reference.name}”重新分析`;
-    });
-    state.assetPreviewCache.delete('detailSetsPath');
-    await loadAssetLibraryPreview('detailSetsPath', { preserveSelection: true, force: true });
-    const refreshed = state.templateItems.find(candidate => candidate.relativePath === item.relativePath && templateFolderPathForItem(candidate) === folder);
-    if (refreshed) state.activeTemplatePath = refreshed.path;
-    renderTemplateAnalysisResult();
-    if (folder === state.config.detailSetsPath) await loadTemplatePreparation();
-    $('#templateConfigStatus').textContent = '参考重析已完成';
-    toast('参考重析已完成');
-  } catch (error) {
-    toast(errorText(error), true);
-  } finally {
-    state.assetAnalysisProgress.delete(item.path);
-    renderAssetManagementGrid();
-    renderAssetSelectionState();
-  }
-}
-
-async function runAssetTemplateAnalysis(paths) {
-  const requested = new Set(paths);
-  const selected = state.assetPreviewItems.filter(item => requested.has(item.path) && !state.assetAnalysisProgress.has(item.path));
-  if (!selected.length) return toast('请先选择需要 AI 分析的套图', true);
-  state.assetAnalysisRunning += 1;
-  for (const item of selected) state.assetAnalysisProgress.set(item.path, { status: 'queued', attempt: 0 });
-  renderAssetManagementGrid();
-  try {
-    const groups = new Map();
-    for (const item of selected) {
-      const folder = templateFolderPathForItem(item);
-      if (!groups.has(folder)) groups.set(folder, []);
-      groups.get(folder).push(item);
-    }
-    let finished = 0;
-    let failed = 0;
-    let maxConcurrency = 0;
-    for (const [folder, group] of groups) {
-      const byRelative = new Map(group.map(item => [item.relativePath, item.path]));
-      const offset = finished;
-      const result = await window.caishen.analyzeTemplateItems({
-        folder,
-        relativePaths: group.map(item => item.relativePath)
-      }, progress => {
-        const activePath = byRelative.get(progress.relativePath);
-        if (activePath) state.assetAnalysisProgress.set(activePath, { status: 'running', attempt: progress.attempt || 0 });
-        const completedPath = byRelative.get(progress.completedRelativePath);
-        if (completedPath) state.assetAnalysisProgress.set(completedPath, { status: progress.completedStatus || 'success', attempt: 0 });
-        if (currentPage === 'assets' && state.assetPreviewKey === 'detailSetsPath') {
-          renderAssetManagementGrid();
-          $('#assetPreviewSummary').textContent = `AI 分析进度 ${Math.min(selected.length, offset + Number(progress.current || 0))}/${selected.length}${failed + Number(progress.failed || 0) ? ` · 失败 ${failed + Number(progress.failed || 0)}` : ''}`;
-        }
-      });
-      finished += Number(result.completed || group.length);
-      failed += Number(result.failed || 0);
-      maxConcurrency = Math.max(maxConcurrency, Number(result.concurrency || 0));
-    }
-    state.assetPreviewCache.delete('detailSetsPath');
-    await loadAssetLibraryPreview('detailSetsPath', { preserveSelection: true, force: true });
-    await loadTemplatePreparation();
-    if (currentPage === 'assets' && state.assetPreviewKey === 'detailSetsPath') $('#assetPreviewSummary').textContent = `共 ${state.assetPreviewItems.length} 张 · 本次完成 ${finished} 张${failed ? `，失败 ${failed} 张` : ''} · 并发最高 ${maxConcurrency}`;
-    toast(failed ? `AI 分析完成，${failed} 张失败，可单独重新运行` : `AI 分析完成：${finished} 张`, failed > 0);
-  } catch (error) {
-    toast(errorText(error), true);
-    state.assetPreviewCache.delete('detailSetsPath');
-    await loadAssetLibraryPreview('detailSetsPath', { preserveSelection: true, force: true }).catch(() => {});
-  } finally {
-    for (const item of selected) state.assetAnalysisProgress.delete(item.path);
-    state.assetAnalysisRunning = Math.max(0, state.assetAnalysisRunning - 1);
-    if (currentPage === 'assets') {
-      renderAssetManagementGrid();
-      renderAssetSelectionState();
-    }
-  }
-}
-
-function analyzeSelectedTemplateAssets() {
-  return runAssetTemplateAnalysis([...state.selectedAssetPaths]);
 }
 
 async function runReviewGeneration(onlyMissing, folders) {
@@ -4446,54 +4323,6 @@ async function runReviewGeneration(onlyMissing, folders) {
     toast(errorText(error), true);
     await loadReviews();
   }
-}
-
-async function openProductProfile() {
-  if (!state.config.detailSetsPath) return toast('请先选择套图文件夹', true);
-  try {
-    const profile = await window.caishen.getProductProfile(state.config.detailSetsPath);
-    $('#profileDimensions').value = profile?.dimensions || '';
-    $('#profileMaterial').value = profile?.material || '';
-    $('#profileNotes').value = profile?.notes || '';
-    $('#productProfilePath').textContent = `资料保存在：${state.config.detailSetsPath}/商品资料.json`;
-    $('#analyzeProductProfileButton').disabled = !state.selectedProduct?.path;
-    $('#productProfileModal').hidden = false;
-  } catch (error) { toast(errorText(error), true); }
-}
-
-function closeProductProfile() {
-  $('#productProfileModal').hidden = true;
-}
-
-async function analyzeProductProfileFromSelection() {
-  if (!state.selectedProduct?.path) return toast('请先在母版模式选择一张品类图', true);
-  $('#analyzeProductProfileButton').disabled = true;
-  $('#analyzeProductProfileButton').textContent = '识别中…';
-  try {
-    const profile = await window.caishen.analyzeProductProfile(state.selectedProduct.path);
-    if (profile?.dimensions) $('#profileDimensions').value = profile.dimensions;
-    if (profile?.material) $('#profileMaterial').value = profile.material;
-    toast(profile?.dimensions || profile?.material ? '商品资料识别完成' : '没有识别到明确尺寸或材质');
-  } catch (error) { toast(errorText(error), true); }
-  finally {
-    $('#analyzeProductProfileButton').disabled = !state.selectedProduct?.path;
-    $('#analyzeProductProfileButton').textContent = '从当前品类图 AI 识别';
-  }
-}
-
-async function saveProductProfile() {
-  try {
-    await window.caishen.saveProductProfile({
-      folder: state.config.detailSetsPath,
-      profile: {
-        dimensions: $('#profileDimensions').value.trim(),
-        material: $('#profileMaterial').value.trim(),
-        notes: $('#profileNotes').value.trim()
-      }
-    });
-    closeProductProfile();
-    toast('商品资料已保存');
-  } catch (error) { toast(errorText(error), true); }
 }
 
 function activePrompt() {
@@ -5344,7 +5173,7 @@ async function testAnalysisConnection() {
     $('#analysisConnectionTitle').textContent = '分析接口正常';
     const protocol = result.wireApi === 'responses' ? 'Responses API' : 'Chat Completions';
     $('#analysisConnectionStatus').textContent = `${protocol} · ${result.model} · 响应 ${result.latencyMs ?? 0} ms${result.responsePreview ? ` · 返回 ${result.responsePreview}` : ''}`;
-    toast('分析接口测试成功，套图识别可以使用');
+    toast('分析接口测试成功');
   } catch (error) {
     const message = apiTestErrorText(error);
     row.classList.add('error');
@@ -5519,14 +5348,11 @@ function bindEvents() {
     resetAssetManagementScroll();
   };
   $('#selectAllAssetsButton').onclick = toggleAllVisibleAssets;
-  $('#batchAnalyzeAssetsButton').onclick = analyzeSelectedTemplateAssets;
   $('#addAssetFilesButton').onclick = chooseAndAddAssetFiles;
   $('#deleteSelectedAssetsButton').onclick = deleteSelectedAssets;
   $('#assetManagementGrid').onclick = event => {
-    const analyzeButton = event.target.closest('[data-template-ai]');
-    if (analyzeButton) return runAssetTemplateAnalysis([analyzeButton.dataset.templateAi]);
     const resultButton = event.target.closest('[data-template-result]');
-    if (resultButton) return openTemplateAnalysisResult(resultButton.dataset.templateResult);
+    if (resultButton) return openTemplateRegionEditor(resultButton.dataset.templateResult);
     const selectButton = event.target.closest('[data-asset-select]');
     const card = event.target.closest('[data-asset-path]');
     if (!selectButton || !card || state.assetUploading) return;
@@ -5829,8 +5655,8 @@ function bindEvents() {
     catch (error) { state.config.auditMode = previous; renderConfig(); toast(errorText(error), true); }
   });
   $('#closeTemplateConfigButton').onclick = closeTemplateConfig;
-  $('#saveTemplateConfigButton').onclick = saveTemplateConfig;
-  const handleTemplateAnalysisFieldChange = event => {
+  $('#saveTemplateRegionsButton').onclick = saveTemplateRegions;
+  const handleTemplateRegionFieldChange = event => {
     const field = event.target.dataset.templateField;
     const card = event.target.closest('[data-template-index]');
     if (!field || !card) return;
@@ -5842,27 +5668,40 @@ function bindEvents() {
       card.querySelector('.template-action-hint').textContent = templateActionHint(item.action);
     }
   };
-  $('#templateAnalysisResult').oninput = handleTemplateAnalysisFieldChange;
-  $('#templateAnalysisResult').onchange = handleTemplateAnalysisFieldChange;
-  $('#templateAnalysisResult').onclick = event => {
+  $('#templateRegionResult').oninput = handleTemplateRegionFieldChange;
+  $('#templateRegionResult').onchange = handleTemplateRegionFieldChange;
+  $('#templateRegionResult').onclick = event => {
     const actionQuickButton = event.target.closest('[data-template-set-action]');
     if (actionQuickButton) {
       const path = state.activeTemplatePath;
       const quickItem = state.templateItems.find((entry) => entry.path === path);
       if (!quickItem) return;
       quickItem.action = actionQuickButton.dataset.templateSetAction;
-      const card = document.querySelector('#templateAnalysisResult [data-template-index]');
+      if (quickItem.action !== 'replace_print') quickItem.regions = [];
+      const card = document.querySelector('#templateRegionResult [data-template-index]');
       applyTemplateActionDefaults(quickItem, card);
-      renderTemplateAnalysisResult();
+      renderTemplateRegionResult();
       return;
     }
-    const referenceButton = event.target.closest('[data-reference-analysis]');
-    if (referenceButton) return analyzeActiveTemplateWithReference(referenceButton.dataset.referenceAnalysis);
+    const undoButton = event.target.closest('[data-region-undo]');
+    if (undoButton) {
+      const quickItem = activeTemplateItem();
+      quickItem?.regions?.pop();
+      if (quickItem && !quickItem.regions.length) quickItem.action = 'copy_original';
+      renderTemplateRegionResult();
+      return;
+    }
+    const clearButton = event.target.closest('[data-region-clear]');
+    if (clearButton) {
+      const quickItem = activeTemplateItem();
+      if (quickItem) {
+        quickItem.regions = [];
+        quickItem.action = 'copy_original';
+      }
+      renderTemplateRegionResult();
+      return;
+    }
   };
-  $('#closeProductProfileButton').onclick = closeProductProfile;
-  $('#cancelProductProfileButton').onclick = closeProductProfile;
-  $('#saveProductProfileButton').onclick = saveProductProfile;
-  $('#analyzeProductProfileButton').onclick = analyzeProductProfileFromSelection;
   $('#productGrid').onclick = event => {
     const card = event.target.closest('[data-type="product"]');
     if (!card) return;

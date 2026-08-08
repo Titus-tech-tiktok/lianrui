@@ -23,14 +23,16 @@ function round(value, digits = 4) {
 
 function normalizeRegion(value) {
   if (!value || typeof value !== 'object') return null;
-  const width = finiteNumber(value.width ?? value.w);
-  const height = finiteNumber(value.height ?? value.h);
+  const x = clamp(value.x, 0, 1);
+  const y = clamp(value.y, 0, 1);
+  const width = Math.min(finiteNumber(value.width ?? value.w), 1 - x);
+  const height = Math.min(finiteNumber(value.height ?? value.h), 1 - y);
   if (width <= 0 || height <= 0) return null;
   return {
-    x: clamp(value.x, 0, 1),
-    y: clamp(value.y, 0, 1),
-    width: clamp(width, 0, 1),
-    height: clamp(height, 0, 1)
+    x: round(x),
+    y: round(y),
+    width: round(width),
+    height: round(height)
   };
 }
 
@@ -141,8 +143,9 @@ function isUncertainManualText(value) {
   ].some(token => text.includes(token));
 }
 
-function createManualTemplateAnalysis({ action: actionValue, reason = '', replaceArea = '', forbiddenArea = '' } = {}) {
-  const action = normalizeTemplateAction(actionValue);
+function createManualTemplateAnalysis({ action: actionValue, reason = '', replaceArea = '', forbiddenArea = '', regions = [] } = {}) {
+  const replaceRegions = normalizeRegions(regions);
+  const action = actionValue ? normalizeTemplateAction(actionValue) : replaceRegions.length ? 'replace_print' : 'copy_original';
   const needsManualCheck = action === 'manual_check';
   const manualReason = String(reason || '').trim();
   const manualReplaceArea = String(replaceArea || '').trim();
@@ -162,7 +165,7 @@ function createManualTemplateAnalysis({ action: actionValue, reason = '', replac
     reason: manualReason || '运营手动筛选',
     replace_area: safeReplaceArea,
     imageUnderstanding: manualReason || '运营手动筛选',
-    replace_regions: [],
+    replace_regions: action === 'replace_print' ? replaceRegions : [],
     printableSurfaces: [],
     printableArea: action === 'replace_print' ? safeReplaceArea : '无',
     forbidden_area: String(forbiddenArea || '').trim() || DEFAULT_FORBIDDEN_AREA,
@@ -283,9 +286,11 @@ function validateTemplateAnalysis(value, options = {}) {
     imageUnderstanding: understanding,
     printableArea: replaceArea,
     replace_area: replaceArea,
-    // Keep AI polygons so generation can lock every non-editable pixel with a mask.
+    // AI rectangles are intentionally ignored; only operator-authored ROIs are trusted.
     printableSurfaces: surfaces,
-    replace_regions: [],
+    replace_regions: source === 'manual' && processingMode === 'replace_print'
+      ? normalizeRegions(root.replace_regions)
+      : [],
     preserveAreas,
     forbidden_area: preserveAreas,
     mappingMode: processingMode === 'replace_print' ? 'master_product_migration' : 'none',

@@ -11,6 +11,15 @@ async function writeImage(file, color = '#dddddd') {
   await sharp({ create: { width: 96, height: 96, channels: 3, background: color } }).png().toFile(file);
 }
 
+async function writeCabinetTemplate(file) {
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  const cabinet = Buffer.from('<svg width="144" height="192"><rect width="144" height="192" rx="10" fill="#171717"/><rect x="8" y="8" width="128" height="38" fill="#e2e2e2"/><rect x="8" y="52" width="128" height="38" fill="#e8e8e8"/><rect x="8" y="96" width="128" height="38" fill="#dedede"/><rect x="8" y="140" width="128" height="44" fill="#e5e5e5"/></svg>');
+  await sharp({ create: { width: 240, height: 240, channels: 3, background: '#b9aa98' } })
+    .composite([{ input: cabinet, left: 48, top: 24 }])
+    .png()
+    .toFile(file);
+}
+
 async function createFixture(t, workspaceId) {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), `caishen-flagship-complex-${workspaceId}-`));
   const imageBytes = await sharp({ create: { width: 48, height: 48, channels: 3, background: '#55aaee' } }).png().toBuffer();
@@ -97,55 +106,53 @@ async function createFixture(t, workspaceId) {
   const printPath = path.join(runtime.WORKSPACE_ROOT, 'assets', 'print', 'pattern.png');
   const masterImagePath = path.join(runtime.WORKSPACE_ROOT, 'assets', 'master', 'master.png');
   await Promise.all([
-    writeImage(templatePath, '#eeeeee'),
+    writeCabinetTemplate(templatePath),
     writeImage(printPath, '#dd3366'),
     writeImage(masterImagePath, '#3366dd')
   ]);
-  await runtime.saveTemplateConfiguration({
+  await runtime.saveTemplateRegions({
     folder: templateRoot,
     items: [{
       relativePath: '01-complex.png',
       action: 'replace_print',
       reason: 'complex ecommerce page with Chinese title text, white selling point labels, open cabinet door, internal storage, multi panel cabinet doors, props and text labels',
       replaceArea: 'visible cabinet door fronts',
-      forbiddenArea: 'Chinese text, white labels, open cabinet interior, props, black frame, seams, handles and legs'
+      forbiddenArea: 'Chinese text, white labels, open cabinet interior, props, black frame, seams, handles and legs',
+      regions: [{ x: 0.18, y: 0.08, width: 0.64, height: 0.84 }]
     }]
   });
 
   return { runtime, captured, templateRoot, printPath, masterImagePath, baseUrl: `http://127.0.0.1:${server.address().port}/v1` };
 }
 
-test('flagship template-print adds complex preservation instructions', { concurrency: false }, async (t) => {
-  const { runtime, captured, templateRoot, printPath } = await createFixture(t, 'flagship');
+test('flagship template-print uses the shared fixed four-image contract', { concurrency: false }, async (t) => {
+  const { runtime, captured, templateRoot, printPath, masterImagePath } = await createFixture(t, 'flagship');
   await runtime.saveSelectedModelPackage('flagship');
 
   const result = await runtime.generateTask({
     taskNumber: 1,
     generationMode: 'template_print',
     printPath,
+    masterImagePath,
     templateFolderPath: templateRoot,
     templateRelativePaths: ['01-complex.png']
   });
 
-  assert.match(captured.imageBodies[0], /FLAGSHIP_COMPLEX_TEMPLATE_PRINT_MODE/);
   assert.equal(result.summary.billingCostMinor, 300000);
   const events = await fs.readFile(path.join(result.folder, '.caishen-meta', 'image-api-events.jsonl'), 'utf8');
-  assert.match(events, /"maxConcurrency":14/);
-  assert.match(captured.imageBodies[0], /preserve every Chinese title/);
-  assert.match(captured.imageBodies[0], /DETAIL_SLICE_LAYOUT_PROTECTION_MODE/);
-  assert.match(captured.imageBodies[0], /ORDERED_DETAIL_SLICE_CONTINUITY_MODE/);
-  assert.match(captured.imageBodies[0], /one ordered detail-page slice, not a complete long detail page/);
-  assert.match(captured.imageBodies[0], /Keep the top edge and bottom edge bands stable/);
-  assert.match(captured.imageBodies[0], /Do not generate the full detail page/);
-  assert.match(captured.imageBodies[0], /Do not enlarge, crop, move or restyle Chinese text/);
-  assert.match(captured.imageBodies[0], /cropped drawer front or partial cabinet surface is still a valid target/);
-  assert.equal((captured.imageBodies[0].match(/name="image"/g) || []).length, 2);
+  assert.match(events, /"maxConcurrency":30/);
+  assert.match(captured.imageBodies[0], /CURRENT_REQUEST_EXECUTION_CONTRACT/);
+  assert.match(captured.imageBodies[0], /Use image 1 as the locked output canvas/);
+  assert.doesNotMatch(captured.imageBodies[0], /FLAGSHIP_COMPLEX_TEMPLATE_PRINT_MODE|DETAIL_SLICE_LAYOUT_PROTECTION_MODE/);
+  assert.equal((captured.imageBodies[0].match(/name="image\[\]"/g) || []).length, 4);
+  assert.equal((captured.imageBodies[0].match(/name="mask"/g) || []).length, 0);
   assert.match(captured.imageBodies[0], /filename="01-complex/);
+  assert.match(captured.imageBodies[0], /filename="master/);
   assert.match(captured.imageBodies[0], /filename="pattern/);
-  assert.doesNotMatch(captured.imageBodies[0], /filename="master/);
+  assert.match(captured.imageBodies[0], /\.regions\.png/);
 });
 
-test('standard template-print uses shared complex preservation mode without package prompt override', { concurrency: false }, async (t) => {
+test('standard template-print uses the shared four-image prompt without package override', { concurrency: false }, async (t) => {
   const { runtime, captured, templateRoot, printPath, masterImagePath } = await createFixture(t, 'standard');
   await runtime.saveSelectedModelPackage('standard');
 
@@ -159,7 +166,8 @@ test('standard template-print uses shared complex preservation mode without pack
   });
 
   assert.doesNotMatch(captured.imageBodies[0], /STANDARD ONLY PROMPT/);
-  assert.match(captured.imageBodies[0], /FLAGSHIP_COMPLEX_TEMPLATE_PRINT_MODE/);
+  assert.match(captured.imageBodies[0], /CURRENT_REQUEST_EXECUTION_CONTRACT/);
+  assert.doesNotMatch(captured.imageBodies[0], /FLAGSHIP_COMPLEX_TEMPLATE_PRINT_MODE/);
 });
 
 test('fast template-print bills package image price and uses package concurrency', { concurrency: false }, async (t) => {
@@ -176,10 +184,11 @@ test('fast template-print bills package image price and uses package concurrency
   });
 
   assert.doesNotMatch(captured.imageBodies[0], /FAST ONLY PROMPT/);
-  assert.match(captured.imageBodies[0], /FLAGSHIP_COMPLEX_TEMPLATE_PRINT_MODE/);
+  assert.match(captured.imageBodies[0], /CURRENT_REQUEST_EXECUTION_CONTRACT/);
+  assert.doesNotMatch(captured.imageBodies[0], /FLAGSHIP_COMPLEX_TEMPLATE_PRINT_MODE/);
   assert.equal(result.summary.billingCostMinor, 50000);
   const events = await fs.readFile(path.join(result.folder, '.caishen-meta', 'image-api-events.jsonl'), 'utf8');
-  assert.match(events, /"maxConcurrency":6/);
+  assert.match(events, /"maxConcurrency":30/);
 });
 
 test('fast review regeneration paths charge package image price', { concurrency: false }, async (t) => {
@@ -296,8 +305,10 @@ test('flagship template-print can include master reference when enabled', { conc
     templateRelativePaths: ['01-complex.png']
   });
 
-  assert.match(captured.imageBodies[0], /FLAGSHIP_COMPLEX_TEMPLATE_PRINT_MODE/);
-  assert.equal((captured.imageBodies[0].match(/name="image"/g) || []).length, 3);
+  assert.match(captured.imageBodies[0], /CURRENT_REQUEST_EXECUTION_CONTRACT/);
+  assert.doesNotMatch(captured.imageBodies[0], /FLAGSHIP_COMPLEX_TEMPLATE_PRINT_MODE/);
+  assert.equal((captured.imageBodies[0].match(/name="image\[\]"/g) || []).length, 4);
+  assert.equal((captured.imageBodies[0].match(/name="mask"/g) || []).length, 0);
   assert.match(captured.imageBodies[0], /filename="01-complex/);
   assert.match(captured.imageBodies[0], /filename="master/);
   assert.match(captured.imageBodies[0], /filename="pattern/);

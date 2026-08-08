@@ -31,12 +31,69 @@ test('review activity panel only renders after an explicit task card click', asy
   assert.match(clickBlock, /state\.reviewTaskActivated = true/);
 });
 
-test('template reference panel supports broad candidates and force replace analysis', async () => {
+test('template editor uses manual regions instead of AI reference analysis', async () => {
   const renderer = await fs.readFile(path.join(__dirname, '../../web/src/renderer.js'), 'utf8');
-  const candidatesBlock = renderer.match(/function templateReferenceCandidates\(item\) \{[\s\S]*?\n\}/)?.[0] || '';
+  const index = await fs.readFile(path.join(__dirname, '../../web/index.html'), 'utf8');
+  const bridge = await fs.readFile(path.join(__dirname, '../../web/src/api-bridge.js'), 'utf8');
+  const server = await fs.readFile(path.join(__dirname, '../src/server.js'), 'utf8');
+  const runtime = await fs.readFile(path.join(__dirname, '../src/runtime.js'), 'utf8');
+  assert.match(renderer, /function initializeTemplateRegionEditor\(item\)/);
+  assert.match(renderer, /const fitEditorToViewport = \(\) =>/);
+  assert.match(renderer, /layout\?\.clientHeight \|\| figure\.clientHeight/);
+  assert.match(renderer, /data-region-undo/);
+  assert.match(renderer, /data-region-clear/);
+  assert.match(renderer, /regions: item\.regions/);
+  assert.match(renderer, /typeof window\.PointerEvent === 'function'/);
+  assert.match(renderer, /window\.addEventListener\('mouseup', finishRegion, \{ once: true \}\)/);
+  assert.match(renderer, /function renderTemplateRegionResult\(\)/);
+  assert.doesNotMatch(renderer, /async function previewTemplateRegions\(\)/);
+  assert.doesNotMatch(renderer, /data-region-preview/);
+  assert.match(index, /id="templateRegionResult"/);
+  assert.match(index, /id="saveTemplateRegionsButton"/);
+  assert.doesNotMatch(bridge, /previewTemplateRegions/);
+  assert.doesNotMatch(server, /previewTemplateRegions/);
+  assert.doesNotMatch(runtime, /async function previewTemplateRegions\(payload\)/);
+  assert.match(runtime, /MASTER_COORDINATE_REGISTRATION_MODE/);
+  assert.doesNotMatch(renderer, /data-template-ai=/);
+  assert.doesNotMatch(renderer, /templateAnalysisResult|renderTemplateAnalysisResult|openTemplateAnalysisResult/);
+  assert.doesNotMatch(index, /templateAnalysisResult|saveTemplateConfigButton/);
+  assert.doesNotMatch(bridge, /analyzeTemplates:/);
+  assert.doesNotMatch(bridge, /analyzeTemplateItems:/);
+  assert.doesNotMatch(bridge, /analyzeTemplateItemWithReference:/);
+  assert.doesNotMatch(bridge, /saveTemplateConfig:/);
+  assert.doesNotMatch(server, /analyzeTemplates:\s*\(/);
+  assert.doesNotMatch(server, /analyzeTemplateItems:\s*\(/);
+  assert.doesNotMatch(server, /analyzeTemplateItemWithReference:\s*\(/);
+  assert.doesNotMatch(server, /saveTemplateConfig:\s*\(/);
+  assert.doesNotMatch(runtime, /function templateAnalysisForJob|function saveTemplateConfiguration/);
+});
 
-  assert.match(candidatesBlock, /templateDirectoryKey\(candidate\) === activeFolder/);
-  assert.doesNotMatch(candidatesBlock, /normalizeTemplateUiAction\(candidate\.action\) === 'replace_print'/);
-  assert.match(renderer, /data-force-replace-analysis/);
-  assert.match(renderer, /forceReplacePrint:\s*true/);
+test('legacy prompt entrypoints and master generation mode are not exposed', async () => {
+  const renderer = await fs.readFile(path.join(__dirname, '../../web/src/renderer.js'), 'utf8');
+  const index = await fs.readFile(path.join(__dirname, '../../web/index.html'), 'utf8');
+  const bridge = await fs.readFile(path.join(__dirname, '../../web/src/api-bridge.js'), 'utf8');
+  const server = await fs.readFile(path.join(__dirname, '../src/server.js'), 'utf8');
+  const runtime = await fs.readFile(path.join(__dirname, '../src/runtime.js'), 'utf8');
+
+  for (const source of [renderer, index, bridge, server, runtime]) {
+    assert.doesNotMatch(source, /analyzeProductProfile|productProfileAnalysis/);
+  }
+  assert.doesNotMatch(index, /value="master"/);
+  assert.doesNotMatch(index, /productProfileModal|analyzeProductProfileButton/);
+  assert.doesNotMatch(bridge, /regenerateMaster:/);
+  assert.doesNotMatch(server, /regenerateMaster:/);
+  assert.doesNotMatch(runtime, /getPromptValue\('masterGeneration'\)|getPromptValue\('templateMigration'\)/);
+  assert.doesNotMatch(runtime, /getPromptValue\('templateAudit'\)|getPromptValue\('templateAuditRecheck'\)/);
+});
+
+test('single-image regeneration keeps the same fixed four-image request as initial generation', async () => {
+  const renderer = await fs.readFile(path.join(__dirname, '../../web/src/renderer.js'), 'utf8');
+  const server = await fs.readFile(path.join(__dirname, '../src/server.js'), 'utf8');
+  const runtime = await fs.readFile(path.join(__dirname, '../src/runtime.js'), 'utf8');
+
+  assert.match(renderer, /重新生成仍固定使用四张输入/);
+  assert.doesNotMatch(renderer, /referenceResultRelativePath|reviewRegenerateReference/);
+  assert.doesNotMatch(server, /referenceResultRelativePath/);
+  assert.doesNotMatch(runtime, /referenceResultPath|exactly five images|Image 5/);
+  assert.match(runtime, /exactly four images in this fixed order/);
 });

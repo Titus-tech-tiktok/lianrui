@@ -8,27 +8,36 @@ const {
   renderPromptTemplate
 } = require('../src/core/prompt-settings');
 
-test('提示词设置覆盖所有固定 AI 调用和自由生图默认值', () => {
+test('prompt settings expose only the three active generation prompts', () => {
   assert.deepEqual(PROMPT_DEFINITIONS.map(item => item.id), [
-    'masterGeneration',
-    'templateAnalysis',
     'templatePrint',
     'templateMasterGeneration',
+    'freeImageDefault'
+  ]);
+  for (const removedId of [
+    'masterGeneration',
+    'templateAnalysis',
     'templateMigration',
     'productProfileAnalysis',
     'templateAudit',
-    'templateAuditRecheck',
-    'freeImageDefault'
-  ]);
-  assert.ok(PROMPT_DEFINITIONS.find(item => item.id === 'templateMigration').defaultValue.includes('{{templateAnalysis}}'));
+    'templateAuditRecheck'
+  ]) {
+    assert.equal(PROMPT_DEFINITIONS.some(item => item.id === removedId), false);
+    assert.throws(() => normalizePromptValue(removedId, 'unused'), /unknown prompt|\u672a\u77e5\u63d0\u793a\u8bcd/i);
+  }
 });
 
-test('自定义提示词保留空字符串并安全替换动态变量', () => {
-  const settings = publicPromptSettings({ prompts: { freeImageDefault: '', templatePrint: '分析={{templateAnalysis}}；路径={{templatePath}}' } });
+test('custom prompt values preserve empty strings and render dynamic values', () => {
+  const settings = publicPromptSettings({
+    prompts: {
+      freeImageDefault: '',
+      templatePrint: 'path={{templatePath}}'
+    }
+  });
   assert.equal(settings.prompts.find(item => item.id === 'freeImageDefault').customized, true);
+  assert.deepEqual(settings.prompts.find(item => item.id === 'templatePrint').placeholders, ['{{templatePath}}']);
   assert.equal(renderPromptTemplate(settings.prompts.find(item => item.id === 'templatePrint').value, {
-    templateAnalysis: '{"action":"replace_print"}',
-    templatePath: '主图/01.png'
-  }), '分析={"action":"replace_print"}；路径=主图/01.png');
+    templatePath: 'main/01.png'
+  }), 'path=main/01.png');
   assert.equal(normalizePromptValue('freeImageDefault', ''), '');
 });
