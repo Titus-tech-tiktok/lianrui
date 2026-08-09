@@ -7040,6 +7040,41 @@ label input, label textarea {
   white-space: nowrap;
 }
 
+.mobile-stats-gateway-card .mobile-stats-gateway-value {
+  display: flex;
+  grid-template-columns: none;
+  align-items: center;
+  gap: 8px;
+}
+
+.mobile-stats-gateway-value button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid rgba(47, 124, 116, .24);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .78);
+  color: var(--teal);
+  cursor: pointer;
+}
+
+.mobile-stats-gateway-value button:focus-visible {
+  outline: 3px solid rgba(47, 124, 116, .25);
+  outline-offset: 2px;
+}
+
+.mobile-stats-gateway-value svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .mobile-stats-panel {
   padding: 16px;
   border-radius: 22px;

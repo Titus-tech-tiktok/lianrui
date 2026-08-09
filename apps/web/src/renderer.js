@@ -116,6 +116,7 @@ const state = {
   mobileStats: null,
   mobileStatsRange: 'today',
   mobileGatewayUsage: null,
+  mobileGatewayBalanceVisible: false,
   mobileStatsUpdatedAt: '',
   config: null,
   products: [],
@@ -569,26 +570,26 @@ function ensureMobileStatsPage() {
   const page = document.createElement('section');
   page.className = 'page mobile-stats-page';
   page.id = 'page-mobile-stats';
-  page.setAttribute('aria-label', '手机全局统计');
+  page.setAttribute('aria-label', 'Global analytics');
   page.innerHTML = `
     <div class="mobile-stats-shell">
       <header class="mobile-stats-header">
         <div>
           <span>SUPER ADMIN</span>
-          <h1>永沙全局统计</h1>
-          <p id="mobileStatsUpdatedAt">正在读取最新数据</p>
+          <h1>Global Analytics</h1>
+          <p id="mobileStatsUpdatedAt">Loading latest data</p>
         </div>
-        <button class="mobile-stats-icon-button" id="refreshMobileStatsButton" type="button" aria-label="刷新">刷新</button>
+        <button class="mobile-stats-icon-button" id="refreshMobileStatsButton" type="button" aria-label="Refresh">Refresh</button>
       </header>
       <div id="mobileStatsContent" class="mobile-stats-content">
-        <div class="mobile-stats-loading">正在读取统计数据...</div>
+        <div class="mobile-stats-loading">Loading analytics...</div>
       </div>
     </div>`;
   document.querySelector('main')?.append(page);
 }
 
 function mobileRangeLabel(range) {
-  return ({ today: '今日', yesterday: '昨日', '7d': '近7天', month: '本月', '30d': '近30天' })[range] || range;
+  return ({ today: 'Today', yesterday: 'Yesterday', '7d': 'Last 7 Days', month: 'This Month', '30d': 'Last 30 Days' })[range] || range;
 }
 
 function mobileStatsTotalImages(totals = {}) {
@@ -596,8 +597,9 @@ function mobileStatsTotalImages(totals = {}) {
 }
 
 function formatGatewayContractBalance(value) {
+  if (!state.mobileGatewayBalanceVisible) return '$••••••';
   const amount = Number(value);
-  return Number.isFinite(amount) ? `$${amount.toFixed(2)}` : '暂时无法读取';
+  return Number.isFinite(amount) ? `$${amount.toFixed(2)}` : 'Unavailable';
 }
 
 function renderMobileStats() {
@@ -605,14 +607,14 @@ function renderMobileStats() {
   if (!container) return;
   const stats = state.mobileStats;
   if (!stats) {
-    container.innerHTML = '<div class="mobile-stats-loading">暂无统计数据</div>';
+    container.innerHTML = '<div class="mobile-stats-loading">No analytics available</div>';
     return;
   }
   const ranges = [
-    { key: 'today', label: '今日', dataKey: 'today' },
-    { key: 'yesterday', label: '昨日', dataKey: 'yesterday' },
-    { key: '7d', label: '近7天', dataKey: 'd7' },
-    { key: 'month', label: '本月', dataKey: 'month' }
+    { key: 'today', label: 'Today', dataKey: 'today' },
+    { key: 'yesterday', label: 'Yesterday', dataKey: 'yesterday' },
+    { key: '7d', label: 'Last 7 Days', dataKey: 'd7' },
+    { key: 'month', label: 'This Month', dataKey: 'month' }
   ];
   const selectedRange = ranges.find(item => item.key === state.mobileStatsRange) || ranges[0];
   const selectedStats = stats[selectedRange.dataKey] || {};
@@ -627,44 +629,51 @@ function renderMobileStats() {
     return `
       <div class="mobile-stats-account-row">
         <span class="mobile-stats-rank">${index + 1}</span>
-        <div class="mobile-stats-account-name"><b>${escapeHtml(item.displayName || item.username || '未命名账号')}</b><i style="width:${width}%"></i></div>
+        <div class="mobile-stats-account-name"><b>${escapeHtml(item.displayName || item.username || 'Unnamed account')}</b><i style="width:${width}%"></i></div>
         <strong>${formatMobileStatsMoney(item.totalCostMinor)}</strong>
         <strong class="mobile-stats-account-balance">${formatMobileStatsMoney(balance?.availableMinor)}</strong>
-        <em>${formatInteger(item.imageGenerated || 0)}张</em>
+        <em>${formatInteger(item.imageGenerated || 0)}</em>
       </div>`;
-  }).join('') : `<div class="mobile-stats-empty">${escapeHtml(selectedRange.label)}暂无账号消耗</div>`;
+  }).join('') : `<div class="mobile-stats-empty">No account usage for ${escapeHtml(selectedRange.label.toLowerCase())}</div>`;
   const totalImages = mobileStatsTotalImages(selectedTotals);
-  const updated = state.mobileStatsUpdatedAt ? `更新 ${formatLocalDateTime(state.mobileStatsUpdatedAt)}` : '已读取最新数据';
+  const updated = state.mobileStatsUpdatedAt ? `Updated ${formatLocalDateTime(state.mobileStatsUpdatedAt)}` : 'Analytics are up to date';
   const updatedNode = $('#mobileStatsUpdatedAt');
   if (updatedNode) updatedNode.textContent = updated;
   container.innerHTML = `
-    <nav class="mobile-stats-range-switch" aria-label="选择统计范围">
+    <nav class="mobile-stats-range-switch" aria-label="Select analytics range">
       ${ranges.map(item => `<button type="button" data-mobile-stats-range="${item.key}" class="${item.key === selectedRange.key ? 'active' : ''}">${escapeHtml(item.label)}</button>`).join('')}
     </nav>
     <section class="mobile-stats-gateway-card">
-      <div><span>网关合约费用</span><small>${state.mobileGatewayUsage?.available ? '实时可用余额' : '余额状态'}</small></div>
-      <strong>${formatGatewayContractBalance(state.mobileGatewayUsage?.balance)}</strong>
+      <div><span>OpenAI Service Credits</span><small>${state.mobileGatewayUsage?.available ? 'Live available balance' : 'Balance unavailable'}</small></div>
+      <div class="mobile-stats-gateway-value">
+        <strong>${formatGatewayContractBalance(state.mobileGatewayUsage?.balance)}</strong>
+        <button type="button" id="mobileGatewayBalanceToggle" aria-label="${state.mobileGatewayBalanceVisible ? 'Hide OpenAI service credits' : 'Show OpenAI service credits'}" aria-pressed="${state.mobileGatewayBalanceVisible}">
+          ${state.mobileGatewayBalanceVisible
+            ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18M10.6 10.7a2 2 0 0 0 2.7 2.7M9.9 4.2A10.7 10.7 0 0 1 12 4c5.5 0 9 5 9 5a15.7 15.7 0 0 1-2.1 2.5M6.6 6.6C4.4 8 3 10 3 10s3.5 5 9 5c1.2 0 2.3-.2 3.3-.6"/></svg>'
+            : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12s3.5-5 9-5 9 5 9 5-3.5 5-9 5-9-5-9-5Z"/><circle cx="12" cy="12" r="2.5"/></svg>'}
+        </button>
+      </div>
     </section>
     <section class="mobile-stats-hero-card">
       <div>
-        <span>${escapeHtml(selectedRange.label)}总消耗</span>
+        <span>${escapeHtml(selectedRange.label)} Spend</span>
         <strong>${formatMobileStatsMoney(selectedTotals.totalCostMinor)}</strong>
-        <p>首次生图 ${formatInteger(selectedTotals.imageGenerated || 0)} 张 · 重生成 ${formatInteger(selectedTotals.imageRegenerated || 0)} 张</p>
+        <p>Initial ${formatInteger(selectedTotals.imageGenerated || 0)} · Regenerated ${formatInteger(selectedTotals.imageRegenerated || 0)}</p>
       </div>
       <div class="mobile-stats-donut" style="--rate:${Math.round((Number(selectedTotals.successRate) || 0) * 360)}deg">
         <b>${formatPercent(selectedTotals.successRate)}</b>
-        <small>一次成功</small>
+        <small>First-pass success</small>
       </div>
     </section>
     <section class="mobile-stats-panel">
-      <div class="mobile-stats-panel-head"><h2>账号排行</h2><span>${escapeHtml(selectedRange.label)} · ${formatInteger((selectedStats.byAccount || []).length)} 个账号</span></div>
-      <div class="mobile-stats-account-head"><span>账号</span><span>消耗</span><span>可用余额</span><span>成功</span></div>
+      <div class="mobile-stats-panel-head"><h2>Account Ranking</h2><span>${escapeHtml(selectedRange.label)} · ${formatInteger((selectedStats.byAccount || []).length)} accounts</span></div>
+      <div class="mobile-stats-account-head"><span>Account</span><span>Spend</span><span>Balance</span><span>Success</span></div>
       <div class="mobile-stats-account-list">${accountHtml}</div>
     </section>
     <section class="mobile-stats-summary-strip">
-      <div><span>平均成本</span><b>${formatMobileStatsMoney(selectedTotals.averageCostMinor)}</b></div>
-      <div><span>总张数</span><b>${formatInteger(totalImages)}</b></div>
-      <div><span>套图分析</span><b>${formatInteger(selectedTotals.templateAnalysisFolders || 0)}</b></div>
+      <div><span>Average Cost</span><b>${formatMobileStatsMoney(selectedTotals.averageCostMinor)}</b></div>
+      <div><span>Total Images</span><b>${formatInteger(totalImages)}</b></div>
+      <div><span>Template Analyses</span><b>${formatInteger(selectedTotals.templateAnalysisFolders || 0)}</b></div>
     </section>`;
   container.querySelectorAll('[data-mobile-stats-range]').forEach(button => {
     button.onclick = () => {
@@ -672,6 +681,13 @@ function renderMobileStats() {
       renderMobileStats();
     };
   });
+  const balanceToggle = $('#mobileGatewayBalanceToggle');
+  if (balanceToggle) {
+    balanceToggle.onclick = () => {
+      state.mobileGatewayBalanceVisible = !state.mobileGatewayBalanceVisible;
+      renderMobileStats();
+    };
+  }
 }
 
 async function loadMobileStats() {
