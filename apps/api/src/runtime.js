@@ -1828,6 +1828,65 @@ async function apiJson(url, options = {}, timeoutMs = 120000) {
   }
 }
 
+let gatewayUsageCache = { value: null, expiresAt: 0, pending: null };
+
+function gatewayMoneyValue(value) {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value === 'string') value = value.replaceAll(',', '').replace(/^\s*\$/, '').trim();
+  if (value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function gatewayBalanceFromUsage(body = {}) {
+  const roots = [body, body?.data, body?.quota, body?.data?.quota].filter(Boolean);
+  for (const root of roots) {
+    for (const key of ['remaining', 'balance', 'available', 'available_balance']) {
+      const value = gatewayMoneyValue(root?.[key]);
+      if (value !== null) return value;
+    }
+  }
+  for (const root of [body?.quota, body?.data?.quota].filter(Boolean)) {
+    const limit = gatewayMoneyValue(root.limit);
+    const used = gatewayMoneyValue(root.used);
+    if (limit !== null && used !== null) return Math.max(0, limit - used);
+  }
+  return null;
+}
+
+async function getGatewayUsage(options = {}) {
+  const now = Date.now();
+  if (options.forceRefresh !== true && gatewayUsageCache.value && gatewayUsageCache.expiresAt > now) {
+    return gatewayUsageCache.value;
+  }
+  if (gatewayUsageCache.pending) return gatewayUsageCache.pending;
+  const pending = (async () => {
+    const api = await activeApiConfig('image');
+    const body = await apiJson(apiEndpoint(api.baseUrl, '/usage'), {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${api.imageKey}`,
+        Accept: 'application/json'
+      }
+    }, 15000);
+    const balance = gatewayBalanceFromUsage(body);
+    const value = {
+      available: balance !== null,
+      balance,
+      currency: String(body?.currency || body?.data?.currency || body?.quota?.currency || 'USD').toUpperCase(),
+      fetchedAt: new Date().toISOString()
+    };
+    gatewayUsageCache = { value, expiresAt: Date.now() + 30000, pending: null };
+    return value;
+  })();
+  gatewayUsageCache.pending = pending;
+  try {
+    return await pending;
+  } finally {
+    if (gatewayUsageCache.pending === pending) gatewayUsageCache.pending = null;
+  }
+}
+
 async function billableLlmJson(url, options = {}, timeoutMs = 120000, metadata = {}) {
   const reservation = await billing.reserve(currentWorkspaceId(), 'llm', {
     ...metadata,
@@ -4123,6 +4182,7 @@ const runtimeExports = {
   generateTemplateSetForFolder,
   generateTitleForTask,
   generateTitles,
+  getGatewayUsage,
   getTaobaoPublishPackage,
   getImageSchedulerSnapshot,
   getTaobaoPublishSettings,

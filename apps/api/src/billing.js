@@ -222,6 +222,11 @@ function createBillingService(dataRoot) {
       const days = range === '7d' ? 7 : 30;
       return { range, startMs: nowMs - days * dayMs, endMs: nowMs };
     }
+    if (range === 'month') {
+      const chinaNow = new Date(nowMs + chinaOffsetMs);
+      const monthStartMs = Date.UTC(chinaNow.getUTCFullYear(), chinaNow.getUTCMonth(), 1) - chinaOffsetMs;
+      return { range, startMs: monthStartMs, endMs: nowMs };
+    }
     return { range: 'today', startMs: todayStartMs, endMs: nowMs };
   }
 

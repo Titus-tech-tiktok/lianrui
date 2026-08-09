@@ -229,3 +229,31 @@ test('global stats include current non-superadmin balances by role', async t => 
   ]);
   assert.deepEqual(stats.balanceSummary.byAccount.map(item => item.workspaceId), ['admin-workspace', 'member-workspace']);
 });
+
+test('global stats current month excludes entries before Beijing month start', async t => {
+  const { root, billing } = await fixture();
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  await billing.saveRules({ enabled: true, imageFeeMinor: 100, llmFeeMinor: 20, defaultBalanceMinor: 1000 });
+  await billing.commit(await billing.reserve('current-workspace', 'image', { description: '本月生图' }));
+  await billing.commit(await billing.reserve('previous-workspace', 'image', { description: '上月生图' }));
+
+  const ledgerFile = path.join(root, 'system', 'billing-ledger.jsonl');
+  const entries = (await fs.readFile(ledgerFile, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+  const chinaOffsetMs = 8 * 60 * 60 * 1000;
+  const chinaNow = new Date(Date.now() + chinaOffsetMs);
+  const monthStartMs = Date.UTC(chinaNow.getUTCFullYear(), chinaNow.getUTCMonth(), 1) - chinaOffsetMs;
+  for (const entry of entries) {
+    if (entry.workspaceId === 'previous-workspace') entry.createdAt = new Date(monthStartMs - 1).toISOString();
+  }
+  await fs.writeFile(ledgerFile, `${entries.map(entry => JSON.stringify(entry)).join('\n')}\n`, 'utf8');
+
+  const stats = await billing.getGlobalStats('month', new Map([
+    ['current-workspace', { role: 'member', username: 'current' }],
+    ['previous-workspace', { role: 'member', username: 'previous' }]
+  ]));
+
+  assert.equal(stats.range, 'month');
+  assert.equal(stats.totals.totalCostMinor, 100);
+  assert.deepEqual(stats.byAccount.map(account => account.workspaceId), ['current-workspace']);
+  assert.equal(new Date(stats.startedAt).getTime(), monthStartMs);
+});

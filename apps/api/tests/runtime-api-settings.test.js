@@ -96,6 +96,12 @@ test('API settings keep Change2Pro image and analysis credentials isolated', asy
     global.fetch = async (url, options = {}) => {
       const authorization = options.headers?.Authorization;
       requests.push({ url: String(url), authorization });
+      if (String(url).endsWith('/v1/usage')) {
+        return new Response(JSON.stringify({ remaining: '125.78', currency: 'USD' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
       if (String(url).endsWith('/v1/chat/completions')) {
         chatRequest = JSON.parse(options.body);
         return new Response(JSON.stringify({ choices: [{ message: { content: 'OK' } }] }), {
@@ -136,6 +142,13 @@ test('API settings keep Change2Pro image and analysis credentials isolated', asy
     assert.equal(chatRequest.messages[0].role, 'user');
     assert.equal(typeof chatRequest.messages[0].content, 'string');
     assert.equal(Object.hasOwn(chatRequest, 'input'), false);
+
+    const gatewayUsage = await runtime.getGatewayUsage({ forceRefresh: true });
+    assert.equal(gatewayUsage.available, true);
+    assert.equal(gatewayUsage.balance, 125.78);
+    assert.equal(gatewayUsage.currency, 'USD');
+    assert.equal(requests.at(-1).url, 'https://api.change2pro.com/v1/usage');
+    assert.equal(requests.at(-1).authorization, 'Bearer image-private-key');
   } finally {
     global.fetch = originalFetch;
     delete require.cache[runtimePath];

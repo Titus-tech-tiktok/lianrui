@@ -114,6 +114,8 @@ const state = {
   globalStats: null,
   globalStatsRange: 'today',
   mobileStats: null,
+  mobileStatsRange: 'today',
+  mobileGatewayUsage: null,
   mobileStatsUpdatedAt: '',
   config: null,
   products: [],
@@ -586,23 +588,16 @@ function ensureMobileStatsPage() {
 }
 
 function mobileRangeLabel(range) {
-  return ({ today: '今日', yesterday: '昨日', '7d': '近7天', '30d': '近30天' })[range] || range;
+  return ({ today: '今日', yesterday: '昨日', '7d': '近7天', month: '本月', '30d': '近30天' })[range] || range;
 }
 
 function mobileStatsTotalImages(totals = {}) {
   return (totals.imageGenerated || 0) + (totals.imageRegenerated || 0) + (totals.masterGenerated || 0) + (totals.freeGenerated || 0);
 }
 
-function mobileStatsRangeCard(item, maxCostMinor) {
-  const totals = item.data?.totals || {};
-  const percent = maxCostMinor > 0 ? Math.min(100, Math.round(((Number(totals.totalCostMinor) || 0) / maxCostMinor) * 100)) : 0;
-  return `
-    <article class="mobile-stats-range-card">
-      <div class="mobile-stats-card-top"><span>${escapeHtml(item.label)}</span><em>${formatPercent(totals.successRate)}</em></div>
-      <strong>${formatMobileStatsMoney(totals.totalCostMinor)}</strong>
-      <div class="mobile-stats-card-meta"><b>${formatInteger(totals.imageGenerated || 0)}</b><span>首次</span><b>${formatInteger(totals.imageRegenerated || 0)}</b><span>重生</span></div>
-      <div class="mobile-stats-progress"><i style="width:${percent}%"></i></div>
-    </article>`;
+function formatGatewayContractBalance(value) {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? `$${amount.toFixed(2)}` : '暂时无法读取';
 }
 
 function renderMobileStats() {
@@ -614,52 +609,69 @@ function renderMobileStats() {
     return;
   }
   const ranges = [
-    { key: 'today', label: '今日', data: stats.today },
-    { key: 'yesterday', label: '昨日', data: stats.yesterday },
-    { key: '7d', label: '近7天', data: stats.d7 },
-    { key: '30d', label: '近30天', data: stats.d30 }
+    { key: 'today', label: '今日', dataKey: 'today' },
+    { key: 'yesterday', label: '昨日', dataKey: 'yesterday' },
+    { key: '7d', label: '近7天', dataKey: 'd7' },
+    { key: 'month', label: '本月', dataKey: 'month' }
   ];
-  const d30Totals = stats.d30?.totals || {};
-  const maxCostMinor = Math.max(1, ...ranges.map(item => Number(item.data?.totals?.totalCostMinor) || 0));
-  const accountRows = (stats.d30?.byAccount || []).slice(0, 6);
+  const selectedRange = ranges.find(item => item.key === state.mobileStatsRange) || ranges[0];
+  const selectedStats = stats[selectedRange.dataKey] || {};
+  const selectedTotals = selectedStats.totals || {};
+  const balanceByWorkspace = new Map((selectedStats.balanceSummary?.byAccount || [])
+    .map(account => [String(account.workspaceId || ''), account]));
+  const accountRows = (selectedStats.byAccount || []).slice(0, 6);
   const maxAccountCost = Math.max(1, ...accountRows.map(item => Number(item.totalCostMinor) || 0));
   const accountHtml = accountRows.length ? accountRows.map((item, index) => {
     const width = Math.max(6, Math.round(((Number(item.totalCostMinor) || 0) / maxAccountCost) * 100));
+    const balance = balanceByWorkspace.get(String(item.workspaceId || ''));
     return `
       <div class="mobile-stats-account-row">
         <span class="mobile-stats-rank">${index + 1}</span>
         <div class="mobile-stats-account-name"><b>${escapeHtml(item.displayName || item.username || '未命名账号')}</b><i style="width:${width}%"></i></div>
         <strong>${formatMobileStatsMoney(item.totalCostMinor)}</strong>
+        <strong class="mobile-stats-account-balance">${formatMobileStatsMoney(balance?.availableMinor)}</strong>
         <em>${formatInteger(item.imageGenerated || 0)}张</em>
       </div>`;
-  }).join('') : '<div class="mobile-stats-empty">近30天暂无账号消耗</div>';
-  const totalImages = mobileStatsTotalImages(d30Totals);
+  }).join('') : `<div class="mobile-stats-empty">${escapeHtml(selectedRange.label)}暂无账号消耗</div>`;
+  const totalImages = mobileStatsTotalImages(selectedTotals);
   const updated = state.mobileStatsUpdatedAt ? `更新 ${formatLocalDateTime(state.mobileStatsUpdatedAt)}` : '已读取最新数据';
   const updatedNode = $('#mobileStatsUpdatedAt');
   if (updatedNode) updatedNode.textContent = updated;
   container.innerHTML = `
+    <nav class="mobile-stats-range-switch" aria-label="选择统计范围">
+      ${ranges.map(item => `<button type="button" data-mobile-stats-range="${item.key}" class="${item.key === selectedRange.key ? 'active' : ''}">${escapeHtml(item.label)}</button>`).join('')}
+    </nav>
+    <section class="mobile-stats-gateway-card">
+      <div><span>网关合约费用</span><small>${state.mobileGatewayUsage?.available ? '实时可用余额' : '余额状态'}</small></div>
+      <strong>${formatGatewayContractBalance(state.mobileGatewayUsage?.balance)}</strong>
+    </section>
     <section class="mobile-stats-hero-card">
       <div>
-        <span>近30天总消耗</span>
-        <strong>${formatMobileStatsMoney(d30Totals.totalCostMinor)}</strong>
-        <p>首次生图 ${formatInteger(d30Totals.imageGenerated || 0)} 张 · 重生成 ${formatInteger(d30Totals.imageRegenerated || 0)} 张</p>
+        <span>${escapeHtml(selectedRange.label)}总消耗</span>
+        <strong>${formatMobileStatsMoney(selectedTotals.totalCostMinor)}</strong>
+        <p>首次生图 ${formatInteger(selectedTotals.imageGenerated || 0)} 张 · 重生成 ${formatInteger(selectedTotals.imageRegenerated || 0)} 张</p>
       </div>
-      <div class="mobile-stats-donut" style="--rate:${Math.round((Number(d30Totals.successRate) || 0) * 360)}deg">
-        <b>${formatPercent(d30Totals.successRate)}</b>
+      <div class="mobile-stats-donut" style="--rate:${Math.round((Number(selectedTotals.successRate) || 0) * 360)}deg">
+        <b>${formatPercent(selectedTotals.successRate)}</b>
         <small>一次成功</small>
       </div>
     </section>
-    <section class="mobile-stats-range-grid">${ranges.map(item => mobileStatsRangeCard(item, maxCostMinor)).join('')}</section>
     <section class="mobile-stats-panel">
-      <div class="mobile-stats-panel-head"><h2>账号排行</h2><span>近30天 · ${formatInteger((stats.d30?.byAccount || []).length)} 个账号</span></div>
-      <div class="mobile-stats-account-head"><span>账号</span><span>消耗金额</span><span>成功张数</span></div>
+      <div class="mobile-stats-panel-head"><h2>账号排行</h2><span>${escapeHtml(selectedRange.label)} · ${formatInteger((selectedStats.byAccount || []).length)} 个账号</span></div>
+      <div class="mobile-stats-account-head"><span>账号</span><span>消耗</span><span>可用余额</span><span>成功</span></div>
       <div class="mobile-stats-account-list">${accountHtml}</div>
     </section>
     <section class="mobile-stats-summary-strip">
-      <div><span>平均成本</span><b>${formatMobileStatsMoney(d30Totals.averageCostMinor)}</b></div>
+      <div><span>平均成本</span><b>${formatMobileStatsMoney(selectedTotals.averageCostMinor)}</b></div>
       <div><span>总张数</span><b>${formatInteger(totalImages)}</b></div>
-      <div><span>套图分析</span><b>${formatInteger(d30Totals.templateAnalysisFolders || 0)}</b></div>
+      <div><span>套图分析</span><b>${formatInteger(selectedTotals.templateAnalysisFolders || 0)}</b></div>
     </section>`;
+  container.querySelectorAll('[data-mobile-stats-range]').forEach(button => {
+    button.onclick = () => {
+      state.mobileStatsRange = button.dataset.mobileStatsRange || 'today';
+      renderMobileStats();
+    };
+  });
 }
 
 async function loadMobileStats() {
@@ -667,13 +679,15 @@ async function loadMobileStats() {
   const button = $('#refreshMobileStatsButton');
   if (button) button.disabled = true;
   try {
-    const [today, yesterday, d7, d30] = await Promise.all([
+    const [today, yesterday, d7, month, gatewayUsage] = await Promise.all([
       window.caishen.getGlobalStats('today'),
       window.caishen.getGlobalStats('yesterday'),
       window.caishen.getGlobalStats('7d'),
-      window.caishen.getGlobalStats('30d')
+      window.caishen.getGlobalStats('month'),
+      window.caishen.getGatewayUsage().catch(() => null)
     ]);
-    state.mobileStats = { today, yesterday, d7, d30 };
+    state.mobileStats = { today, yesterday, d7, month };
+    state.mobileGatewayUsage = gatewayUsage;
     state.mobileStatsUpdatedAt = new Date().toISOString();
     renderMobileStats();
   } catch (error) {

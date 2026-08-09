@@ -1331,6 +1331,15 @@ async function startServer() {
     }
   });
 
+  app.get('/api/billing/gateway-usage', async (req, res) => {
+    if (!isSuperAdmin(req.user)) return res.status(403).json({ error: '只有超级管理员可以查看网关合约费用' });
+    try {
+      return res.json({ data: await runtime.getGatewayUsage() });
+    } catch {
+      return res.status(502).json({ error: '网关合约费用暂时无法读取' });
+    }
+  });
+
   app.put('/api/billing/rules', async (req, res) => {
     if (!isSuperAdmin(req.user)) return res.status(403).json({ error: '只有超级管理员可以修改计费规则' });
     try {

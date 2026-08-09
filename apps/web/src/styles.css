@@ -6976,64 +6976,68 @@ label input, label textarea {
   font-size: 11px;
 }
 
-.mobile-stats-range-grid {
+.mobile-stats-range-switch {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  padding: 5px;
+  border: 1px solid rgba(203, 211, 205, .9);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, .78);
 }
 
-.mobile-stats-range-card {
-  padding: 15px;
-  border-radius: 18px;
-  display: grid;
-  gap: 8px;
+.mobile-stats-range-switch button {
+  min-width: 0;
+  padding: 10px 4px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
 }
 
-.mobile-stats-card-top {
+.mobile-stats-range-switch button.active {
+  background: var(--navy);
+  color: #fff;
+  box-shadow: 0 8px 18px rgba(16, 27, 43, .18);
+}
+
+.mobile-stats-gateway-card {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 16px;
+  padding: 15px 17px;
+  border: 1px solid rgba(47, 124, 116, .25);
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(255,255,255,.96), rgba(226,242,239,.92));
+  box-shadow: 0 14px 34px rgba(16, 27, 43, .07);
 }
 
-.mobile-stats-card-top em {
-  color: var(--teal);
-  font-size: 12px;
-  font-style: normal;
-  font-weight: 800;
+.mobile-stats-gateway-card div {
+  display: grid;
+  gap: 3px;
 }
 
-.mobile-stats-range-card strong {
-  color: var(--teal);
-  font-size: 28px;
-  line-height: 1.1;
-}
-
-.mobile-stats-card-meta {
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.mobile-stats-card-meta b {
+.mobile-stats-gateway-card span {
   color: var(--navy);
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 850;
 }
 
-.mobile-stats-progress {
-  height: 7px;
-  border-radius: 999px;
-  background: #e9efed;
-  overflow: hidden;
+.mobile-stats-gateway-card small {
+  color: var(--muted);
+  font-size: 11px;
 }
 
-.mobile-stats-progress i {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #2f7c74, #44aa9d);
+.mobile-stats-gateway-card strong {
+  color: var(--teal);
+  font-size: 24px;
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .mobile-stats-panel {
@@ -8625,4 +8629,27 @@ label input, label textarea {
 
 @media (hover: none), (pointer: coarse) {
   .image-hover-preview { display: none; }
+}
+
+.mobile-stats-account-head {
+  display: grid;
+  grid-template-columns: minmax(74px, 1fr) 68px 68px 38px;
+  padding: 0 0 8px 32px;
+}
+
+.mobile-stats-account-head span:not(:first-child) {
+  text-align: right;
+}
+
+.mobile-stats-account-row {
+  grid-template-columns: 24px minmax(74px, 1fr) 68px 68px 38px;
+  gap: 6px;
+}
+
+.mobile-stats-account-row strong {
+  font-size: 12px;
+}
+
+.mobile-stats-account-row .mobile-stats-account-balance {
+  color: var(--teal);
 }
