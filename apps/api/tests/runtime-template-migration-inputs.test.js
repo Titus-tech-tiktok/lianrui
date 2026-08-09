@@ -102,21 +102,23 @@ async function createFixture(t, workspaceId) {
 
   const templateRoot = path.join(runtime.WORKSPACE_ROOT, 'assets', 'template', 'set');
   const templatePath = path.join(templateRoot, 'sku', '1.png');
+  const secondTemplatePath = path.join(templateRoot, 'sku', '2.png');
   const printPath = path.join(runtime.WORKSPACE_ROOT, 'assets', 'print', 'pattern.png');
   await Promise.all([
     writeCabinetTemplate(templatePath),
+    writeCabinetTemplate(secondTemplatePath),
     writeImage(printPath, '#dd3366')
   ]);
   await runtime.saveTemplateRegions({
     folder: templateRoot,
-    items: [{
-      relativePath: 'sku/1.png',
+    items: ['sku/1.png', 'sku/2.png'].map(relativePath => ({
+      relativePath,
       action: 'replace_print',
       reason: 'sku card with labels and product layout',
       replaceArea: 'front cabinet panel',
       forbiddenArea: 'text labels, price tags, background, handle, seams and legs',
       regions: [{ x: 0.12, y: 0.08, width: 0.76, height: 0.84 }]
-    }]
+    }))
   });
 
   return { runtime, captured, templateRoot, printPath };
@@ -217,4 +219,45 @@ test('single regeneration sends the same fixed four semantic reference images', 
   assert.match(regenerationBody, /exactly four images in this fixed order/);
   assert.match(regenerationBody, /Never swap, omit, duplicate or reinterpret their roles/);
   assert.doesNotMatch(regenerationBody, /Image 5|exactly five images/);
+});
+
+test('single regeneration appends current and selected generated references after the fixed four images', { concurrency: false }, async (t) => {
+  const { runtime, captured, templateRoot, printPath } = await createFixture(t, 'regeneration-result-reference');
+  await runtime.saveSelectedModelPackage('flagship');
+
+  const master = await runtime.generateTemplateTaskMaster({
+    taskNumber: 1,
+    masterReferencePath: path.join(templateRoot, 'sku', '1.png'),
+    printPath,
+    templateFolderPath: templateRoot
+  });
+  const task = await runtime.generateTask({
+    taskNumber: 1,
+    generationMode: 'template_print',
+    masterImagePath: master.outputPath,
+    printPath,
+    templateFolderPath: templateRoot,
+    templateRelativePaths: ['sku/1.png', 'sku/2.png']
+  });
+
+  await runtime.regenerateSingleTemplate({
+    folder: task.folder,
+    relativePath: 'sku/1.png',
+    includePreviousResult: true,
+    referenceResultRelativePath: 'sku/2.png'
+  });
+
+  assert.equal(captured.imageBodies.length, 4);
+  const regenerationBody = captured.imageBodies[3];
+  const filenames = [...regenerationBody.matchAll(/name="image\[\]"; filename="([^"]+)"/g)].map(match => match[1]);
+  assert.equal(filenames.length, 6);
+  assert.match(filenames[0], /\.template\.png$/);
+  assert.match(filenames[1], /^template-master/);
+  assert.match(filenames[2], /^pattern/);
+  assert.match(filenames[3], /\.regions\.png$/);
+  assert.match(filenames[4], /^1\.(?:jpg|png)$/);
+  assert.match(filenames[5], /^2\.(?:jpg|png)$/);
+  assert.match(regenerationBody, /Image 5 is the current rejected result/);
+  assert.match(regenerationBody, /Image 6 is an operator-selected generated reference/);
+  assert.match(regenerationBody, /Image 1 remains the locked output canvas/);
 });

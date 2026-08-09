@@ -246,7 +246,49 @@ function createBillingService(dataRoot) {
     return date.toISOString();
   }
 
+  async function buildBalanceSummary(userLookup = new Map()) {
+    const [rules, state] = await Promise.all([readRules(), readAccounts()]);
+    const totals = { count: 0, balanceMinor: 0, availableMinor: 0, reservedMinor: 0 };
+    const byRole = new Map();
+    const byAccount = [];
+    for (const [lookupWorkspaceId, user] of userLookup.entries()) {
+      const workspaceId = String(user?.workspaceId || lookupWorkspaceId || '').trim();
+      if (!workspaceId || user?.role === 'superadmin') continue;
+      const account = normalizeAccount(state.accounts[workspaceId], rules.defaultBalanceMinor);
+      const publicValue = publicAccount(workspaceId, account);
+      const role = String(user?.role || 'member');
+      const roleSummary = byRole.get(role) || { role, count: 0, balanceMinor: 0, availableMinor: 0, reservedMinor: 0 };
+      roleSummary.count += 1;
+      roleSummary.balanceMinor += publicValue.balanceMinor;
+      roleSummary.availableMinor += publicValue.availableMinor;
+      roleSummary.reservedMinor += publicValue.reservedMinor;
+      byRole.set(role, roleSummary);
+      totals.count += 1;
+      totals.balanceMinor += publicValue.balanceMinor;
+      totals.availableMinor += publicValue.availableMinor;
+      totals.reservedMinor += publicValue.reservedMinor;
+      byAccount.push({
+        workspaceId,
+        username: user?.username || '',
+        displayName: user?.displayName || '',
+        role,
+        active: user?.active !== false,
+        balanceMinor: publicValue.balanceMinor,
+        availableMinor: publicValue.availableMinor,
+        reservedMinor: publicValue.reservedMinor,
+        updatedAt: publicValue.updatedAt
+      });
+    }
+    byAccount.sort((left, right) => right.balanceMinor - left.balanceMinor);
+    return {
+      totals,
+      byRole: [...byRole.values()].sort((left, right) => right.balanceMinor - left.balanceMinor),
+      byAccount
+    };
+  }
+
   async function getGlobalStats(rangeValue = 'today', userLookup = new Map()) {
+    const balanceSummary = await buildBalanceSummary(userLookup);
     const windowRange = statsWindowRange(rangeValue);
     let text = '';
     try { text = await fs.readFile(ledgerFile, 'utf8'); } catch {
@@ -270,6 +312,8 @@ function createBillingService(dataRoot) {
     for (const line of text.trim().split('\n').filter(Boolean)) {
       let entry;
       try { entry = JSON.parse(line); } catch { continue; }
+      if (!BILLING_TYPES.has(String(entry.kind || ''))) continue;
+      if (userLookup.get(entry.workspaceId)?.role === 'superadmin') continue;
       const created = new Date(entry.createdAt).getTime();
       if (!Number.isFinite(created) || created < windowRange.startMs || created >= windowRange.endMs) continue;
       const sourceScale = entry?.amountScale === BILLING_SCALE ? BILLING_SCALE : 100;
@@ -298,11 +342,15 @@ function createBillingService(dataRoot) {
         totalCostMinor: 0,
         imageGenerated: 0,
         imageRegenerated: 0,
+        masterGenerated: 0,
+        freeGenerated: 0,
         analysisCalls: 0
       };
       account.totalCostMinor += spendMinor;
       if (bucket === 'generation') account.imageGenerated += 1;
       if (bucket === 'regeneration') account.imageRegenerated += 1;
+      if (bucket === 'master') account.masterGenerated += 1;
+      if (bucket === 'free') account.freeGenerated += 1;
       if (entry.kind === 'llm') account.analysisCalls += 1;
       byAccount.set(workspaceId, account);
       const operation = byOperation.get(bucket) || { key: bucket, count: 0, totalCostMinor: 0 };
@@ -315,17 +363,18 @@ function createBillingService(dataRoot) {
       point.costMinor += spendMinor;
       trend.set(hour, point);
     }
-    const deliveredImages = totals.imageGenerated + totals.masterGenerated + totals.freeGenerated;
-    const firstPassImages = Math.max(0, totals.imageGenerated - totals.imageRegenerated);
-    const successRate = totals.imageGenerated > 0 ? firstPassImages / totals.imageGenerated : 0;
+    const deliveredImages = totals.imageGenerated + totals.imageRegenerated + totals.masterGenerated + totals.freeGenerated;
+    const firstPassImages = totals.imageGenerated;
+    const successBase = totals.imageGenerated + totals.imageRegenerated;
+    const successRate = successBase > 0 ? totals.imageGenerated / successBase : 0;
     const averageCostMinor = deliveredImages > 0 ? Math.round(totals.totalCostMinor / deliveredImages) : 0;
     const decorateAccount = account => ({
       ...account,
-      successRate: account.imageGenerated > 0
-        ? Math.max(0, account.imageGenerated - account.imageRegenerated) / account.imageGenerated
+      successRate: (account.imageGenerated + account.imageRegenerated) > 0
+        ? account.imageGenerated / (account.imageGenerated + account.imageRegenerated)
         : 0,
-      averageCostMinor: account.imageGenerated > 0
-        ? Math.round(account.totalCostMinor / account.imageGenerated)
+      averageCostMinor: (account.imageGenerated + account.imageRegenerated + account.masterGenerated + account.freeGenerated) > 0
+        ? Math.round(account.totalCostMinor / (account.imageGenerated + account.imageRegenerated + account.masterGenerated + account.freeGenerated))
         : 0
     });
     return {
@@ -347,6 +396,7 @@ function createBillingService(dataRoot) {
         activeWorkspaces: totals.activeWorkspaces.size,
         failedOrRetry: totals.failedOrRetry
       },
+      balanceSummary,
       byAccount: [...byAccount.values()].map(decorateAccount).sort((a, b) => b.totalCostMinor - a.totalCostMinor),
       byOperation: [...byOperation.values()].sort((a, b) => b.totalCostMinor - a.totalCostMinor),
       trend: [...trend.values()].sort((a, b) => a.time.localeCompare(b.time))

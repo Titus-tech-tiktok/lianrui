@@ -3025,6 +3025,14 @@ async function generateTemplateJob(job, source, config, options = {}) {
   imagePaths.push(annotationPath);
   const requestImageContract = 'The request contains exactly four images in this fixed order: locked template canvas, print master reference, original print artwork, and red-ROI annotation. Never swap, omit, duplicate or reinterpret their roles.';
   prompt += `\n\nCURRENT_REQUEST_EXECUTION_CONTRACT\n${requestImageContract} Use image 1 as the locked output canvas. Use image 2 to understand the complete print placement on this cabinet and image 3 as the original artwork source. Image 4 only marks the approximate cabinet search area; the red box is not a paste rectangle and must not appear in the output. Apply the complete registered print only to visible cabinet or drawer exterior fronts inside that area. Preserve the original canvas, crop, layout, text, labels, background, people, props, foreground occluders, cabinet frame, seams, handles, legs, sides, drawer interiors and lighting. For opened drawers, keep one continuous facade registration and project each corresponding row onto its existing exterior front. For partial cabinet views, transfer only the matching master-image fragment. Never paste a flat rectangle, redraw the page, change cabinet geometry, zoom, crop, pad or outpaint. Output one finished image at the same composition and dimensions as image 1.`;
+  if (options.includePreviousResult && fs.existsSync(job.outputPath)) {
+    imagePaths.push(job.outputPath);
+    prompt += `\n\nImage ${imagePaths.length} is the current rejected result. Use it only to identify what should be corrected. Do not copy its defects, altered layout, geometry, text, background or artifacts.`;
+  }
+  if (options.referenceResultPath && fs.existsSync(options.referenceResultPath)) {
+    imagePaths.push(options.referenceResultPath);
+    prompt += `\n\nImage ${imagePaths.length} is an operator-selected generated reference. Use it only as a positive reference for print placement, cabinet-front continuity, preserved frame, seams, sides and legs. Do not copy its composition, dimensions, scene, text or pixels. Image 1 remains the locked output canvas.`;
+  }
   const isRegeneration = Boolean(options.isRegeneration || options.extraInstruction);
   let bytes = await generateImage(prompt, imagePaths, {
     size: generationCanvas.size,
@@ -3246,6 +3254,7 @@ async function regenerateSingleTemplateUnlocked(payload, options = {}) {
   const job = await findReviewJob(folder, payload?.relativePath);
   const config = await loadConfig();
   const extraInstruction = String(payload?.extraInstruction || '').trim();
+  const referenceResultPath = await resolveReviewReferenceResultPath(folder, payload?.referenceResultRelativePath || '');
   const progressFile = metadataPaths(folder).generationProgress;
   const activeProgress = await readJsonFile(progressFile, {});
   const activePhase = String(activeProgress?.phase || '');
@@ -3296,6 +3305,8 @@ async function regenerateSingleTemplateUnlocked(payload, options = {}) {
     generated = await generateTemplateJob(job, source, config, {
       extraInstruction,
       isRegeneration: true,
+      includePreviousResult: Boolean(payload?.includePreviousResult),
+      referenceResultPath,
       signal: options.signal,
       onRequestState: event => {
         void publishSingleProgress({
@@ -3936,6 +3947,16 @@ async function findReviewJob(folder, relativePath) {
   });
   if (!job) throw new Error(`未找到套图图片：${relativePath}`);
   return job;
+}
+
+async function resolveReviewReferenceResultPath(folder, relativePath) {
+  const value = String(relativePath || '').trim();
+  if (!value) return '';
+  const referenceJob = await findReviewJob(folder, value);
+  if (!referenceJob.outputPath || !fs.existsSync(referenceJob.outputPath)) {
+    throw new Error(`参考结果图尚未生成：${referenceJob.relativePath}`);
+  }
+  return referenceJob.outputPath;
 }
 
 async function setTemplateManualStatus(payload) {

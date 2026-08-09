@@ -180,6 +180,8 @@ test('global stats exclude superadmin account usage', async t => {
   assert.equal(stats.totals.analysisCalls, 1);
   assert.equal(stats.totals.activeWorkspaces, 1);
   assert.deepEqual(stats.byAccount.map(account => account.workspaceId), ['member-workspace']);
+  assert.equal(stats.byOperation.reduce((total, item) => total + item.totalCostMinor, 0), 120);
+  assert.equal(stats.trend.reduce((total, item) => total + item.costMinor, 0), 120);
 });
 
 test('global stats use total generated count and actual retry success rate', async t => {

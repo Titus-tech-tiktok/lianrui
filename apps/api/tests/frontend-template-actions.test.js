@@ -86,16 +86,20 @@ test('legacy prompt entrypoints and master generation mode are not exposed', asy
   assert.doesNotMatch(runtime, /getPromptValue\('templateAudit'\)|getPromptValue\('templateAuditRecheck'\)/);
 });
 
-test('single-image regeneration keeps the same fixed four-image request as initial generation', async () => {
+test('single-image regeneration keeps four fixed base images and supports generated-result references', async () => {
   const renderer = await fs.readFile(path.join(__dirname, '../../web/src/renderer.js'), 'utf8');
   const server = await fs.readFile(path.join(__dirname, '../src/server.js'), 'utf8');
   const runtime = await fs.readFile(path.join(__dirname, '../src/runtime.js'), 'utf8');
 
-  assert.match(renderer, /重新生成仍固定使用四张输入/);
-  assert.doesNotMatch(renderer, /referenceResultRelativePath|reviewRegenerateReference/);
-  assert.doesNotMatch(server, /referenceResultRelativePath/);
-  assert.doesNotMatch(runtime, /referenceResultPath|exactly five images|Image 5/);
+  assert.match(renderer, /function reviewRegenerationReferenceCandidates/);
+  assert.match(renderer, /referenceResultRelativePath/);
+  assert.match(renderer, /参考当前这张不合格结果/);
+  assert.match(renderer, /可选参考结果图/);
+  assert.match(server, /referenceResultRelativePath/);
+  assert.match(runtime, /resolveReviewReferenceResultPath/);
+  assert.match(runtime, /operator-selected generated reference/);
   assert.match(runtime, /exactly four images in this fixed order/);
+  assert.match(runtime, /imagePaths\.push\(options\.referenceResultPath\)/);
 });
 
 test('review regeneration accepts multiple submissions and stop-all clears their local state', async () => {

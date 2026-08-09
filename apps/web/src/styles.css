@@ -2689,7 +2689,9 @@ input:focus, textarea:focus, select:focus {
   font-weight: 700;
 }
 
-.review-regenerate-modal header p {
+.review-regenerate-modal header p,
+.review-regenerate-reference span,
+.review-regenerate-reference-card small {
   color: var(--muted);
   font-size: 12px;
 }
@@ -2703,7 +2705,8 @@ input:focus, textarea:focus, select:focus {
   background: var(--paper);
 }
 
-.review-regenerate-field b {
+.review-regenerate-field b,
+.review-regenerate-reference b {
   display: block;
   margin-bottom: 8px;
 }
@@ -2713,6 +2716,72 @@ input:focus, textarea:focus, select:focus {
   resize: vertical;
   min-height: 96px;
   background: #fff;
+}
+
+.review-regenerate-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.review-regenerate-check input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--teal);
+}
+
+.review-regenerate-reference-list {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 10px;
+}
+
+.review-regenerate-reference-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfaf7;
+  padding: 10px;
+  display: grid;
+  grid-template-columns: 18px 64px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  cursor: pointer;
+}
+
+.review-regenerate-reference-card:first-child {
+  grid-template-columns: 18px minmax(0, 1fr);
+}
+
+.review-regenerate-reference-card.selected {
+  border-color: var(--teal);
+  background: #eef6f3;
+}
+
+.review-regenerate-reference-card input {
+  accent-color: var(--teal);
+}
+
+.review-regenerate-reference-card img {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  border-radius: 6px;
+  background: #e8e8e3;
+}
+
+.review-regenerate-reference-card span {
+  min-width: 0;
+}
+
+.review-regenerate-reference-card b,
+.review-regenerate-reference-card small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .review-regenerate-note {

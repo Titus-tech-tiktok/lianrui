@@ -355,6 +355,11 @@ function formatMoney(minor = 0) {
   return `$${formatUsdAmount(Math.max(0, Number(minor) || 0) / BILLING_AMOUNT_SCALE)}`;
 }
 
+function formatMobileStatsMoney(minor = 0) {
+  const amount = Math.max(0, Number(minor) || 0) / BILLING_AMOUNT_SCALE;
+  return `$${amount.toFixed(2)}`;
+}
+
 function formatDurationMs(ms = 0) {
   const totalSeconds = Math.max(0, Math.floor(Number(ms) / 1000));
   const hours = Math.floor(totalSeconds / 3600);
@@ -594,7 +599,7 @@ function mobileStatsRangeCard(item, maxCostMinor) {
   return `
     <article class="mobile-stats-range-card">
       <div class="mobile-stats-card-top"><span>${escapeHtml(item.label)}</span><em>${formatPercent(totals.successRate)}</em></div>
-      <strong>${formatMoney(totals.totalCostMinor)}</strong>
+      <strong>${formatMobileStatsMoney(totals.totalCostMinor)}</strong>
       <div class="mobile-stats-card-meta"><b>${formatInteger(totals.imageGenerated || 0)}</b><span>首次</span><b>${formatInteger(totals.imageRegenerated || 0)}</b><span>重生</span></div>
       <div class="mobile-stats-progress"><i style="width:${percent}%"></i></div>
     </article>`;
@@ -630,7 +635,7 @@ function renderMobileStats() {
       <div class="mobile-stats-account-row">
         <span class="mobile-stats-rank">${index + 1}</span>
         <div class="mobile-stats-account-name"><b>${escapeHtml(item.displayName || item.username || '未命名账号')}</b><i style="width:${width}%"></i></div>
-        <strong>${formatMoney(item.totalCostMinor)}</strong>
+        <strong>${formatMobileStatsMoney(item.totalCostMinor)}</strong>
         <em>${formatInteger(item.imageGenerated || 0)}张</em>
       </div>`;
   }).join('') : '<div class="mobile-stats-empty">近30天暂无账号消耗</div>';
@@ -642,7 +647,7 @@ function renderMobileStats() {
     <section class="mobile-stats-hero-card">
       <div>
         <span>近30天总消耗</span>
-        <strong>${formatMoney(d30Totals.totalCostMinor)}</strong>
+        <strong>${formatMobileStatsMoney(d30Totals.totalCostMinor)}</strong>
         <p>首次生图 ${formatInteger(d30Totals.imageGenerated || 0)} 张 · 重生成 ${formatInteger(d30Totals.imageRegenerated || 0)} 张</p>
       </div>
       <div class="mobile-stats-donut" style="--rate:${Math.round((Number(d30Totals.successRate) || 0) * 360)}deg">
@@ -661,7 +666,7 @@ function renderMobileStats() {
       <div class="mobile-stats-account-list">${accountHtml}</div>
     </section>
     <section class="mobile-stats-summary-strip">
-      <div><span>平均成本</span><b>${formatMoney(d30Totals.averageCostMinor)}</b></div>
+      <div><span>平均成本</span><b>${formatMobileStatsMoney(d30Totals.averageCostMinor)}</b></div>
       <div><span>总张数</span><b>${formatInteger(totalImages)}</b></div>
       <div><span>套图分析</span><b>${formatInteger(d30Totals.templateAnalysisFolders || 0)}</b></div>
     </section>`;
@@ -2151,6 +2156,21 @@ function normalizedRelativePath(value = '') {
   return String(value || '').replaceAll('\\', '/').toLocaleLowerCase('zh-CN');
 }
 
+function reviewRegenerationReferenceCandidates(item, currentJob) {
+  const current = normalizedRelativePath(currentJob?.relativePath);
+  return (item?.jobs || [])
+    .filter(job => job?.outputUrl && normalizedRelativePath(job.relativePath) !== current)
+    .filter(job => {
+      const action = normalizeTemplateUiAction(job.action);
+      return action !== 'exclude' && action !== 'copy_original';
+    })
+    .map(job => ({
+      relativePath: job.relativePath,
+      outputUrl: job.outputUrl,
+      status: job.status || ''
+    }));
+}
+
 function closeReviewRegenerationDialog(result = null) {
   const dialog = state.reviewRegenerationDialog;
   if (!dialog) return;
@@ -2159,8 +2179,9 @@ function closeReviewRegenerationDialog(result = null) {
   dialog.resolve(result);
 }
 
-function openReviewRegenerationDialog(job) {
+function openReviewRegenerationDialog(item, job) {
   if (state.reviewRegenerationDialog) closeReviewRegenerationDialog(null);
+  const candidates = reviewRegenerationReferenceCandidates(item, job);
   const element = document.createElement('div');
   element.className = 'review-regenerate-modal-backdrop';
   element.innerHTML = `<section class="review-regenerate-modal" role="dialog" aria-modal="true" aria-labelledby="reviewRegenerateTitle">
@@ -2170,7 +2191,22 @@ function openReviewRegenerationDialog(job) {
     </header>
     <div class="review-regenerate-body">
       <label class="review-regenerate-field"><b>本次额外要求</b><textarea data-review-regenerate-note rows="4" placeholder="例如：印花只能覆盖柜门面板，不能盖住黑色边框、台面、侧板、柜脚和场景物品。"></textarea></label>
-      <p class="review-regenerate-note">重新生成仍固定使用四张输入：套图原图、母版图、印花原图、红框标注图。</p>
+      <label class="review-regenerate-check"><input type="checkbox" data-review-regenerate-previous ${job.outputUrl ? '' : 'disabled'}>参考当前这张不合格结果，只修正问题</label>
+      <div class="review-regenerate-reference">
+        <div><b>可选参考结果图</b><span>选择一张已经生成的效果图，只参考印花落位和柜体结构，不复制它的构图或尺寸。</span></div>
+        <div class="review-regenerate-reference-list">
+          <label class="review-regenerate-reference-card selected">
+            <input type="radio" name="review-regenerate-reference" value="" checked>
+            <span>不使用其他参考图</span>
+          </label>
+          ${candidates.map(candidate => `<label class="review-regenerate-reference-card">
+            <input type="radio" name="review-regenerate-reference" value="${escapeHtml(candidate.relativePath)}">
+            <img src="${escapeHtml(candidate.outputUrl)}" data-preview-src="${escapeHtml(candidate.outputUrl)}" alt="${escapeHtml(candidate.relativePath)} 参考结果">
+            <span><b>${escapeHtml(candidate.relativePath)}</b><small>${escapeHtml(candidate.status || '已生成')}</small></span>
+          </label>`).join('')}
+        </div>
+      </div>
+      <p class="review-regenerate-note">基础输入仍固定为套图原图、母版图、印花原图、红框标注图；所选结果图只作为追加参考。</p>
     </div>
     <footer><button class="secondary" type="button" data-review-regenerate-cancel>取消</button><button class="primary" type="button" data-review-regenerate-submit>提交重新生成</button></footer>
   </section>`;
@@ -2181,9 +2217,19 @@ function openReviewRegenerationDialog(job) {
       closeReviewRegenerationDialog(null);
       return;
     }
+    const card = event.target.closest('.review-regenerate-reference-card');
+    if (card) {
+      element.querySelectorAll('.review-regenerate-reference-card').forEach(item => item.classList.remove('selected'));
+      card.classList.add('selected');
+      const input = card.querySelector('input[type="radio"]');
+      if (input) input.checked = true;
+    }
     if (event.target.closest('[data-review-regenerate-submit]')) {
+      const reference = element.querySelector('input[name="review-regenerate-reference"]:checked')?.value || '';
       closeReviewRegenerationDialog({
-        extraInstruction: element.querySelector('[data-review-regenerate-note]')?.value || ''
+        extraInstruction: element.querySelector('[data-review-regenerate-note]')?.value || '',
+        includePreviousResult: Boolean(element.querySelector('[data-review-regenerate-previous]')?.checked),
+        referenceResultRelativePath: reference
       });
     }
   });
@@ -3360,7 +3406,7 @@ function renderReviewStage() {
           return;
         }
         if (button.dataset.jobAction === 'regenerate') {
-          const regenerationOptions = await openReviewRegenerationDialog(job);
+          const regenerationOptions = await openReviewRegenerationDialog(item, job);
           if (!regenerationOptions) return;
           const regenExtraInstruction = regenerationOptions.extraInstruction || '';
           const reviewRegenerateKey = reviewJobActionKey(item, job);
@@ -3371,7 +3417,9 @@ function renderReviewStage() {
           await window.caishen.regenerateTemplate({
             folder: item.folder,
             relativePath: job.relativePath,
-            extraInstruction: regenExtraInstruction
+            extraInstruction: regenExtraInstruction,
+            includePreviousResult: Boolean(regenerationOptions.includePreviousResult),
+            referenceResultRelativePath: regenerationOptions.referenceResultRelativePath || ''
           }, (progress, backgroundJob) => {
             if (backgroundJob?.id && ['queued', 'running'].includes(backgroundJob.status)) {
               state.reviewRegenerationJobIds.set(reviewRegenerateKey, backgroundJob.id);

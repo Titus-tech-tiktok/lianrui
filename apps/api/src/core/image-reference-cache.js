@@ -58,8 +58,10 @@ function createImageReferenceCache(options = {}) {
     }
 
     options.onConvert?.(filePath);
-    await fsp.mkdir(path.dirname(outputPath), { recursive: true });
-    const temporaryPath = `${outputPath}.${process.pid}.${crypto.randomUUID()}.tmp${extension}`;
+    const temporaryPath = path.join(
+      path.dirname(outputPath),
+      `${key.slice(0, 8)}.${process.pid}.${crypto.randomUUID().slice(0, 8)}.tmp${extension}`
+    );
     let pipeline = sharp(filePath, { failOn: 'none' }).rotate().resize({
       width: spec.maxEdge,
       height: spec.maxEdge,
@@ -70,7 +72,11 @@ function createImageReferenceCache(options = {}) {
       ? pipeline.png({ compressionLevel: 9, adaptiveFiltering: true })
       : pipeline.jpeg({ quality: spec.jpegQuality, mozjpeg: true });
     try {
-      await withConversionSlot(() => pipeline.toFile(temporaryPath));
+      await withConversionSlot(async () => {
+        // The cache root may be pruned while this conversion waits for a slot.
+        await fsp.mkdir(path.dirname(outputPath), { recursive: true });
+        await pipeline.toFile(temporaryPath);
+      });
       await fsp.rename(temporaryPath, outputPath);
     } catch (error) {
       if (!fs.existsSync(outputPath)) {
