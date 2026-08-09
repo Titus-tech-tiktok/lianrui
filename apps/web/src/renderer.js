@@ -621,12 +621,6 @@ function renderMobileStats() {
   ];
   const d30Totals = stats.d30?.totals || {};
   const maxCostMinor = Math.max(1, ...ranges.map(item => Number(item.data?.totals?.totalCostMinor) || 0));
-  const maxGenerated = Math.max(1, ...ranges.map(item => Number(item.data?.totals?.imageGenerated) || 0));
-  const chartHtml = ranges.map(item => {
-    const totals = item.data?.totals || {};
-    const height = Math.max(12, Math.round(((Number(totals.imageGenerated) || 0) / maxGenerated) * 100));
-    return `<div class="mobile-stats-chart-bar"><i style="height:${height}%"></i><span>${escapeHtml(item.label)}</span></div>`;
-  }).join('');
   const accountRows = (stats.d30?.byAccount || []).slice(0, 6);
   const maxAccountCost = Math.max(1, ...accountRows.map(item => Number(item.totalCostMinor) || 0));
   const accountHtml = accountRows.length ? accountRows.map((item, index) => {
@@ -656,10 +650,6 @@ function renderMobileStats() {
       </div>
     </section>
     <section class="mobile-stats-range-grid">${ranges.map(item => mobileStatsRangeCard(item, maxCostMinor)).join('')}</section>
-    <section class="mobile-stats-panel mobile-stats-chart-panel">
-      <div class="mobile-stats-panel-head"><h2>生成趋势</h2><span>按首次生图对比</span></div>
-      <div class="mobile-stats-chart">${chartHtml}</div>
-    </section>
     <section class="mobile-stats-panel">
       <div class="mobile-stats-panel-head"><h2>账号排行</h2><span>近30天 · ${formatInteger((stats.d30?.byAccount || []).length)} 个账号</span></div>
       <div class="mobile-stats-account-head"><span>账号</span><span>消耗金额</span><span>成功张数</span></div>
@@ -3199,7 +3189,13 @@ function renderReviewTrackingLog(item, summary, running) {
     summary.completedAt ? `完成 ${formatLocalDateTime(summary.completedAt)}` : '',
     !summary.completedAt && summary.updatedAt ? `更新 ${formatLocalDateTime(summary.updatedAt)}` : ''
   ].filter(Boolean).join(' · ');
-  $('#reviewOperationLog').innerHTML = `<div class="review-log-summary"><b>${running ? '当前任务正在处理' : counts.failed ? '当前任务需要处理' : '当前任务处理完成'}</b><span>${summary.current}/${summary.total} 张已处理</span><small>完成 ${counts.completed} · 失败 ${counts.failed} · 待处理 ${counts.pending} · 未查看 ${counts.unread}${summary.billingCostMinor ? ` · 成本 ${formatMoney(summary.billingCostMinor)}` : ''}${summaryTimes ? ` · ${escapeHtml(summaryTimes)}` : ''}</small></div><div class="review-log-filters">${filterButton('all', '当前任务全部', entries.length)}${filterButton('unread', '未查看', counts.unread)}${filterButton('completed', '完成', counts.completed)}${filterButton('failed', '失败', counts.failed)}${filterButton('pending', '待处理', counts.pending)}</div><div class="review-track-list">${items}</div><details class="review-log-history"><summary>查看当前任务记录</summary>${history}</details>`;
+  const log = $('#reviewOperationLog');
+  const scrollTop = log.scrollTop;
+  const historyOpen = Boolean(log.querySelector('.review-log-history')?.open);
+  log.innerHTML = `<div class="review-log-summary"><b>${running ? '当前任务正在处理' : counts.failed ? '当前任务需要处理' : '当前任务处理完成'}</b><span>${summary.current}/${summary.total} 张已处理</span><small>完成 ${counts.completed} · 失败 ${counts.failed} · 待处理 ${counts.pending} · 未查看 ${counts.unread}${summary.billingCostMinor ? ` · 成本 ${formatMoney(summary.billingCostMinor)}` : ''}${summaryTimes ? ` · ${escapeHtml(summaryTimes)}` : ''}</small></div><div class="review-log-filters">${filterButton('all', '当前任务全部', entries.length)}${filterButton('unread', '未查看', counts.unread)}${filterButton('completed', '完成', counts.completed)}${filterButton('failed', '失败', counts.failed)}${filterButton('pending', '待处理', counts.pending)}</div><div class="review-track-list">${items}</div><details class="review-log-history"><summary>查看当前任务记录</summary>${history}</details>`;
+  const nextHistory = log.querySelector('.review-log-history');
+  if (nextHistory) nextHistory.open = historyOpen;
+  log.scrollTop = Math.min(scrollTop, Math.max(0, log.scrollHeight - log.clientHeight));
 }
 
 function renderEmptyReviewTrackingLog() {
@@ -3243,6 +3239,14 @@ function visibleReviewEntries() {
     const jobs = item.jobs || [];
     const reviewableJobs = jobs.filter(job => job.status !== '已跳过');
     const fullyApproved = reviewableJobs.length > 0 && reviewableJobs.every(job => job.status === '已通过');
+    if (filter === '人工不通过') {
+      return jobs.some(job => String(job.manualReview?.Status || job.manualReview?.status || '') === '人工不通过');
+    }
+    if (filter === '触发过重新生成') {
+      const hasClientRecord = state.reviewRegenerationRecords.some(record => record.folder === item.folder);
+      const hasOperationLog = (item.logs || []).some(log => String(log.message || log.Message || '').includes('重新生成单张'));
+      return hasClientRecord || hasOperationLog;
+    }
     if (filter === '已通过') return fullyApproved;
     return filter === '全部图片' || item.status === filter || jobs.some(job => job.status === filter);
   });

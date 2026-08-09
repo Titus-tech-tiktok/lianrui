@@ -118,3 +118,23 @@ test('review regeneration accepts multiple submissions and stop-all clears their
   assert.match(runtime, /queueTemplateRegeneration\(folder, options\.signal/);
   assert.match(runtime, /phase: 'failed',[\s\S]*?已停止重新生成/);
 });
+
+test('review activity refresh preserves its own scroll position', async () => {
+  const renderer = await fs.readFile(path.join(__dirname, '../../web/src/renderer.js'), 'utf8');
+  const block = renderer.match(/function renderReviewTrackingLog[\s\S]*?\n\}/)?.[0] || '';
+
+  assert.match(block, /const scrollTop = log\.scrollTop/);
+  assert.match(block, /log\.scrollTop = Math\.min\(scrollTop/);
+  assert.match(block, /historyOpen/);
+});
+
+test('review task filters use manual rejection and regeneration history', async () => {
+  const renderer = await fs.readFile(path.join(__dirname, '../../web/src/renderer.js'), 'utf8');
+  const index = await fs.readFile(path.join(__dirname, '../../web/index.html'), 'utf8');
+
+  assert.match(index, /<option>人工不通过<\/option>/);
+  assert.match(index, /<option>触发过重新生成<\/option>/);
+  assert.doesNotMatch(index, /<option>AI不通过<\/option>|<option>待人工确认<\/option>|<option>直接套模板<\/option>/);
+  assert.match(renderer, /filter === '人工不通过'[\s\S]*?manualReview\?\.Status/);
+  assert.match(renderer, /filter === '触发过重新生成'[\s\S]*?reviewRegenerationRecords[\s\S]*?重新生成单张/);
+});
