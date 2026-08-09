@@ -242,19 +242,42 @@ async function collectZipEntries(root, folder = root, entries = []) {
   return entries;
 }
 
+async function collectZipDownloadEntries(folder) {
+  const root = path.resolve(folder);
+  const files = await collectZipEntries(root);
+  const entries = files.map(file => ({
+    file,
+    name: path.relative(root, file).replaceAll(path.sep, '/')
+  }));
+  const source = await readZipSourceMetadata(root);
+  const masterImagePath = path.resolve(String(source.masterImagePath || ''));
+  const masterStat = source.masterImagePath && runtime.isWorkspacePath(masterImagePath)
+    ? await fsp.stat(masterImagePath).catch(() => null)
+    : null;
+  if (masterStat?.isFile()) {
+    const extension = path.extname(masterImagePath) || '.png';
+    const masterName = `母版图${extension.toLowerCase()}`;
+    const alreadyIncluded = entries.some(entry => normalizedComparablePath(entry.file) === normalizedComparablePath(masterImagePath));
+    const nameTaken = entries.some(entry => entry.name.toLocaleLowerCase('zh-CN') === masterName.toLocaleLowerCase('zh-CN'));
+    if (!alreadyIncluded && !nameTaken) entries.push({ file: masterImagePath, name: masterName });
+  }
+  return entries;
+}
+
 async function createFolderZip(folder) {
   const root = path.resolve(folder);
   const localParts = [];
   const centralParts = [];
   let offset = 0;
-  const files = await collectZipEntries(root);
-  for (const file of files) {
+  const entries = await collectZipDownloadEntries(root);
+  for (const entry of entries) {
+    const file = entry.file;
     const stat = await fsp.stat(file);
     const source = await fsp.readFile(file);
     const compressedCandidate = zlib.deflateRawSync(source);
     const useDeflate = compressedCandidate.length < source.length;
     const payload = useDeflate ? compressedCandidate : source;
-    const name = Buffer.from(path.relative(root, file).replaceAll(path.sep, '/'), 'utf8');
+    const name = Buffer.from(entry.name, 'utf8');
     const checksum = crc32(source);
     const dos = zipDosDateTime(stat.mtime);
     const localHeader = Buffer.alloc(30);
@@ -297,8 +320,8 @@ async function createFolderZip(folder) {
   end.writeUInt32LE(0x06054b50, 0);
   end.writeUInt16LE(0, 4);
   end.writeUInt16LE(0, 6);
-  end.writeUInt16LE(files.length, 8);
-  end.writeUInt16LE(files.length, 10);
+  end.writeUInt16LE(entries.length, 8);
+  end.writeUInt16LE(entries.length, 10);
   end.writeUInt32LE(centralSize, 12);
   end.writeUInt32LE(offset, 16);
   end.writeUInt16LE(0, 20);
@@ -1573,6 +1596,8 @@ module.exports = {
   addAssetFiles,
   buildZipDownloadName,
   canAccessRpc,
+  collectZipDownloadEntries,
+  createFolderZip,
   createAssetThumbnail,
   decodeFileToken,
   deleteAssetFiles,
