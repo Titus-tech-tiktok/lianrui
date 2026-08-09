@@ -147,6 +147,7 @@ const state = {
   viewedReviewJobs: new Set(),
   reviewRegenerationRecords: [],
   regeneratingReviewJobs: new Set(),
+  reviewRegenerationJobIds: new Map(),
   selectedReviewFolders: new Set(),
   reviewRegenerationDialog: null,
   freeSource: null,
@@ -2858,6 +2859,29 @@ async function stopCurrentReviewGeneration() {
     const result = await window.caishen.cancelActiveJobs();
     state.stopGenerationRequested = true;
     state.activeReviewGenerationJobId = '';
+    state.regeneratingReviewJobs.clear();
+    state.reviewRegenerationJobIds.clear();
+    let recordsChanged = false;
+    state.reviewRegenerationRecords.forEach(record => {
+      if (record.status !== 'running') return;
+      record.status = 'stopped';
+      record.updatedAt = new Date().toISOString();
+      recordsChanged = true;
+    });
+    if (recordsChanged) persistReviewRegenerationRecords();
+    if (state.activeReview?.generationProgress) {
+      state.activeReview.generationProgress = {
+        ...state.activeReview.generationProgress,
+        phase: 'failed',
+        pending: 0,
+        waitingUpstream: 0,
+        message: '任务已手动停止',
+        completedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+    }
+    renderReviewList();
+    renderReviewStagePreservingScroll();
     toast(Number(result?.count) > 0 ? `已强制停止 ${result.count} 个后台任务` : '已发送停止指令，当前没有排队或运行中的后台任务');
     await loadReviews();
   } catch (error) {
@@ -2977,6 +3001,41 @@ function updateReviewRegenerationRecord(record, status) {
   persistReviewRegenerationRecords();
 }
 
+function runningReviewRegenerationRecord(item, job) {
+  return state.reviewRegenerationRecords.slice().reverse().find(record => (
+    record.folder === item.folder
+    && normalizedRelativePath(record.relativePath) === normalizedRelativePath(job.relativePath)
+    && record.status === 'running'
+  ));
+}
+
+async function stopReviewRegeneration(item, job) {
+  const key = reviewJobActionKey(item, job);
+  const jobId = state.reviewRegenerationJobIds.get(key);
+  if (!jobId) return toast('任务正在提交，请稍后再点停止', true);
+  try {
+    await window.caishen.cancelJob(jobId);
+    state.reviewRegenerationJobIds.delete(key);
+    state.regeneratingReviewJobs.delete(key);
+    updateReviewRegenerationRecord(runningReviewRegenerationRecord(item, job), 'stopped');
+    if (state.activeReview?.folder === item.folder) {
+      state.activeReview.generationProgress = {
+        ...(state.activeReview.generationProgress || {}),
+        phase: 'failed',
+        pending: 0,
+        waitingUpstream: 0,
+        message: `已停止重新生成：${job.relativePath}`,
+        completedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      renderReviewStagePreservingScroll();
+    }
+    toast(`已停止重新生成：${job.relativePath}`);
+  } catch (error) {
+    toast(errorText(error), true);
+  }
+}
+
 function renderReviewStagePreservingScroll() {
   const stage = $('#reviewStage');
   const top = stage ? stage.scrollTop : 0;
@@ -3020,8 +3079,8 @@ function renderReviewTrackingLog(item, summary, running) {
     .map((record, recordIndex) => {
       const index = jobs.findIndex(job => normalizedRelativePath(job.relativePath) === normalizedRelativePath(record.relativePath));
       const job = jobs[index] || { relativePath: record.relativePath };
-      const status = record.status === 'failed' ? 'failed' : record.status === 'completed' ? 'completed' : 'pending';
-      const label = record.status === 'failed' ? '重新生成失败' : record.status === 'completed' ? '重新生成完成' : '重新生成中';
+      const status = ['failed', 'stopped'].includes(record.status) ? 'failed' : record.status === 'completed' ? 'completed' : 'pending';
+      const label = record.status === 'stopped' ? '重新生成已停止' : record.status === 'failed' ? '重新生成失败' : record.status === 'completed' ? '重新生成完成' : '重新生成中';
       const updated = formatLocalDateTime(record.updatedAt || record.createdAt);
       return {
         job,
@@ -3234,11 +3293,14 @@ function renderReviewStage() {
         : `<div class="review-compare-placeholder${job.generationError ? ' failed' : running && !skipped ? ' running' : ''}"><span>${escapeHtml(job.generationError ? '生成失败' : skipped ? '按规则不输出' : running ? '正在生成' : '待生成')}</span>${running && !skipped && !job.generationError ? '<i aria-hidden="true"></i>' : ''}</div>`;
       const templatePreviewUrl = job.templatePreviewUrl || job.templateThumbnailUrl || job.templateUrl;
       const templateThumbUrl = job.templateThumbnailUrl || job.templatePreviewUrl || job.templateUrl;
-      const generationActionDisabled = regenerating || (running && !copied);
-      const generationActionLabel = regenerating ? '重新生成中' : running && !copied ? '整套生成中' : copied ? '检查规则' : '重新生成';
+      const wholeSetRunning = running && localRegenerating === 0;
+      const regenerationJobId = state.reviewRegenerationJobIds.get(reviewJobActionKey(item, job));
+      const generationActionDisabled = regenerating ? !regenerationJobId : (wholeSetRunning && !copied);
+      const generationActionLabel = regenerating ? (regenerationJobId ? '停止重新生成' : '正在提交…') : wholeSetRunning && !copied ? '整套生成中' : copied ? '检查规则' : '重新生成';
+      const generationAction = regenerating ? 'stop-regenerate' : copied ? 'configure' : 'regenerate';
       const actions = skipped
         ? `<div class="review-image-actions review-image-skipped"><span>按套图规则不输出，不进入最终图片</span><button class="text-button" data-job-action="configure" data-job-index="${index}">检查规则</button></div>`
-        : `<div class="review-image-actions"><button class="secondary" data-job-action="pass" data-job-index="${index}"${!job.outputUrl || regenerating ? ' disabled' : ''}>通过</button><button class="secondary danger-outline" data-job-action="reject" data-job-index="${index}"${!job.outputUrl || regenerating ? ' disabled' : ''}>不通过</button><button class="secondary" data-job-action="${copied ? 'configure' : 'regenerate'}" data-job-index="${index}"${generationActionDisabled ? ' disabled' : ''}>${generationActionLabel}</button></div>`;
+        : `<div class="review-image-actions"><button class="secondary" data-job-action="pass" data-job-index="${index}"${!job.outputUrl || regenerating ? ' disabled' : ''}>通过</button><button class="secondary danger-outline" data-job-action="reject" data-job-index="${index}"${!job.outputUrl || regenerating ? ' disabled' : ''}>不通过</button><button class="secondary${regenerating ? ' danger-outline' : ''}" data-job-action="${generationAction}" data-job-index="${index}"${generationActionDisabled ? ' disabled' : ''}>${generationActionLabel}</button></div>`;
       return `<figure class="review-image comparison${skipped ? ' skipped' : ''}${copied ? ' copied' : ''}${regenerating ? ' regenerating' : ''}" data-review-job="${index}"><div class="review-image-status"><b>${escapeHtml(job.relativePath)}</b><span>${escapeHtml(regenerating ? '重新生成中' : job.status)}</span></div><div class="review-compare"><div class="review-compare-side"><span>原套图模板</span><div class="review-compare-frame"><img loading="lazy" decoding="async" src="${templateThumbUrl}" data-preview-src="${templatePreviewUrl}" alt="${escapeHtml(job.relativePath)} 原套图模板"></div></div><div class="review-compare-side result"><span>${escapeHtml(displayResultLabel)}</span><div class="review-compare-frame">${resultPreview}</div></div></div><figcaption>${regenerating ? '已提交重新生成，完成后会自动刷新右侧结果' : skipped ? '此图按规则不输出，不进入最终套图' : job.outputUrl ? (copied ? '原图直接复制，未调用 API' : '左侧原模板，右侧本次生成结果') : '生成完成后会在右侧自动显示结果'}</figcaption>${actions}</figure>`;
     }).join('')
     : item.images.map(image => `<figure class="review-image legacy"><img loading="lazy" decoding="async" src="${image.url}" data-preview-src="${image.url}" alt="${escapeHtml(image.name)}"><figcaption>${escapeHtml(image.name)}</figcaption></figure>`).join('');
@@ -3287,6 +3349,10 @@ function renderReviewStage() {
       renderReviewTrackingLog(item, summary, running);
       button.disabled = true;
       try {
+        if (button.dataset.jobAction === 'stop-regenerate') {
+          await stopReviewRegeneration(item, job);
+          return;
+        }
         if (button.dataset.jobAction === 'configure') {
           setPage('tasks');
           await loadTemplatePreparation();
@@ -3306,7 +3372,10 @@ function renderReviewStage() {
             folder: item.folder,
             relativePath: job.relativePath,
             extraInstruction: regenExtraInstruction
-          }, progress => {
+          }, (progress, backgroundJob) => {
+            if (backgroundJob?.id && ['queued', 'running'].includes(backgroundJob.status)) {
+              state.reviewRegenerationJobIds.set(reviewRegenerateKey, backgroundJob.id);
+            }
             if (!state.activeReview || state.activeReview.folder !== item.folder) return;
             updateReviewRegenerationRecord(regenerationRecord, 'running');
             state.activeReview.generationProgress = {
@@ -3319,6 +3388,7 @@ function renderReviewStage() {
             };
             renderReviewStagePreservingScroll();
           });
+          state.reviewRegenerationJobIds.delete(reviewRegenerateKey);
           state.regeneratingReviewJobs.delete(reviewRegenerateKey);
           updateReviewRegenerationRecord(regenerationRecord, 'completed');
           toast(`已重新生成：${job.relativePath}`);
@@ -3329,11 +3399,13 @@ function renderReviewStage() {
         }
         await loadReviews();
       } catch (error) {
+        const stoppedRecord = state.reviewRegenerationRecords.slice().reverse().find(itemRecord => itemRecord.folder === item.folder && normalizedRelativePath(itemRecord.relativePath) === normalizedRelativePath(job.relativePath) && itemRecord.status === 'stopped');
         const record = state.reviewRegenerationRecords.slice().reverse().find(itemRecord => itemRecord.folder === item.folder && normalizedRelativePath(itemRecord.relativePath) === normalizedRelativePath(job.relativePath) && itemRecord.status === 'running');
         updateReviewRegenerationRecord(record, 'failed');
+        state.reviewRegenerationJobIds.delete(reviewJobActionKey(item, job));
         state.regeneratingReviewJobs.delete(reviewJobActionKey(item, job));
         if (state.activeReview?.folder === item.folder) renderReviewStage();
-        toast(errorText(error), true);
+        if (!stoppedRecord) toast(errorText(error), true);
       } finally {
         button.disabled = false;
       }

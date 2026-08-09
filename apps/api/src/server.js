@@ -607,9 +607,14 @@ async function cancelWorkspaceJobs(workspaceId = runtime.WORKSPACE_ID) {
     const job = await cancelJob(id);
     if (job) cancelled.push(job);
   }
+  const deadline = Date.now() + 5000;
+  while ([...ids].some(id => activeJobControllers.has(id)) && Date.now() < deadline) {
+    await wait(50);
+  }
+  const settled = await Promise.all(cancelled.map(job => readJob(job.id)));
   return {
     count: cancelled.length,
-    jobs: cancelled.map(publicJob)
+    jobs: settled.map((job, index) => publicJob(job || cancelled[index]))
   };
 }
 

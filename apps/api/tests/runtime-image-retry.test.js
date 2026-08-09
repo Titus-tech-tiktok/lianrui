@@ -121,6 +121,12 @@ test('template-print regeneration entrypoints use the image API', async (t) => {
   assert.equal(afterSingleRegenerationBilling.account.balanceMinor, 400000);
   assert.equal(requests, 5, '单张重新生成仍应调用图片 API');
 
+  await Promise.all([
+    runtime.regenerateSingleTemplate({ folder: generated.folder, relativePath: '1.png' }),
+    runtime.regenerateSingleTemplate({ folder: generated.folder, relativePath: '1.png' })
+  ]);
+  assert.equal(requests, 7, '连续提交的单张重新生成应安全排队且全部调用图片 API');
+
 });
 
 test('template-print queue completes all thirty images through the adaptive image API queue', async (t) => {

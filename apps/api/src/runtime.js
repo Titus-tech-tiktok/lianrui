@@ -100,6 +100,48 @@ const billing = createBillingService(DATA_ROOT);
 const DEFAULT_WORKSPACE_ID = String(process.env.CAISHEN_WORKSPACE_ID || 'local').replace(/[^a-zA-Z0-9_-]/g, '') || 'local';
 const workspaceContext = new AsyncLocalStorage();
 const configuredOutputRoots = new Map();
+const templateRegenerationQueues = new Map();
+
+function waitForTemplateRegenerationTurn(previous, signal) {
+  if (!signal) return previous;
+  if (signal.aborted) return Promise.reject(new Error('任务已停止'));
+  return new Promise((resolve, reject) => {
+    const handleAbort = () => reject(new Error('任务已停止'));
+    signal.addEventListener('abort', handleAbort, { once: true });
+    previous.then(
+      value => {
+        signal.removeEventListener('abort', handleAbort);
+        resolve(value);
+      },
+      error => {
+        signal.removeEventListener('abort', handleAbort);
+        reject(error);
+      }
+    );
+  });
+}
+
+async function queueTemplateRegeneration(folder, signal, operation) {
+  const key = path.resolve(folder).toLocaleLowerCase('en-US');
+  const previous = templateRegenerationQueues.get(key) || Promise.resolve();
+  let release;
+  let acquired = false;
+  const turn = new Promise(resolve => { release = resolve; });
+  templateRegenerationQueues.set(key, turn);
+  try {
+    await waitForTemplateRegenerationTurn(previous, signal);
+    acquired = true;
+    if (signal?.aborted) throw new Error('任务已停止');
+    return await operation();
+  } finally {
+    const finishTurn = () => {
+      release();
+      if (templateRegenerationQueues.get(key) === turn) templateRegenerationQueues.delete(key);
+    };
+    if (acquired) finishTurn();
+    else previous.then(finishTurn);
+  }
+}
 
 function normalizeWorkspaceId(value) {
   return String(value || DEFAULT_WORKSPACE_ID).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80) || DEFAULT_WORKSPACE_ID;
@@ -3197,7 +3239,7 @@ async function generateTemplateSetForFolder(folder, onlyMissing = true, relative
   return { folder, generated: jobs.length - failures.length, failures, rejected, summary };
 }
 
-async function regenerateSingleTemplate(payload, options = {}) {
+async function regenerateSingleTemplateUnlocked(payload, options = {}) {
   const folder = String(payload?.folder || '');
   const source = await readSourceMetadata(folder);
   if (source.generationMode !== 'template_print') throw new Error('只支持人工框选套图生成流程');
@@ -3209,11 +3251,10 @@ async function regenerateSingleTemplate(payload, options = {}) {
   const activePhase = String(activeProgress?.phase || '');
   const progressAgeMs = Date.now() - new Date(activeProgress?.updatedAt || 0).getTime();
   if (['queued', 'preparing', 'analyzing', 'generating', 'auditing', 'running'].includes(activePhase)
+      && !activeProgress?.activeRelativePath
       && Number.isFinite(progressAgeMs)
       && progressAgeMs < 20 * 60 * 1000) {
-    throw new Error(activeProgress?.activeRelativePath
-      ? '当前已有单张图片正在重新生成，请等待完成后再试。'
-      : '当前整套任务仍在生成，请等待整套完成后再重新生成单张图片。');
+    throw new Error('当前整套任务仍在生成，请等待整套完成后再重新生成单张图片。');
   }
   const startedAt = new Date().toISOString();
   const publishSingleProgress = async update => {
@@ -3250,21 +3291,35 @@ async function regenerateSingleTemplate(payload, options = {}) {
     pending: 1,
     message: `正在重新生成：${job.relativePath}`
   });
-  const generated = await generateTemplateJob(job, source, config, {
-    extraInstruction,
-    isRegeneration: true,
-    signal: options.signal,
-    onRequestState: event => {
-      void publishSingleProgress({
-        phase: 'generating',
-        pending: 1,
-        waitingUpstream: event?.state === 'retrying' ? 1 : 0,
-        message: event?.state === 'retrying'
-          ? `生图接口等待重试：${job.relativePath}`
-          : `正在重新生成：${job.relativePath}`
-      }).catch(() => {});
-    }
-  });
+  let generated;
+  try {
+    generated = await generateTemplateJob(job, source, config, {
+      extraInstruction,
+      isRegeneration: true,
+      signal: options.signal,
+      onRequestState: event => {
+        void publishSingleProgress({
+          phase: 'generating',
+          pending: 1,
+          waitingUpstream: event?.state === 'retrying' ? 1 : 0,
+          message: event?.state === 'retrying'
+            ? `生图接口等待重试：${job.relativePath}`
+            : `正在重新生成：${job.relativePath}`
+        }).catch(() => {});
+      }
+    });
+  } catch (error) {
+    const stopped = Boolean(options.signal?.aborted);
+    await addOperationLog(folder, stopped ? `已停止重新生成：${job.relativePath}` : `重新生成失败：${job.relativePath}`);
+    await publishSingleProgress({
+      phase: 'failed',
+      pending: 0,
+      waitingUpstream: 0,
+      message: stopped ? `已停止重新生成：${job.relativePath}` : `重新生成失败：${job.relativePath}`,
+      completedAt: new Date().toISOString()
+    });
+    throw error;
+  }
   const generationErrorsFile = metadataPaths(folder).generationErrors;
   const generationErrors = await readJsonFile(generationErrorsFile, {});
   const failurePrefix = `${job.relativePath}:`;
@@ -3292,6 +3347,11 @@ async function regenerateSingleTemplate(payload, options = {}) {
     completedAt: new Date().toISOString()
   });
   return { folder, relativePath: job.relativePath, outputPath: job.outputPath };
+}
+
+async function regenerateSingleTemplate(payload, options = {}) {
+  const folder = String(payload?.folder || '');
+  return queueTemplateRegeneration(folder, options.signal, () => regenerateSingleTemplateUnlocked(payload, options));
 }
 
 async function generateDirectTemplateTask(task, options = {}) {

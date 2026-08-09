@@ -97,3 +97,20 @@ test('single-image regeneration keeps the same fixed four-image request as initi
   assert.doesNotMatch(runtime, /referenceResultPath|exactly five images|Image 5/);
   assert.match(runtime, /exactly four images in this fixed order/);
 });
+
+test('review regeneration accepts multiple submissions and stop-all clears their local state', async () => {
+  const renderer = await fs.readFile(path.join(__dirname, '../../web/src/renderer.js'), 'utf8');
+  const server = await fs.readFile(path.join(__dirname, '../src/server.js'), 'utf8');
+  const runtime = await fs.readFile(path.join(__dirname, '../src/runtime.js'), 'utf8');
+
+  assert.match(renderer, /const wholeSetRunning = running && localRegenerating === 0/);
+  assert.match(renderer, /state\.regeneratingReviewJobs\.clear\(\)/);
+  assert.match(renderer, /record\.status = 'stopped'/);
+  assert.match(renderer, /重新生成已停止/);
+  assert.match(renderer, /reviewRegenerationJobIds: new Map\(\)/);
+  assert.match(renderer, /await window\.caishen\.cancelJob\(jobId\)/);
+  assert.match(renderer, /停止重新生成/);
+  assert.match(server, /activeJobControllers\.has\(id\)/);
+  assert.match(runtime, /queueTemplateRegeneration\(folder, options\.signal/);
+  assert.match(runtime, /phase: 'failed',[\s\S]*?已停止重新生成/);
+});
