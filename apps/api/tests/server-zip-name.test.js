@@ -3,6 +3,8 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
+const zlib = require('node:zlib');
+const sharp = require('sharp');
 
 const runtime = require('../src/runtime');
 const { buildZipDownloadName, createFolderZip } = require('../src/server');
@@ -13,17 +15,21 @@ async function writeSource(folder, templateFolderPath, masterImagePath = '') {
   await fs.writeFile(path.join(meta, 'source.json'), JSON.stringify({ TemplateFolderPath: templateFolderPath, MasterImagePath: masterImagePath }), 'utf8');
 }
 
-function zipLocalEntryNames(archive) {
-  const names = [];
+function zipLocalEntries(archive) {
+  const entries = [];
   let offset = 0;
   while (offset + 30 <= archive.length && archive.readUInt32LE(offset) === 0x04034b50) {
+    const method = archive.readUInt16LE(offset + 8);
     const compressedSize = archive.readUInt32LE(offset + 18);
     const nameLength = archive.readUInt16LE(offset + 26);
     const extraLength = archive.readUInt16LE(offset + 28);
-    names.push(archive.subarray(offset + 30, offset + 30 + nameLength).toString('utf8'));
+    const name = archive.subarray(offset + 30, offset + 30 + nameLength).toString('utf8');
+    const dataStart = offset + 30 + nameLength + extraLength;
+    const payload = archive.subarray(dataStart, dataStart + compressedSize);
+    entries.push({ name, data: method === 8 ? zlib.inflateRawSync(payload) : payload });
     offset += 30 + nameLength + extraLength + compressedSize;
   }
-  return names;
+  return entries;
 }
 
 test('ZIP 下载名按套图文件夹、日期和两位序号生成', async t => {
@@ -51,15 +57,20 @@ test('task ZIP includes its generated master image at the archive root', async t
   const master = path.join(root, 'masters', 'generated-master.png');
   await fs.mkdir(path.dirname(master), { recursive: true });
   await fs.mkdir(output, { recursive: true });
-  await fs.writeFile(master, Buffer.from('master-image'));
+  await sharp({ create: { width: 8, height: 8, channels: 4, background: { r: 25, g: 120, b: 220, alpha: 0.5 } } })
+    .png()
+    .toFile(master);
   await fs.writeFile(path.join(output, 'result.jpg'), Buffer.from('result-image'));
   await writeSource(output, path.join(root, 'templates', 'style-1'), master);
 
   const archive = await createFolderZip(output);
-  const names = zipLocalEntryNames(archive);
+  const entries = zipLocalEntries(archive);
+  const names = entries.map(entry => entry.name);
+  const masterEntry = entries.find(entry => entry.name === '母版图.jpg');
 
   assert.ok(names.includes('result.jpg'));
-  assert.ok(names.includes('母版图.png'));
-  assert.equal(names.filter(name => name === '母版图.png').length, 1);
+  assert.ok(masterEntry);
+  assert.equal(names.includes('母版图.png'), false);
+  assert.deepEqual([...masterEntry.data.subarray(0, 3)], [0xff, 0xd8, 0xff]);
 });
 

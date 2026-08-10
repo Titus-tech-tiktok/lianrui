@@ -8790,6 +8790,10 @@ label input, label textarea {
   background: #eaf5f2;
 }
 
+.mobile-finance-kpis article.total-profit {
+  grid-column: 1 / -1;
+}
+
 .mobile-finance-kpis span,
 .mobile-finance-cashflow span {
   color: var(--muted);

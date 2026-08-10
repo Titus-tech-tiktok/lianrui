@@ -636,6 +636,14 @@ function financeGatewayCost(month) {
   };
 }
 
+function financeGatewayCumulativeCost() {
+  const actualCost = Number(state.mobileGatewayUsage?.total?.actualCost);
+  return {
+    available: Number.isFinite(actualCost) && actualCost >= 0,
+    minor: Math.round(Math.max(0, actualCost || 0) * 100)
+  };
+}
+
 function financeCategoryLabel(category) {
   return ({
     client_payment: '客户充值',
@@ -670,7 +678,13 @@ function mobileFinancePanelHtml() {
   const operatingExpenses = Number(summary.operatingExpensesCnyMinor) || 0;
   const gatewayTopups = Number(summary.gatewayTopupsCnyMinor) || 0;
   const gatewayCost = financeGatewayCost(month);
+  const cumulativeGatewayCost = financeGatewayCumulativeCost();
   const netProfit = gatewayCost.available ? revenue - operatingExpenses - gatewayCost.minor : null;
+  const totalRevenue = Number(summary.totalRevenueCnyMinor) || 0;
+  const totalOperatingExpenses = Number(summary.totalOperatingExpensesCnyMinor) || 0;
+  const totalProfit = cumulativeGatewayCost.available
+    ? totalRevenue - totalOperatingExpenses - cumulativeGatewayCost.minor
+    : null;
   const cashFlow = Number(summary.manualCashFlowCnyMinor) || 0;
   const margin = netProfit !== null && revenue > 0 ? (netProfit / revenue) * 100 : null;
   const entries = Array.isArray(data?.entries) ? data.entries : [];
@@ -691,7 +705,8 @@ function mobileFinancePanelHtml() {
         <article><span>本月收入</span><strong>${formatFinanceCny(revenue)}</strong><small>累计收入 ${formatFinanceCny(summary.totalRevenueCnyMinor)}</small></article>
         <article><span>API 实际成本</span><strong>${gatewayCost.available ? formatFinanceCny(gatewayCost.minor) : '暂不可用'}</strong><small>按网关实时消耗统计</small></article>
         <article><span>经营支出</span><strong>${formatFinanceCny(operatingExpenses)}</strong><small>不含网关充值</small></article>
-        <article class="profit"><span>净利润</span><strong>${netProfit === null ? '待成本同步' : formatFinanceCny(netProfit)}</strong><small>${margin === null ? '网关成本可用后自动计算' : `利润率 ${margin.toFixed(1)}%`}</small></article>
+        <article class="profit"><span>本月净利润</span><strong>${netProfit === null ? '待成本同步' : formatFinanceCny(netProfit)}</strong><small>${margin === null ? '网关成本可用后自动计算' : `利润率 ${margin.toFixed(1)}%`}</small></article>
+        <article class="profit total-profit"><span>累计总利润</span><strong>${totalProfit === null ? '待成本同步' : formatFinanceCny(totalProfit)}</strong><small>${cumulativeGatewayCost.available ? `累计 API 成本 ${formatFinanceCny(cumulativeGatewayCost.minor)}` : '累计网关成本可用后自动计算'}</small></article>
       </div>
       <div class="mobile-finance-cashflow">
         <div><span>本月现金流</span><strong>${formatFinanceCny(cashFlow)}</strong><small>收入 - 经营支出 - 网关充值</small></div>

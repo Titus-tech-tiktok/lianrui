@@ -245,7 +245,7 @@ async function collectZipEntries(root, folder = root, entries = []) {
 async function collectZipDownloadEntries(folder) {
   const root = path.resolve(folder);
   const files = await collectZipEntries(root);
-  const entries = files.map(file => ({
+  let entries = files.map(file => ({
     file,
     name: path.relative(root, file).replaceAll(path.sep, '/')
   }));
@@ -255,13 +255,23 @@ async function collectZipDownloadEntries(folder) {
     ? await fsp.stat(masterImagePath).catch(() => null)
     : null;
   if (masterStat?.isFile()) {
-    const extension = path.extname(masterImagePath) || '.png';
-    const masterName = `母版图${extension.toLowerCase()}`;
-    const alreadyIncluded = entries.some(entry => normalizedComparablePath(entry.file) === normalizedComparablePath(masterImagePath));
-    const nameTaken = entries.some(entry => entry.name.toLocaleLowerCase('zh-CN') === masterName.toLocaleLowerCase('zh-CN'));
-    if (!alreadyIncluded && !nameTaken) entries.push({ file: masterImagePath, name: masterName });
+    const masterName = '母版图.jpg';
+    entries = entries.filter(entry => (
+      normalizedComparablePath(entry.file) !== normalizedComparablePath(masterImagePath)
+      && entry.name.toLocaleLowerCase('zh-CN') !== masterName.toLocaleLowerCase('zh-CN')
+    ));
+    entries.push({ file: masterImagePath, name: masterName, convertToJpeg: true });
   }
   return entries;
+}
+
+async function readZipEntrySource(entry) {
+  const source = await fsp.readFile(entry.file);
+  if (!entry.convertToJpeg) return source;
+  return sharp(source, { failOn: 'none', animated: false, limitInputPixels: 120_000_000 })
+    .flatten({ background: { r: 255, g: 255, b: 255 } })
+    .jpeg({ quality: 95, chromaSubsampling: '4:4:4' })
+    .toBuffer();
 }
 
 async function createFolderZip(folder) {
@@ -273,7 +283,7 @@ async function createFolderZip(folder) {
   for (const entry of entries) {
     const file = entry.file;
     const stat = await fsp.stat(file);
-    const source = await fsp.readFile(file);
+    const source = await readZipEntrySource(entry);
     const compressedCandidate = zlib.deflateRawSync(source);
     const useDeflate = compressedCandidate.length < source.length;
     const payload = useDeflate ? compressedCandidate : source;
