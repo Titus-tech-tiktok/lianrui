@@ -8688,3 +8688,401 @@ label input, label textarea {
 .mobile-stats-account-row .mobile-stats-account-balance {
   color: var(--teal);
 }
+
+.mobile-finance-more {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid rgba(47, 124, 116, .22);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, .82);
+  color: var(--teal);
+  font-weight: 900;
+  letter-spacing: .05em;
+  box-shadow: 0 12px 30px rgba(16, 27, 43, .07);
+}
+
+.mobile-finance-panel {
+  overflow: hidden;
+  border: 1px solid rgba(47, 124, 116, .2);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, .94);
+  box-shadow: 0 18px 46px rgba(16, 27, 43, .1);
+}
+
+.mobile-finance-loading,
+.mobile-finance-empty {
+  padding: 28px 18px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.mobile-finance-loading.error {
+  color: var(--danger);
+}
+
+.mobile-finance-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 18px;
+  background: linear-gradient(135deg, #10233a 0%, #173f46 100%);
+  color: #fff;
+}
+
+.mobile-finance-head > div > span {
+  color: #d4b46f;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .18em;
+}
+
+.mobile-finance-head h2 {
+  margin: 5px 0 2px;
+  color: #fff;
+  font-size: 24px;
+}
+
+.mobile-finance-head p,
+.mobile-finance-head label > span {
+  margin: 0;
+  color: rgba(255, 255, 255, .68);
+  font-size: 11px;
+}
+
+.mobile-finance-head label {
+  display: grid;
+  gap: 5px;
+  flex: 0 0 132px;
+}
+
+.mobile-finance-head input {
+  min-width: 0;
+  height: 38px;
+  padding: 0 9px;
+  border: 1px solid rgba(255, 255, 255, .2);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .1);
+  color: #fff;
+  font: inherit;
+  color-scheme: dark;
+}
+
+.mobile-finance-kpis {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 14px;
+}
+
+.mobile-finance-kpis article {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid rgba(203, 211, 205, .75);
+  border-radius: 16px;
+  background: #f8faf9;
+  display: grid;
+  gap: 5px;
+}
+
+.mobile-finance-kpis article.profit {
+  border-color: rgba(47, 124, 116, .25);
+  background: #eaf5f2;
+}
+
+.mobile-finance-kpis span,
+.mobile-finance-cashflow span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.mobile-finance-kpis strong {
+  color: var(--navy);
+  font-size: 22px;
+  line-height: 1.1;
+}
+
+.mobile-finance-kpis article.profit strong {
+  color: var(--teal);
+}
+
+.mobile-finance-kpis small,
+.mobile-finance-cashflow small {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.mobile-finance-cashflow {
+  margin: 0 14px 14px;
+  padding: 14px;
+  border-radius: 16px;
+  background: #f4eee3;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.mobile-finance-cashflow div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.mobile-finance-cashflow strong {
+  color: #8f6531;
+  font-size: 18px;
+}
+
+.mobile-finance-toolbar,
+.mobile-finance-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 14px 12px;
+}
+
+.mobile-finance-toolbar > div {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 12px;
+  background: #eef2f0;
+}
+
+.mobile-finance-toolbar button,
+.mobile-finance-list-head button {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.mobile-finance-toolbar button.active,
+#mobileFinanceAdd {
+  background: var(--navy);
+  color: #fff;
+}
+
+.mobile-finance-list-head {
+  padding-top: 12px;
+  border-top: 1px solid rgba(203, 211, 205, .65);
+}
+
+.mobile-finance-list-head h3 {
+  margin: 0;
+  color: var(--navy);
+  font-size: 15px;
+}
+
+.mobile-finance-list-head button {
+  color: var(--teal);
+}
+
+.mobile-finance-list {
+  padding: 0 14px 14px;
+}
+
+.mobile-finance-entry {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 12px 0;
+  border: 0;
+  border-top: 1px solid rgba(203, 211, 205, .55);
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.mobile-finance-entry-icon {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: #edf2f0;
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.mobile-finance-entry-icon.income { background: #e5f4ef; color: #26796e; }
+.mobile-finance-entry-icon.expense { background: #faece9; color: #a74a3d; }
+.mobile-finance-entry-icon.transfer { background: #f4eee3; color: #946a33; }
+
+.mobile-finance-entry-copy,
+.mobile-finance-entry-money {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.mobile-finance-entry-copy b {
+  overflow: hidden;
+  color: var(--navy);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-finance-entry-copy small,
+.mobile-finance-entry-money small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-finance-entry-money {
+  max-width: 105px;
+  text-align: right;
+}
+
+.mobile-finance-entry-money b {
+  color: #946a33;
+  font-size: 13px;
+}
+
+.mobile-finance-entry-money.income b { color: var(--teal); }
+.mobile-finance-entry-money.expense b { color: var(--danger); }
+
+.mobile-finance-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 220;
+  padding: 18px;
+  display: grid;
+  place-items: center;
+  background: rgba(9, 20, 33, .64);
+  backdrop-filter: blur(8px);
+}
+
+.mobile-finance-modal {
+  width: min(100%, 480px);
+  max-height: calc(100vh - 36px);
+  overflow: auto;
+  border-radius: 22px;
+  background: #fbfaf7;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, .3);
+}
+
+.mobile-finance-modal header,
+.mobile-finance-modal footer {
+  padding: 16px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mobile-finance-modal header {
+  border-bottom: 1px solid rgba(203, 211, 205, .7);
+}
+
+.mobile-finance-modal header span {
+  color: #b18c4d;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .18em;
+}
+
+.mobile-finance-modal h2 {
+  margin: 4px 0 0;
+  color: var(--navy);
+  font-size: 22px;
+}
+
+.mobile-finance-modal header button {
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--navy);
+  font-size: 24px;
+}
+
+.mobile-finance-form {
+  padding: 16px 18px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.mobile-finance-form label {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.mobile-finance-form label.wide {
+  grid-column: 1 / -1;
+}
+
+.mobile-finance-form label > span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.mobile-finance-form input,
+.mobile-finance-form select,
+.mobile-finance-form textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--navy);
+  font: inherit;
+}
+
+.mobile-finance-form textarea {
+  resize: vertical;
+}
+
+.mobile-finance-modal footer {
+  border-top: 1px solid rgba(203, 211, 205, .7);
+}
+
+.mobile-finance-modal footer > div {
+  display: flex;
+  gap: 8px;
+}
+
+.mobile-finance-modal footer button {
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 10px;
+}
+
+@media (max-width: 420px) {
+  .mobile-finance-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .mobile-finance-head label {
+    flex-basis: auto;
+  }
+
+  .mobile-finance-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  #mobileFinanceAdd {
+    min-height: 40px;
+  }
+}

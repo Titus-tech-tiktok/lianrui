@@ -90,6 +90,7 @@ const {
   templateById: taobaoTemplateById
 } = require('./core/taobao-publish');
 const { createBillingService } = require('./billing');
+const { createFinanceLedgerService } = require('./finance-ledger');
 
 
 const PROJECT_ROOT = path.resolve(__dirname, '../../..');
@@ -97,6 +98,7 @@ const configuredDataRoot = String(process.env.CAISHEN_DATA_DIR || 'data');
 const DATA_ROOT = path.isAbsolute(configuredDataRoot) ? configuredDataRoot : path.resolve(PROJECT_ROOT, configuredDataRoot);
 const SYSTEM_STATE_ROOT = path.join(DATA_ROOT, 'system');
 const billing = createBillingService(DATA_ROOT);
+const financeLedger = createFinanceLedgerService(DATA_ROOT);
 const DEFAULT_WORKSPACE_ID = String(process.env.CAISHEN_WORKSPACE_ID || 'local').replace(/[^a-zA-Z0-9_-]/g, '') || 'local';
 const workspaceContext = new AsyncLocalStorage();
 const configuredOutputRoots = new Map();
@@ -1854,6 +1856,33 @@ function gatewayBalanceFromUsage(body = {}) {
   return null;
 }
 
+function gatewayUsageMetric(value = {}) {
+  return {
+    requests: Math.max(0, Math.trunc(Number(value?.requests) || 0)),
+    cost: Math.max(0, Number(value?.cost) || 0),
+    actualCost: Math.max(0, Number(value?.actual_cost ?? value?.actualCost) || 0)
+  };
+}
+
+function gatewayDailyUsageFromBody(body = {}) {
+  const candidates = [
+    body?.daily_usage,
+    body?.data?.daily_usage,
+    body?.usage?.daily,
+    body?.data?.usage?.daily
+  ];
+  const source = candidates.find(Array.isArray);
+  const items = source || [];
+  return {
+    available: Boolean(source),
+    items: items.flatMap(item => {
+    const date = String(item?.date || item?.day || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return [];
+    return [{ date, ...gatewayUsageMetric(item) }];
+    })
+  };
+}
+
 async function getGatewayUsage(options = {}) {
   const now = Date.now();
   if (options.forceRefresh !== true && gatewayUsageCache.value && gatewayUsageCache.expiresAt > now) {
@@ -1870,10 +1899,16 @@ async function getGatewayUsage(options = {}) {
       }
     }, 15000);
     const balance = gatewayBalanceFromUsage(body);
+    const usageRoot = body?.usage || body?.data?.usage || {};
+    const dailyUsage = gatewayDailyUsageFromBody(body);
     const value = {
       available: balance !== null,
       balance,
       currency: String(body?.currency || body?.data?.currency || body?.quota?.currency || 'USD').toUpperCase(),
+      today: gatewayUsageMetric(usageRoot?.today),
+      total: gatewayUsageMetric(usageRoot?.total),
+      dailyUsageAvailable: dailyUsage.available,
+      dailyUsage: dailyUsage.items,
       fetchedAt: new Date().toISOString()
     };
     gatewayUsageCache = { value, expiresAt: Date.now() + 30000, pending: null };
@@ -4165,6 +4200,7 @@ const runtimeExports = {
   approveReviewFolder,
   batchApproveReviewFolders,
   billing,
+  financeLedger,
   createTemplateEditMask,
   deleteTemplateFolder,
   detectTemplateLightCabinetPanels,

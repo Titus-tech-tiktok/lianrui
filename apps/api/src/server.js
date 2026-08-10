@@ -1340,6 +1340,42 @@ async function startServer() {
     }
   });
 
+  app.get('/api/finance/ledger', async (req, res) => {
+    if (!isSuperAdmin(req.user)) return res.status(403).json({ error: '只有超级管理员可以查看财务账本' });
+    try {
+      return res.json({ data: await runtime.financeLedger.list(String(req.query.month || '')) });
+    } catch (error) {
+      return res.status(400).json({ error: error?.message || String(error) });
+    }
+  });
+
+  app.post('/api/finance/entries', async (req, res) => {
+    if (!isSuperAdmin(req.user)) return res.status(403).json({ error: '只有超级管理员可以新增财务记录' });
+    try {
+      return res.status(201).json({ data: await runtime.financeLedger.create(req.body || {}) });
+    } catch (error) {
+      return res.status(400).json({ error: error?.message || String(error) });
+    }
+  });
+
+  app.put('/api/finance/entries/:id', async (req, res) => {
+    if (!isSuperAdmin(req.user)) return res.status(403).json({ error: '只有超级管理员可以修改财务记录' });
+    try {
+      return res.json({ data: await runtime.financeLedger.update(req.params.id, req.body || {}) });
+    } catch (error) {
+      return res.status(400).json({ error: error?.message || String(error) });
+    }
+  });
+
+  app.delete('/api/finance/entries/:id', async (req, res) => {
+    if (!isSuperAdmin(req.user)) return res.status(403).json({ error: '只有超级管理员可以删除财务记录' });
+    try {
+      return res.json({ data: await runtime.financeLedger.remove(req.params.id) });
+    } catch (error) {
+      return res.status(400).json({ error: error?.message || String(error) });
+    }
+  });
+
   app.put('/api/billing/rules', async (req, res) => {
     if (!isSuperAdmin(req.user)) return res.status(403).json({ error: '只有超级管理员可以修改计费规则' });
     try {
