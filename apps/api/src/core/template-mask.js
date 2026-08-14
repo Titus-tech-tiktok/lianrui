@@ -792,6 +792,7 @@ async function createTemplatePostCompositeMask(job, analysis, coarseMaskPath = '
 async function createTemplateRegionAnnotation(job, analysis, canvas = null) {
   const summary = parseTemplateAnalysisSummary(analysis);
   const regions = Array.isArray(summary.regions) ? summary.regions : [];
+  const protectedRegions = Array.isArray(summary.protectedRegions) ? summary.protectedRegions : [];
   if (!regions.length) return '';
   const sourcePath = canvas?.templatePath || job.templatePath;
   const metadata = await sharp(sourcePath, { failOn: 'none' }).metadata();
@@ -808,9 +809,16 @@ async function createTemplateRegionAnnotation(job, analysis, canvas = null) {
     const regionHeight = region.height * contentHeight;
     return `<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${regionWidth.toFixed(2)}" height="${regionHeight.toFixed(2)}" rx="2" fill="none" stroke="#ff4d4f" stroke-width="${Math.max(3, Math.round(Math.min(width, height) / 240))}"/>`;
   }).join('');
+  const protectedRectangles = protectedRegions.map(region => {
+    const x = left + region.x * contentWidth;
+    const y = top + region.y * contentHeight;
+    const regionWidth = region.width * contentWidth;
+    const regionHeight = region.height * contentHeight;
+    return `<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${regionWidth.toFixed(2)}" height="${regionHeight.toFixed(2)}" rx="2" fill="none" stroke="#00b8c8" stroke-width="${Math.max(3, Math.round(Math.min(width, height) / 240))}"/>`;
+  }).join('');
   const cache = templateCachePaths(job.templateRoot, job.relativePath);
   const fingerprint = crypto.createHash('sha1').update(JSON.stringify({
-    version: 1,
+    version: 2,
     sourcePath: path.resolve(sourcePath),
     width,
     height,
@@ -818,12 +826,13 @@ async function createTemplateRegionAnnotation(job, analysis, canvas = null) {
     contentHeight,
     left,
     top,
-    regions
+    regions,
+    protectedRegions
   })).digest('hex').slice(0, 12);
   const annotationPath = path.join(cache.cacheFolder, `${path.basename(cache.analysisFile, '.json')}-${fingerprint}.regions.png`);
   if (fs.existsSync(annotationPath)) return annotationPath;
   await fsp.mkdir(path.dirname(annotationPath), { recursive: true });
-  const overlay = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${rectangles}</svg>`);
+  const overlay = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${rectangles}${protectedRectangles}</svg>`);
   await sharp(sourcePath, { failOn: 'none' })
     .composite([{ input: overlay, blend: 'over' }])
     .png()

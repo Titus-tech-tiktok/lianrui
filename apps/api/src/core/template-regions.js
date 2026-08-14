@@ -143,8 +143,9 @@ function isUncertainManualText(value) {
   ].some(token => text.includes(token));
 }
 
-function createManualTemplateAnalysis({ action: actionValue, reason = '', replaceArea = '', forbiddenArea = '', regions = [] } = {}) {
+function createManualTemplateAnalysis({ action: actionValue, reason = '', replaceArea = '', forbiddenArea = '', regions = [], protectedRegions = [] } = {}) {
   const replaceRegions = normalizeRegions(regions);
+  const hardwareRegions = normalizeRegions(protectedRegions);
   const action = actionValue ? normalizeTemplateAction(actionValue) : replaceRegions.length ? 'replace_print' : 'copy_original';
   const needsManualCheck = action === 'manual_check';
   const manualReason = String(reason || '').trim();
@@ -166,6 +167,7 @@ function createManualTemplateAnalysis({ action: actionValue, reason = '', replac
     replace_area: safeReplaceArea,
     imageUnderstanding: manualReason || '运营手动筛选',
     replace_regions: action === 'replace_print' ? replaceRegions : [],
+    protected_regions: action === 'replace_print' ? hardwareRegions : [],
     printableSurfaces: [],
     printableArea: action === 'replace_print' ? safeReplaceArea : '无',
     forbidden_area: String(forbiddenArea || '').trim() || DEFAULT_FORBIDDEN_AREA,
@@ -291,6 +293,9 @@ function validateTemplateAnalysis(value, options = {}) {
     replace_regions: source === 'manual' && processingMode === 'replace_print'
       ? normalizeRegions(root.replace_regions)
       : [],
+    protected_regions: source === 'manual' && processingMode === 'replace_print'
+      ? normalizeRegions(root.protected_regions)
+      : [],
     preserveAreas,
     forbidden_area: preserveAreas,
     mappingMode: processingMode === 'replace_print' ? 'master_product_migration' : 'none',
@@ -347,6 +352,7 @@ function parseTemplateAnalysisSummary(value) {
       replaceArea: getJsonString(root, 'printableArea', 'printable_area', 'replace_area'),
       forbiddenArea: getJsonString(root, 'preserveAreas', 'preserve_areas', 'forbidden_area'),
       regions: normalizeRegions(root.replace_regions),
+      protectedRegions: normalizeRegions(root.protected_regions),
       printableSurfaces: normalizePrintableSurfaces(root.printableSurfaces ?? root.printable_surfaces)
     };
   } catch {
@@ -356,7 +362,8 @@ function parseTemplateAnalysisSummary(value) {
       reason: '分析结果不可读，请人工确认。',
       replaceArea: '',
       forbiddenArea: '',
-      regions: []
+      regions: [],
+      protectedRegions: []
     };
   }
 }

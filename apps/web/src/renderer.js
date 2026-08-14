@@ -4477,23 +4477,31 @@ function activeTemplateItem() {
   return state.templateItems.find(item => item.path === state.activeTemplatePath) || null;
 }
 
-function drawTemplateRegions(canvas, regions, draft = null) {
+function drawTemplateRegions(canvas, regions, protectedRegions, draft = null, draftMode = 'print') {
   if (!canvas) return;
   const context = canvas.getContext('2d');
   const ratio = window.devicePixelRatio || 1;
   context.clearRect(0, 0, canvas.width, canvas.height);
   context.save();
   context.scale(ratio, ratio);
-  context.strokeStyle = '#ff4d4f';
-  context.fillStyle = 'rgba(255, 77, 79, 0.12)';
-  context.lineWidth = 3;
-  for (const region of [...(regions || []), ...(draft ? [draft] : [])]) {
-    const x = region.x * canvas.clientWidth;
-    const y = region.y * canvas.clientHeight;
-    const width = region.width * canvas.clientWidth;
-    const height = region.height * canvas.clientHeight;
-    context.fillRect(x, y, width, height);
-    context.strokeRect(x, y, width, height);
+  const draw = (values, strokeStyle, fillStyle) => {
+    context.strokeStyle = strokeStyle;
+    context.fillStyle = fillStyle;
+    context.lineWidth = 3;
+    for (const region of values || []) {
+      const x = region.x * canvas.clientWidth;
+      const y = region.y * canvas.clientHeight;
+      const width = region.width * canvas.clientWidth;
+      const height = region.height * canvas.clientHeight;
+      context.fillRect(x, y, width, height);
+      context.strokeRect(x, y, width, height);
+    }
+  };
+  draw(regions, '#ff4d4f', 'rgba(255, 77, 79, 0.12)');
+  draw(protectedRegions, '#00b8c8', 'rgba(0, 184, 200, 0.14)');
+  if (draft) {
+    if (draftMode === 'protected') draw([draft], '#00b8c8', 'rgba(0, 184, 200, 0.14)');
+    else draw([draft], '#ff4d4f', 'rgba(255, 77, 79, 0.12)');
   }
   context.restore();
 }
@@ -4505,6 +4513,8 @@ function initializeTemplateRegionEditor(item) {
   const editor = image.closest('.template-region-editor');
   const figure = image.closest('.template-region-figure');
   item.regions = Array.isArray(item.regions) ? item.regions : [];
+  item.protectedRegions = Array.isArray(item.protectedRegions) ? item.protectedRegions : [];
+  item.regionMode = item.regionMode === 'protected' ? 'protected' : 'print';
   const syncCanvas = () => {
     const rectangle = image.getBoundingClientRect();
     const ratio = window.devicePixelRatio || 1;
@@ -4512,7 +4522,7 @@ function initializeTemplateRegionEditor(item) {
     canvas.style.height = `${rectangle.height}px`;
     canvas.width = Math.max(1, Math.round(rectangle.width * ratio));
     canvas.height = Math.max(1, Math.round(rectangle.height * ratio));
-    drawTemplateRegions(canvas, item.regions);
+    drawTemplateRegions(canvas, item.regions, item.protectedRegions);
   };
   const fitEditorToViewport = () => {
     if (!editor || !figure || !image.naturalWidth || !image.naturalHeight) return;
@@ -4558,24 +4568,27 @@ function initializeTemplateRegionEditor(item) {
   };
   const moveRegion = event => {
     if (!start) return;
-    drawTemplateRegions(canvas, item.regions, regionFromPoints(start, pointForEvent(event)));
+    drawTemplateRegions(canvas, item.regions, item.protectedRegions, regionFromPoints(start, pointForEvent(event)), item.regionMode);
   };
   const finishRegion = event => {
     if (!start) return;
     const region = regionFromPoints(start, pointForEvent(event));
     start = null;
     if (region.width >= 0.01 && region.height >= 0.01) {
-      item.regions.push(region);
-      item.action = 'replace_print';
+      if (item.regionMode === 'protected') item.protectedRegions.push(region);
+      else {
+        item.regions.push(region);
+        item.action = 'replace_print';
+      }
       applyTemplateActionDefaults(item, document.querySelector('#templateRegionResult [data-template-index]'));
       renderTemplateRegionResult();
     } else {
-      drawTemplateRegions(canvas, item.regions);
+      drawTemplateRegions(canvas, item.regions, item.protectedRegions);
     }
   };
   const cancelRegion = () => {
     start = null;
-    drawTemplateRegions(canvas, item.regions);
+    drawTemplateRegions(canvas, item.regions, item.protectedRegions);
   };
   if (typeof window.PointerEvent === 'function') {
     canvas.onpointerdown = startRegion;
@@ -4606,6 +4619,8 @@ function renderTemplateRegionResult() {
   }
   const itemIndex = state.templateItems.indexOf(item);
   item.regions = Array.isArray(item.regions) ? item.regions : [];
+  item.protectedRegions = Array.isArray(item.protectedRegions) ? item.protectedRegions : [];
+  item.regionMode = item.regionMode === 'protected' ? 'protected' : 'print';
   $('#templateConfigTitle').textContent = `框选区域 · ${item.name}`;
   $('#templateConfigPath').textContent = item.relativePath;
   $('#templateConfigStatus').textContent = item.regions.length
@@ -4615,12 +4630,13 @@ function renderTemplateRegionResult() {
   container.innerHTML = `<div class="template-result-layout">
     <figure class="template-region-figure"><div class="template-region-editor"><img id="templateRegionImage" src="${escapeHtml(item.previewUrl || item.templateUrl)}" alt="${escapeHtml(item.relativePath)}"><canvas id="templateRegionCanvas" aria-label="拖拽框选柜体区域"></canvas></div><figcaption>${escapeHtml(item.relativePath)}</figcaption></figure>
     <section class="template-region-tools" data-template-index="${itemIndex}">
-      <span class="eyebrow">MANUAL ROI</span><h3>粗框柜体，不要细描边</h3>
-      <p>按住鼠标拖拽，可添加多个红框。红框只用于告诉 Image2 在哪里寻找柜门或抽屉正面，不是整块覆盖范围；框外像素会在生成后恢复为原图。</p>
-      <div class="template-region-count"><b>${item.regions.length}</b><span>个已保存区域</span></div>
-      <div class="template-region-actions"><button class="secondary" type="button" data-region-undo${item.regions.length ? '' : ' disabled'}>撤销上一个</button><button class="secondary" type="button" data-region-clear${item.regions.length ? '' : ' disabled'}>清空框选</button></div>
+      <span class="eyebrow">MANUAL ROI</span><h3>先框柜面，再保护把手</h3>
+      <p>红框用于定位需要套印花的柜门或抽屉正面；青框用于标记必须原样保留的把手、旋钮、锁具和五金。两类框都只是语义提示，不会作为矩形贴片覆盖原图。</p>
+      <div class="template-region-mode"><button class="${item.regionMode === 'print' ? 'primary' : 'secondary'}" type="button" data-region-mode="print">红框：印花柜面</button><button class="${item.regionMode === 'protected' ? 'primary' : 'secondary'}" type="button" data-region-mode="protected">青框：把手/五金</button></div>
+      <div class="template-region-count"><b>${item.regions.length}</b><span>个印花区</span><b class="protected">${item.protectedRegions.length}</b><span>个五金保护区</span></div>
+      <div class="template-region-actions"><button class="secondary" type="button" data-region-undo${(item.regionMode === 'protected' ? item.protectedRegions : item.regions).length ? '' : ' disabled'}>撤销当前类型</button><button class="secondary" type="button" data-region-clear${item.regions.length || item.protectedRegions.length ? '' : ' disabled'}>清空全部框选</button></div>
       <div class="template-region-output-actions"><button class="${normalizeTemplateUiAction(item.action) === 'copy_original' && !item.regions.length ? 'primary' : 'secondary'}" type="button" data-template-set-action="copy_original">保留原图</button><button class="${normalizeTemplateUiAction(item.action) === 'exclude' ? 'primary' : 'secondary'}" type="button" data-template-set-action="exclude">不输出</button></div>
-      <small>有红框：调用 Image2。无红框：逐字节复制原图，不调用生图 API。</small>
+      <small>建议：闭合柜体用一个红框；开抽屉按每个可见抽屉外立面分别画红框；每个把手单独画紧凑青框。无红框时逐字节复制原图，不调用生图 API。</small>
     </section>
   </div>`;
   initializeTemplateRegionEditor(item);
@@ -4651,7 +4667,8 @@ async function saveTemplateRegions() {
         reason: item.reason,
         replaceArea: item.replaceArea,
         forbiddenArea: item.forbiddenArea,
-        regions: item.regions
+        regions: item.regions,
+        protectedRegions: item.protectedRegions
       }]
     });
     state.assetPreviewCache.delete('detailSetsPath');
@@ -6090,16 +6107,28 @@ function bindEvents() {
       const quickItem = state.templateItems.find((entry) => entry.path === path);
       if (!quickItem) return;
       quickItem.action = actionQuickButton.dataset.templateSetAction;
-      if (quickItem.action !== 'replace_print') quickItem.regions = [];
+      if (quickItem.action !== 'replace_print') {
+        quickItem.regions = [];
+        quickItem.protectedRegions = [];
+      }
       const card = document.querySelector('#templateRegionResult [data-template-index]');
       applyTemplateActionDefaults(quickItem, card);
+      renderTemplateRegionResult();
+      return;
+    }
+    const modeButton = event.target.closest('[data-region-mode]');
+    if (modeButton) {
+      const quickItem = activeTemplateItem();
+      if (!quickItem) return;
+      quickItem.regionMode = modeButton.dataset.regionMode === 'protected' ? 'protected' : 'print';
       renderTemplateRegionResult();
       return;
     }
     const undoButton = event.target.closest('[data-region-undo]');
     if (undoButton) {
       const quickItem = activeTemplateItem();
-      quickItem?.regions?.pop();
+      if (quickItem?.regionMode === 'protected') quickItem.protectedRegions?.pop();
+      else quickItem?.regions?.pop();
       if (quickItem && !quickItem.regions.length) quickItem.action = 'copy_original';
       renderTemplateRegionResult();
       return;
@@ -6109,6 +6138,7 @@ function bindEvents() {
       const quickItem = activeTemplateItem();
       if (quickItem) {
         quickItem.regions = [];
+        quickItem.protectedRegions = [];
         quickItem.action = 'copy_original';
       }
       renderTemplateRegionResult();

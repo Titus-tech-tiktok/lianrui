@@ -66,7 +66,7 @@ test('template-print regeneration entrypoints use the image API', async (t) => {
   await fs.writeFile(path.join(templateRoot, '1.png'), templateImage);
   await fs.writeFile(printPath, resultPng);
   await runtime.saveConfig({ outputPath: outputRoot, auditMode: 'economy' });
-  await runtime.billing.saveRules({ enabled: true, imageFeeMinor: 1, llmFeeMinor: 1, defaultBalanceMinor: 1000000 });
+  await runtime.billing.saveRules({ enabled: true, imageFeeMinor: 1, llmFeeMinor: 1, defaultBalanceMinor: 3000000 });
   await runtime.saveTemplateRegions({
     folder: templateRoot,
     items: [{
@@ -98,7 +98,7 @@ test('template-print regeneration entrypoints use the image API', async (t) => {
   assert.deepEqual([...outputPixel.subarray(panelOffset, panelOffset + 3)], [0x88, 0xaa, 0xee]);
   assert.equal(generated.summary.apiGenerated, 1);
   const afterInitialBilling = await runtime.billing.getSummary('image-retry');
-  assert.equal(afterInitialBilling.account.balanceMinor, 700000);
+  assert.equal(afterInitialBilling.account.balanceMinor, 2400000);
   assert.equal(requests, 2, 'standard template-print should call the image API and retry once');
 
   await runtime.generateTemplateSetForFolder(generated.folder, true);
@@ -108,17 +108,17 @@ test('template-print regeneration entrypoints use the image API', async (t) => {
   await runtime.generateTemplateSetForFolder(generated.folder, true);
   await fs.access(outputFile);
   const afterMissingBilling = await runtime.billing.getSummary('image-retry');
-  assert.equal(afterMissingBilling.account.balanceMinor, 400000);
+  assert.equal(afterMissingBilling.account.balanceMinor, 2100000);
   assert.equal(requests, 3, '补生成缺失图片仍应调用图片 API');
 
   await runtime.generateTemplateSetForFolder(generated.folder, false);
   const afterSetRegenerationBilling = await runtime.billing.getSummary('image-retry');
-  assert.equal(afterSetRegenerationBilling.account.balanceMinor, 400000);
+  assert.equal(afterSetRegenerationBilling.account.balanceMinor, 1800000);
   assert.equal(requests, 4, '重新生成整套图仍应调用图片 API');
 
   await runtime.regenerateSingleTemplate({ folder: generated.folder, relativePath: '1.png', extraInstruction: 'keep the print centered' });
   const afterSingleRegenerationBilling = await runtime.billing.getSummary('image-retry');
-  assert.equal(afterSingleRegenerationBilling.account.balanceMinor, 400000);
+  assert.equal(afterSingleRegenerationBilling.account.balanceMinor, 1500000);
   assert.equal(requests, 5, '单张重新生成仍应调用图片 API');
 
   await Promise.all([
@@ -126,6 +126,8 @@ test('template-print regeneration entrypoints use the image API', async (t) => {
     runtime.regenerateSingleTemplate({ folder: generated.folder, relativePath: '1.png' })
   ]);
   assert.equal(requests, 7, '连续提交的单张重新生成应安全排队且全部调用图片 API');
+  const afterQueuedRegenerationBilling = await runtime.billing.getSummary('image-retry');
+  assert.equal(afterQueuedRegenerationBilling.account.balanceMinor, 900000);
 
 });
 
@@ -237,4 +239,120 @@ test('template generation outer loop uses image concurrency instead of analysis 
   const generationBlock = source.slice(start, end);
   assert.match(generationBlock, /runWithConcurrency\(jobs, apiConcurrencyLimit\(jobs\.length\)/);
   assert.doesNotMatch(generationBlock, /activeApiConcurrencyLimit\(jobs\.length\)/);
+});
+
+test('every failed outbound image attempt is billed', { concurrency: false }, async (t) => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'caishen-image-failed-billing-'));
+  let requests = 0;
+  const server = http.createServer((req, res) => {
+    if (req.url !== '/v1/images/edits') return res.writeHead(404).end();
+    requests += 1;
+    req.resume();
+    req.on('end', () => {
+      res.setHeader('Content-Type', 'application/json');
+      res.writeHead(503);
+      res.end(JSON.stringify({ error: { message: 'Upstream service temporarily unavailable' } }));
+    });
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(async () => {
+    server.closeAllConnections?.();
+    await new Promise(resolve => server.close(resolve));
+    await fs.rm(temp, { recursive: true, force: true });
+  });
+
+  process.env.CAISHEN_DATA_DIR = path.join(temp, 'data');
+  process.env.CAISHEN_WORKSPACE_ID = 'failed-attempt-billing';
+  process.env.CAISHEN_API_BASE_URL = `http://127.0.0.1:${server.address().port}/v1`;
+  process.env.CAISHEN_API_KEY = 'image-key';
+  process.env.CAISHEN_IMAGE_API_KEY = 'image-key';
+  process.env.CAISHEN_IMAGE_MODEL = 'gpt-image-2';
+  process.env.CAISHEN_IMAGE_API_START_INTERVAL_MS = '0';
+  process.env.CAISHEN_IMAGE_API_BACKOFF_BASE_MS = '1';
+  process.env.CAISHEN_IMAGE_API_BACKOFF_MAX_MS = '1';
+  process.env.CAISHEN_IMAGE_API_MAX_ATTEMPTS = '3';
+  const runtimePath = require.resolve('../src/runtime');
+  delete require.cache[runtimePath];
+  const runtime = require('../src/runtime');
+  t.after(() => delete require.cache[runtimePath]);
+
+  const productPath = path.join(temp, 'product.png');
+  const printPath = path.join(temp, 'print.png');
+  const image = await cabinetTemplateBuffer();
+  await fs.writeFile(productPath, image);
+  await fs.writeFile(printPath, image);
+  await runtime.billing.saveRules({
+    enabled: true,
+    imageFeeMinMinor: 1,
+    imageFeeMaxMinor: 1,
+    llmFeeMinMinor: 0,
+    llmFeeMaxMinor: 0,
+    defaultBalanceMinor: 100000000
+  });
+
+  await assert.rejects(
+    runtime.generateTemplateTaskMaster({ id: 'failed-master', productPath, printPath }),
+    /temporarily unavailable/i
+  );
+  assert.equal(requests, 3);
+  const transactions = await runtime.billing.listTransactions('failed-attempt-billing', 20);
+  assert.equal(transactions.filter(entry => entry.kind === 'image').length, 3);
+});
+
+test('superadmin image requests remain billing exempt', { concurrency: false }, async (t) => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'caishen-image-superadmin-billing-'));
+  const resultPng = await sharp({ create: { width: 32, height: 32, channels: 3, background: '#66aa88' } }).png().toBuffer();
+  let requests = 0;
+  const server = http.createServer((req, res) => {
+    if (req.url !== '/v1/images/edits') return res.writeHead(404).end();
+    requests += 1;
+    req.resume();
+    req.on('end', () => {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ data: [{ b64_json: resultPng.toString('base64') }] }));
+    });
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(async () => {
+    server.closeAllConnections?.();
+    await new Promise(resolve => server.close(resolve));
+    await fs.rm(temp, { recursive: true, force: true });
+  });
+
+  process.env.CAISHEN_DATA_DIR = path.join(temp, 'data');
+  process.env.CAISHEN_WORKSPACE_ID = 'superadmin-billing';
+  process.env.CAISHEN_API_BASE_URL = `http://127.0.0.1:${server.address().port}/v1`;
+  process.env.CAISHEN_API_KEY = 'image-key';
+  process.env.CAISHEN_IMAGE_API_KEY = 'image-key';
+  process.env.CAISHEN_IMAGE_MODEL = 'gpt-image-2';
+  process.env.CAISHEN_IMAGE_API_START_INTERVAL_MS = '0';
+  const runtimePath = require.resolve('../src/runtime');
+  delete require.cache[runtimePath];
+  const runtime = require('../src/runtime');
+  t.after(() => delete require.cache[runtimePath]);
+
+  const productPath = path.join(temp, 'product.png');
+  const printPath = path.join(temp, 'print.png');
+  const image = await cabinetTemplateBuffer();
+  await fs.writeFile(productPath, image);
+  await fs.writeFile(printPath, image);
+  await runtime.billing.saveRules({
+    enabled: true,
+    imageFeeMinMinor: 1,
+    imageFeeMaxMinor: 1,
+    llmFeeMinMinor: 0,
+    llmFeeMaxMinor: 0,
+    defaultBalanceMinor: 100000000
+  });
+  const before = await runtime.billing.getSummary('superadmin-billing');
+  await runtime.runWithWorkspace('superadmin-billing', () => runtime.generateTemplateTaskMaster({
+    id: 'superadmin-master',
+    productPath,
+    printPath
+  }), { userRole: 'superadmin', userId: 'superadmin' });
+  const after = await runtime.billing.getSummary('superadmin-billing');
+
+  assert.equal(requests, 1);
+  assert.equal(after.account.balanceMinor, before.account.balanceMinor);
+  assert.equal((await runtime.billing.listTransactions('superadmin-billing', 20)).filter(entry => entry.kind === 'image').length, 0);
 });

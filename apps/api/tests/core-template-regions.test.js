@@ -255,7 +255,8 @@ test('不可读分析回退为人工确认', () => {
     reason: '分析结果不可读，请人工确认。',
     replaceArea: '',
     forbiddenArea: '',
-    regions: []
+    regions: [],
+    protectedRegions: []
   });
 });
 

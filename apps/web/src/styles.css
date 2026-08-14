@@ -6590,7 +6590,10 @@ label input, label textarea {
 .template-region-tools p { margin: 0; color: var(--subtle); font-size: 13px; line-height: 1.8; }
 .template-region-count { display: flex; align-items: baseline; gap: 9px; padding: 18px 0; margin: 16px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .template-region-count b { color: #d93c35; font-size: 34px; line-height: 1; }
+.template-region-count b.protected { color: #008c9a; margin-left: 8px; }
 .template-region-count span { color: var(--subtle); font-size: 12px; }
+.template-region-mode { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 16px; }
+.template-region-mode button { min-width: 0; }
 .template-region-actions, .template-region-output-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .template-region-output-actions { margin-top: 8px; }
 .template-region-tools > small { display: block; color: var(--subtle); margin-top: 14px; line-height: 1.6; }

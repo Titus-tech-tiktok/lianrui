@@ -253,7 +253,7 @@ test('standard review regeneration paths charge package image price', { concurre
   assert.equal(afterMissing.account.balanceMinor - afterSingle.account.balanceMinor, 70000);
 });
 
-test('flagship review regeneration remains free after initial package charge', { concurrency: false }, async (t) => {
+test('flagship review regeneration charges every image API request', { concurrency: false }, async (t) => {
   const { runtime, templateRoot, printPath, masterImagePath } = await createFixture(t, 'flagship-review-billing');
   await runtime.saveSelectedModelPackage('flagship');
 
@@ -270,7 +270,7 @@ test('flagship review regeneration remains free after initial package charge', {
 
   await runtime.generateTemplateSetForFolder(initial.folder, false);
   const afterSetRegeneration = await runtime.billing.getSummary('flagship-review-billing');
-  assert.equal(afterInitial.account.balanceMinor - afterSetRegeneration.account.balanceMinor, 0);
+  assert.equal(afterInitial.account.balanceMinor - afterSetRegeneration.account.balanceMinor, 300000);
 
   await runtime.regenerateSingleTemplate({
     folder: initial.folder,
@@ -278,7 +278,7 @@ test('flagship review regeneration remains free after initial package charge', {
     extraInstruction: 'keep cabinet labels unchanged'
   });
   const afterSingle = await runtime.billing.getSummary('flagship-review-billing');
-  assert.equal(afterSetRegeneration.account.balanceMinor - afterSingle.account.balanceMinor, 0);
+  assert.equal(afterSetRegeneration.account.balanceMinor - afterSingle.account.balanceMinor, 300000);
 });
 
 test('flagship template-print can include master reference when enabled', { concurrency: false }, async (t) => {

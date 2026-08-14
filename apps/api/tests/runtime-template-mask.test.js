@@ -115,7 +115,8 @@ test('manual coarse region creates an ROI-only post-composite mask and red-box a
   const analysis = JSON.stringify({
     version: 11,
     processingMode: 'replace_print',
-    replace_regions: [{ x: 0.15, y: 0.12, width: 0.7, height: 0.75 }]
+    replace_regions: [{ x: 0.15, y: 0.12, width: 0.7, height: 0.75 }],
+    protected_regions: [{ x: 0.42, y: 0.2, width: 0.16, height: 0.08 }]
   });
   const job = { templatePath, templateRoot: root, relativePath: '详情/detail.png' };
   const maskPath = await templateMask.createTemplateEditMask(job, analysis);
@@ -129,10 +130,13 @@ test('manual coarse region creates an ROI-only post-composite mask and red-box a
   assert.equal(alphaAt(8, 8), 255, 'pixels outside the coarse region stay protected');
   const annotation = await sharp(annotationPath).removeAlpha().raw().toBuffer({ resolveWithObject: true });
   let redPixels = 0;
+  let cyanPixels = 0;
   for (let index = 0; index < annotation.data.length; index += annotation.info.channels) {
     if (annotation.data[index] > 220 && annotation.data[index + 1] < 110 && annotation.data[index + 2] < 110) redPixels += 1;
+    if (annotation.data[index] < 80 && annotation.data[index + 1] > 140 && annotation.data[index + 2] > 150) cyanPixels += 1;
   }
   assert.ok(redPixels > 0, 'annotation contains visible red ROI borders');
+  assert.ok(cyanPixels > 0, 'annotation contains visible cyan hardware-protection borders');
 });
 
 test('coarse request mask stays continuous while post-composite mask restores seams and labels', async t => {

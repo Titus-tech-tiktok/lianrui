@@ -547,11 +547,15 @@ async function runNextJobs() {
         activeJobs -= 1;
         runNextJobs();
       }
-    }, { modelPackageWorkspaceId: job.modelPackageWorkspaceId || job.workspaceId });
+    }, {
+      modelPackageWorkspaceId: job.modelPackageWorkspaceId || job.workspaceId,
+      userRole: job.actorRole || 'member',
+      userId: job.actorUserId || ''
+    });
   }
 }
 
-async function enqueueJob(method, args, clientKey = '', modelPackageWorkspaceId = runtime.WORKSPACE_ID) {
+async function enqueueJob(method, args, clientKey = '', modelPackageWorkspaceId = runtime.WORKSPACE_ID, actor = {}) {
   const workspaceId = runtime.WORKSPACE_ID;
   const normalizedClientKey = String(clientKey || '').slice(0, 160);
   const scopedClientKey = normalizedClientKey ? `${workspaceId}:${normalizedClientKey}` : '';
@@ -564,6 +568,8 @@ async function enqueueJob(method, args, clientKey = '', modelPackageWorkspaceId 
     id: crypto.randomUUID(),
     workspaceId,
     modelPackageWorkspaceId,
+    actorRole: String(actor?.role || 'member'),
+    actorUserId: String(actor?.id || ''),
     clientKey: normalizedClientKey,
     method,
     args,
@@ -1223,7 +1229,11 @@ async function startServer() {
     if (!user) return res.status(401).json({ error: '请先登录' });
     req.user = user;
     req.modelPackageWorkspaceId = await modelPackageWorkspaceForUser(user);
-    return runtime.runWithWorkspace(user.workspaceId, () => next(), { modelPackageWorkspaceId: req.modelPackageWorkspaceId });
+    return runtime.runWithWorkspace(user.workspaceId, () => next(), {
+      modelPackageWorkspaceId: req.modelPackageWorkspaceId,
+      userRole: user.role,
+      userId: user.id
+    });
   });
 
   app.post('/api/auth/password', async (req, res) => {
@@ -1468,7 +1478,7 @@ async function startServer() {
     if (!LONG_JOB_METHODS.has(method) || !rpc[method]) return res.status(404).json({ error: `未知后台任务：${method}` });
     if (!consumeJobRate(req.ip)) return res.status(429).json({ error: '后台任务提交过于频繁，请稍后再试' });
     try {
-      const job = await enqueueJob(method, Array.isArray(req.body?.args) ? req.body.args : [], req.body?.clientKey, req.modelPackageWorkspaceId);
+      const job = await enqueueJob(method, Array.isArray(req.body?.args) ? req.body.args : [], req.body?.clientKey, req.modelPackageWorkspaceId, req.user);
       return res.status(job.status === 'completed' ? 200 : 202).json({ data: publicJob(job) });
     } catch (error) {
       return res.status(400).json({ error: error?.message || String(error) });

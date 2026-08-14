@@ -171,15 +171,17 @@ for (const packageId of ['flagship', 'standard', 'fast']) {
     assert.ok(printIndex < annotationIndex);
     assert.match(templateBody, /FOUR_IMAGE_RED_ROI_TEMPLATE_EDIT/);
     assert.match(templateBody, /CURRENT_REQUEST_EXECUTION_CONTRACT/);
-    assert.match(templateBody, /locked template canvas, print master reference, original print artwork, and red-ROI annotation/);
+    assert.match(templateBody, /locked template canvas, print master reference, original print artwork, and ROI annotation/);
     assert.match(templateBody, /Use image 1 as the locked output canvas/);
-    assert.match(templateBody, /red box is not a paste rectangle/);
-    assert.match(templateBody, /Apply the complete registered print only to visible cabinet or drawer exterior fronts/);
-    assert.match(templateBody, /For opened drawers, keep one continuous facade registration/);
+    assert.match(templateBody, /colored boxes are guidance only, are not paste rectangles/);
+    assert.match(templateBody, /Apply the complete registered print only to visible cabinet-door or drawer exterior-front surface pixels inside red areas/);
+    assert.match(templateBody, /cyan boxes mark handles, knobs, locks or metal hardware that must remain identical to image 1/);
     assert.match(templateBody, /For partial cabinet views, transfer only the matching master-image fragment/);
     assert.match(templateBody, /Never paste a flat rectangle/);
     assert.match(templateBody, /same composition and dimensions as image 1/);
-    assert.doesNotMatch(templateBody, /FLAGSHIP_COMPLEX_TEMPLATE_PRINT_MODE|OPEN_DRAWER_REGISTERED_PRINT_MAPPING|DETAIL_SLICE_LAYOUT_PROTECTION_MODE/);
+    assert.match(templateBody, /OPEN_DRAWER_REGISTERED_PRINT_MAPPING/);
+    assert.match(templateBody, /Apply the following rules only when image 1 contains one or more opened drawers/);
+    assert.doesNotMatch(templateBody, /FLAGSHIP_COMPLEX_TEMPLATE_PRINT_MODE|DETAIL_SLICE_LAYOUT_PROTECTION_MODE/);
   });
 }
 

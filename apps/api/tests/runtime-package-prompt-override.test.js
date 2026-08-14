@@ -136,13 +136,25 @@ async function createRuntimeFixture(t, workspaceId) {
   return { runtime, captured, sourcePath };
 }
 
-test('standard package keeps the user image prompt', { concurrency: false }, async (t) => {
+test('standard package keeps the user image prompt and bills repeated requests independently', { concurrency: false }, async (t) => {
   const { runtime, captured, sourcePath } = await createRuntimeFixture(t, 'standard-package-prompts');
   await runtime.saveSelectedModelPackage('standard');
+  await runtime.billing.saveRules({
+    enabled: true,
+    imageFeeMinMinor: 1,
+    imageFeeMaxMinor: 1,
+    llmFeeMinMinor: 0,
+    llmFeeMaxMinor: 0,
+    defaultBalanceMinor: 1000000
+  });
 
+  await runtime.generateFree({ sourcePath, prompt: 'ORIGINAL USER IMAGE PROMPT' });
   await runtime.generateFree({ sourcePath, prompt: 'ORIGINAL USER IMAGE PROMPT' });
   assert.match(captured.imageBodies[0], /ORIGINAL USER IMAGE PROMPT/);
   assert.doesNotMatch(captured.imageBodies[0], /STANDARD PACKAGE IMAGE PROMPT ONLY/);
+  assert.equal(captured.imageBodies.length, 2);
+  const transactions = await runtime.billing.listTransactions('standard-package-prompts', 20);
+  assert.equal(transactions.filter(entry => entry.kind === 'image').length, 2);
 });
 
 test('flagship package keeps the user image prompt', { concurrency: false }, async (t) => {

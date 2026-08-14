@@ -992,6 +992,7 @@ function isOpenDrawerTemplatePrintAnalysis(analysis, job = {}) {
 function openDrawerRegisteredPrintPrompt() {
   return [
     'OPEN_DRAWER_REGISTERED_PRINT_MAPPING',
+    'Apply the following rules only when image 1 contains one or more opened drawers; otherwise preserve the closed cabinet normally.',
     'An opened stack of drawers is one cabinet facade in different depth positions, not several independent print canvases.',
     'First map the complete reference artwork once onto the cabinet facade as if every drawer were closed. Divide that single mapped facade into ordered horizontal row bands from top drawer to bottom drawer.',
     'Each visible opened drawer front must receive only its own corresponding row band from that one closed-facade mapping: row 1 to drawer 1, row 2 to drawer 2, and so on. Preserve the same global artwork scale and vertical registration across all rows.',
@@ -1002,6 +1003,10 @@ function openDrawerRegisteredPrintPrompt() {
     'Foreground piles of clothes, storage items, tabletop goods, boxes, mirrors, trays and merchandise remain above the cabinet print. Stop the print exactly at their true occlusion boundary; never invent cabinet panels, frames, legs, black blocks or rectangular patches over those foreground objects.',
     'Never print over an occluder, erase it, move it, redraw it, complete a hidden motif through it, or expose cabinet surface that is not visible in the first image.'
   ].join('\n');
+}
+
+function currentActorRole() {
+  return String(workspaceContext.getStore()?.userRole || '').trim().toLowerCase();
 }
 
 function flagshipComplexTemplatePrintPrompt() {
@@ -2201,15 +2206,14 @@ async function generateImage(prompt, imagePaths, options = {}) {
     originalBytes: preparedImages.reduce((total, item) => total + item.originalBytes, 0),
     preparedBytes: preparedImages.reduce((total, item) => total + item.preparedBytes, 0)
   };
-  const reservation = options.skipBilling ? null : await billing.reserve(currentWorkspaceId(), 'image', {
-    ...packageBillingRange(pack, 'image'),
-    description: options.billingDescription || 'Image generation',
-    reference: options.billingReference || '',
-    onceKey: options.billingOnceKey || ''
-  });
+  const billingExempt = options.skipBilling || currentActorRole() === 'superadmin';
+  const attemptBillingKey = options.billingOnceKey
+    || billingOnceKey('image:api-request', currentWorkspaceId(), Date.now(), crypto.randomUUID());
+  let billingAmountMinor = 0;
   try {
     const attemptStartedAt = new Map();
-    const body = await adaptiveImageApiJson(apiEndpoint(api.baseUrl, '/images/edits'), async ({ signal }) => {
+    const endpoint = apiEndpoint(api.baseUrl, '/images/edits');
+    const body = await imageApiScheduler.schedule(async ({ attempt, signal }) => {
       if (signal?.aborted) throw new Error('Task stopped');
       const fields = [
         { name: 'model', value: api.imageModel },
@@ -2241,14 +2245,26 @@ async function generateImage(prompt, imagePaths, options = {}) {
         const maskBytes = await fsp.readFile(maskPath);
         form.append('mask', new Blob([maskBytes], { type: 'image/png' }), 'template-edit-mask.png');
       }
-      return {
+      const requestOptions = {
         method: 'POST',
         headers: { Authorization: `Bearer ${api.imageKey}` },
         body: form,
         signal,
         _powershellMultipart: { fields, files }
       };
-    }, IMAGE_API_TIMEOUT_MS, {
+      const reservation = billingExempt ? null : await billing.reserve(currentWorkspaceId(), 'image', {
+        ...packageBillingRange(pack, 'image'),
+        description: options.billingDescription || 'Image generation',
+        reference: options.billingReference || '',
+        onceKey: `${attemptBillingKey}:attempt:${attempt}`
+      });
+      try {
+        return await adaptiveImageApiJsonOnce(endpoint, requestOptions, IMAGE_API_TIMEOUT_MS, signal);
+      } finally {
+        const billingEntry = reservation ? await billing.commit(reservation) : null;
+        billingAmountMinor += Math.abs(Number(billingEntry?.amountMinor) || 0);
+      }
+    }, {
       signal: options.signal,
       onState: event => {
         if (event.state === 'running') attemptStartedAt.set(event.attempt, Date.now());
@@ -2272,11 +2288,10 @@ async function generateImage(prompt, imagePaths, options = {}) {
       ...preparation,
       downloadElapsedMs: Math.max(0, Date.now() - downloadStartedAt)
     });
-    const billingEntry = reservation ? await billing.commit(reservation) : null;
-    bytes.billingAmountMinor = Math.abs(Number(billingEntry?.amountMinor) || 0);
+    bytes.billingAmountMinor = billingAmountMinor;
     return bytes;
   } catch (error) {
-    if (reservation) await billing.release(reservation).catch(() => {});
+    error.billingAmountMinor = Math.max(0, Number(error?.billingAmountMinor) || 0) + billingAmountMinor;
     throw error;
   }
 }
@@ -2679,7 +2694,8 @@ async function collectTemplateItems(templateRoot) {
       reason: summary.reason,
       replaceArea: summary.replaceArea,
       forbiddenArea: summary.forbiddenArea,
-      regions: summary.regions
+      regions: summary.regions,
+      protectedRegions: summary.protectedRegions
     });
   }
   return { jobs, items };
@@ -2852,14 +2868,16 @@ async function saveTemplateRegions(payload) {
     const job = byRelative.get(templateRelativeKey(item.relativePath));
     if (!job) throw new Error(`模板不存在：${item.relativePath}`);
     const regions = Array.isArray(item.regions) ? item.regions : [];
+    const protectedRegions = Array.isArray(item.protectedRegions) ? item.protectedRegions : [];
     const requestedAction = normalizeTemplateProcessingMode(item.action);
     const action = regions.length ? 'replace_print' : requestedAction === 'exclude' ? 'exclude' : 'copy_original';
     const analysis = createManualTemplateAnalysis({
       action,
       reason: regions.length ? '运营人工框选柜体区域' : action === 'exclude' ? '运营人工排除' : '未框选区域，按原图复制',
       replaceArea: regions.length ? '人工粗框内由 Image2 判断的可见柜门或抽屉正面' : '无',
-      forbiddenArea: '粗框外全部区域，以及框内背景、人物、文字、边框、门缝、把手、柜脚、内侧和道具',
-      regions
+      forbiddenArea: '粗框外全部区域，以及框内背景、人物、文字、边框、门缝、柜脚、内侧和道具；青框内把手、旋钮、锁具和五金必须原样保留',
+      regions,
+      protectedRegions
     });
     const cache = templateCachePaths(folder, job.relativePath);
     await writeTemplateAnalysisCache({
@@ -3099,7 +3117,6 @@ async function generateTemplateJob(job, source, config, options = {}) {
     return { action, outputPath: job.outputPath };
   }
 
-  const activePack = await activeModelPackage();
   if (!source.printPath || !fs.existsSync(source.printPath)) throw new Error('原始印花图不存在');
   if (!source.masterImagePath || !fs.existsSync(source.masterImagePath)) throw new Error('请先生成当前任务的母版图');
   let prompt = renderPromptTemplate(await getPromptValue('templatePrint'), {
@@ -3117,8 +3134,8 @@ async function generateTemplateJob(job, source, config, options = {}) {
   const annotationPath = await createTemplateRegionAnnotation(job, configuration, generationCanvas);
   imagePaths = imagePaths.slice(0, 3);
   imagePaths.push(annotationPath);
-  const requestImageContract = 'The request contains exactly four images in this fixed order: locked template canvas, print master reference, original print artwork, and red-ROI annotation. Never swap, omit, duplicate or reinterpret their roles.';
-  prompt += `\n\nCURRENT_REQUEST_EXECUTION_CONTRACT\n${requestImageContract} Use image 1 as the locked output canvas. Use image 2 to understand the complete print placement on this cabinet and image 3 as the original artwork source. Image 4 only marks the approximate cabinet search area; the red box is not a paste rectangle and must not appear in the output. Apply the complete registered print only to visible cabinet or drawer exterior fronts inside that area. Preserve the original canvas, crop, layout, text, labels, background, people, props, foreground occluders, cabinet frame, seams, handles, legs, sides, drawer interiors and lighting. For opened drawers, keep one continuous facade registration and project each corresponding row onto its existing exterior front. For partial cabinet views, transfer only the matching master-image fragment. Never paste a flat rectangle, redraw the page, change cabinet geometry, zoom, crop, pad or outpaint. Output one finished image at the same composition and dimensions as image 1.`;
+  const requestImageContract = 'The request contains exactly four images in this fixed order: locked template canvas, print master reference, original print artwork, and ROI annotation. Never swap, omit, duplicate or reinterpret their roles.';
+  prompt += `\n\nCURRENT_REQUEST_EXECUTION_CONTRACT\n${requestImageContract} Use image 1 as the locked output canvas. Use image 2 to understand the complete print placement on this cabinet and image 3 as the original artwork source. In image 4, red boxes mark approximate printable cabinet search areas and cyan boxes mark handles, knobs, locks or metal hardware that must remain identical to image 1. The colored boxes are guidance only, are not paste rectangles and must not appear in the output. Apply the complete registered print only to visible cabinet-door or drawer exterior-front surface pixels inside red areas. Never print inside cyan areas. Preserve the original canvas, crop, layout, text, labels, background, people, props, foreground occluders, cabinet frame, seams, handles, knobs, locks, hardware, legs, sides, drawer interiors and lighting. For partial cabinet views, transfer only the matching master-image fragment. Never paste a flat rectangle, redraw the page, change cabinet geometry, zoom, crop, pad or outpaint. Output one finished image at the same composition and dimensions as image 1.\n\n${openDrawerRegisteredPrintPrompt()}`;
   if (options.includePreviousResult && fs.existsSync(job.outputPath)) {
     imagePaths.push(job.outputPath);
     prompt += `\n\nImage ${imagePaths.length} is the current rejected result. Use it only to identify what should be corrected. Do not copy its defects, altered layout, geometry, text, background or artifacts.`;
@@ -3132,12 +3149,11 @@ async function generateTemplateJob(job, source, config, options = {}) {
     size: generationCanvas.size,
     quality: config.imageQuality || 'high',
     bulkGeneration: options.bulkGeneration === true,
-    billingDescription: options.extraInstruction ? '套图图片重新生成' : '套图换印花生图',
+    billingDescription: isRegeneration ? '套图图片重新生成' : '套图换印花生图',
     billingReference: job.relativePath,
     billingOnceKey: isRegeneration
       ? billingOnceKey('image:template-job-regenerate', job.outputRoot, job.relativePath, Date.now(), crypto.randomUUID())
       : billingOnceKey('image:template-job', job.outputRoot, job.relativePath, Date.now(), crypto.randomUUID()),
-    skipBilling: isRegeneration && packageIsFlagship(activePack),
     signal: options.signal,
     onRequestState: options.onRequestState
   });
@@ -3288,6 +3304,7 @@ async function generateTemplateSetForFolder(folder, onlyMissing = true, relative
       live.billingCostMinor += Math.max(0, Number(result.billedMinor) || 0);
       return result;
     } catch (error) {
+      live.billingCostMinor += Math.max(0, Number(error?.billingAmountMinor) || 0);
       live.failed += 1;
       liveFailures.push(`${job.relativePath}: ${error?.message || error}`);
       await writeJsonFile(metadataPaths(folder).generationErrors, {
@@ -3415,11 +3432,14 @@ async function regenerateSingleTemplateUnlocked(payload, options = {}) {
     });
   } catch (error) {
     const stopped = Boolean(options.signal?.aborted);
+    const failedBilledMinor = Math.max(0, Number(error?.billingAmountMinor) || 0);
+    const failedProgress = failedBilledMinor > 0 ? await readJsonFile(progressFile, {}) : null;
     await addOperationLog(folder, stopped ? `已停止重新生成：${job.relativePath}` : `重新生成失败：${job.relativePath}`);
     await publishSingleProgress({
       phase: 'failed',
       pending: 0,
       waitingUpstream: 0,
+      billingCostMinor: Math.max(0, Number(failedProgress?.billingCostMinor) || 0) + failedBilledMinor,
       message: stopped ? `已停止重新生成：${job.relativePath}` : `重新生成失败：${job.relativePath}`,
       completedAt: new Date().toISOString()
     });
@@ -3496,7 +3516,6 @@ async function generateTemplateTaskMaster(task = {}, options = {}) {
   if (typeof options.reportProgress === 'function') {
     await options.reportProgress({ phase: 'generating', current: 0, total: 1, percent: 10, message: '正在生成母版图…' });
   }
-  const pack = await activeModelPackage();
   let prompt = String(await getPromptValue('templateMasterGeneration') || '').trim();
   prompt = `${prompt || '根据第一张产品参考图和第二张印花图生成标准电商母版图。'}\n\nCURRENT_MASTER_REQUEST_CONTRACT\nThe request contains exactly two images in this fixed order: image 1 is the cabinet product reference and image 2 is the original print artwork. Never swap their roles. Image 1 may contain a living room, bedroom, furniture, curtains, floor, wall, plants, lamps, speakers, props, people, text or labels. Preserve only the same complete cabinet structure from image 1, remove every environmental element, apply image 2 only to the cabinet's printable exterior fronts with physical perspective and continuous registration, and output a centered complete cabinet on a uniform pure white RGB(255,255,255) background with only a subtle natural grounding shadow. Never preserve, recreate or extend the source scene. This contract overrides any conflicting optional instruction.`;
   const bytes = await generateImage(prompt, [referencePath, task.printPath], {
@@ -3504,7 +3523,6 @@ async function generateTemplateTaskMaster(task = {}, options = {}) {
     quality: config.imageQuality || 'high',
     billingDescription: '套图母版生成',
     billingReference: task.id || path.basename(referencePath),
-    skipBilling: packageIsFlagship(pack),
     signal: options.signal,
     onRequestState: options.onRequestState
   });
@@ -3520,7 +3538,7 @@ async function generateTemplateTaskMaster(task = {}, options = {}) {
     billingCostMinor: Math.max(0, Number(bytes.billingAmountMinor) || 0)
   };
   if (typeof options.reportProgress === 'function') {
-    await options.reportProgress({ phase: 'completed', current: 1, total: 1, percent: 100, message: '母版图生成完成', billingCostMinor: 0 });
+    await options.reportProgress({ phase: 'completed', current: 1, total: 1, percent: 100, message: '母版图生成完成', billingCostMinor: result.billingCostMinor });
   }
   return result;
 }
@@ -4138,7 +4156,7 @@ async function generateFree(payload = {}, options = {}) {
     quality: config.imageQuality || 'auto',
     billingDescription: '自由生图',
     billingReference: path.basename(payload.sourcePath),
-    billingOnceKey: billingOnceKey('image:free', payload.sourcePath, String(payload.prompt).trim()),
+    billingOnceKey: billingOnceKey('image:free', payload.sourcePath, String(payload.prompt).trim(), Date.now(), crypto.randomUUID()),
     signal: options.signal
   }));
   return { outputPath, url: imageUrl(outputPath) };

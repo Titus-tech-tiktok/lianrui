@@ -42,7 +42,9 @@ test('template editor uses manual regions instead of AI reference analysis', asy
   assert.match(renderer, /layout\?\.clientHeight \|\| figure\.clientHeight/);
   assert.match(renderer, /data-region-undo/);
   assert.match(renderer, /data-region-clear/);
+  assert.match(renderer, /data-region-mode="protected"/);
   assert.match(renderer, /regions: item\.regions/);
+  assert.match(renderer, /protectedRegions: item\.protectedRegions/);
   assert.match(renderer, /typeof window\.PointerEvent === 'function'/);
   assert.match(renderer, /window\.addEventListener\('mouseup', finishRegion, \{ once: true \}\)/);
   assert.match(renderer, /function renderTemplateRegionResult\(\)/);
