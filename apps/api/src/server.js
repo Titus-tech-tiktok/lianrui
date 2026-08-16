@@ -255,11 +255,16 @@ async function collectZipDownloadEntries(folder) {
     ? await fsp.stat(masterImagePath).catch(() => null)
     : null;
   if (masterStat?.isFile()) {
-    const masterName = '母版图.jpg';
-    entries = entries.filter(entry => (
-      normalizedComparablePath(entry.file) !== normalizedComparablePath(masterImagePath)
-      && entry.name.toLocaleLowerCase('zh-CN') !== masterName.toLocaleLowerCase('zh-CN')
-    ));
+    const masterName = '白底图/白底图.jpg';
+    entries = entries.filter(entry => {
+      const archiveName = entry.name.replaceAll('\\', '/').replace(/^\.\/+/, '').toLocaleLowerCase('zh-CN');
+      const topFolder = archiveName.split('/')[0];
+      return normalizedComparablePath(entry.file) !== normalizedComparablePath(masterImagePath)
+        && archiveName !== '母版图.jpg'
+        && archiveName !== '母版图.png'
+        && topFolder !== '白底'
+        && topFolder !== '白底图';
+    });
     entries.push({ file: masterImagePath, name: masterName, convertToJpeg: true });
   }
   return entries;

@@ -47,7 +47,7 @@ test('ZIP 下载名按套图文件夹、日期和两位序号生成', async t =>
   assert.equal(await buildZipDownloadName(second), '款式1-0715-02');
 });
 
-test('task ZIP includes its generated master image at the archive root', async t => {
+test('task ZIP includes its generated master image as 白底图/白底图.jpg', async t => {
   const fixtureRoot = path.join(runtime.WORKSPACE_ROOT, '.tests');
   await fs.mkdir(fixtureRoot, { recursive: true });
   const root = await fs.mkdtemp(path.join(fixtureRoot, 'caishen-zip-master-'));
@@ -61,15 +61,20 @@ test('task ZIP includes its generated master image at the archive root', async t
     .png()
     .toFile(master);
   await fs.writeFile(path.join(output, 'result.jpg'), Buffer.from('result-image'));
+  await fs.mkdir(path.join(output, '白底'), { recursive: true });
+  await fs.writeFile(path.join(output, '白底', '旧母版图.png'), Buffer.from('legacy-master'));
+  await fs.writeFile(path.join(output, '母版图.jpg'), Buffer.from('legacy-root-master'));
   await writeSource(output, path.join(root, 'templates', 'style-1'), master);
 
   const archive = await createFolderZip(output);
   const entries = zipLocalEntries(archive);
   const names = entries.map(entry => entry.name);
-  const masterEntry = entries.find(entry => entry.name === '母版图.jpg');
+  const masterEntry = entries.find(entry => entry.name === '白底图/白底图.jpg');
 
   assert.ok(names.includes('result.jpg'));
   assert.ok(masterEntry);
+  assert.equal(names.some(name => name.startsWith('白底/')), false);
+  assert.equal(names.includes('母版图.jpg'), false);
   assert.equal(names.includes('母版图.png'), false);
   assert.deepEqual([...masterEntry.data.subarray(0, 3)], [0xff, 0xd8, 0xff]);
 });
