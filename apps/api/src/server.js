@@ -26,7 +26,7 @@ const LONG_JOB_METHODS = new Set([
   'generateTemplates', 'regenerateTemplate'
 ]);
 const SUPERADMIN_RPC_METHODS = new Set([
-  'getApiSettings', 'saveApiSettings', 'testApiSettings', 'testAnalysisApi', 'savePromptSetting', 'resetPromptSetting'
+  'getApiSettings', 'saveApiSettings', 'testApiSettings', 'testRelayHealth', 'savePromptSetting', 'resetPromptSetting'
 ]);
 
 function canAccessRpc(user, method) {
@@ -72,8 +72,16 @@ function visibleUsersForActor(users, actor) {
 
 function billingVisibleUsersForActor(users, actor) {
   if (actor.role === 'superadmin') return users;
-  if (actor.role === 'admin') return users.filter(user => user.role !== 'superadmin');
+  if (actor.role === 'admin') return visibleUsersForActor(users, actor);
   return [];
+}
+
+function canTransferUserBalance(actor, target) {
+  if (!target) return false;
+  if (actor.role === 'superadmin') return true;
+  if (actor.role !== 'admin') return false;
+  return target.id === actor.id
+    || (target.role === 'member' && (!target.parentUserId || target.parentUserId === actor.id));
 }
 
 function canManageUser(actor, target) {
@@ -496,13 +504,6 @@ async function writeJob(job) {
   throw lastError;
 }
 
-async function modelPackageWorkspaceForUser(user) {
-  // Analysis and generation are platform capabilities. Keep their effective
-  // model/concurrency selection identical for every role and every new account;
-  // only user assets and outputs remain isolated in the user's own workspace.
-  return runtime.WORKSPACE_ID;
-}
-
 function publicJob(job) {
   if (!job) return null;
   return {
@@ -553,14 +554,13 @@ async function runNextJobs() {
         runNextJobs();
       }
     }, {
-      modelPackageWorkspaceId: job.modelPackageWorkspaceId || job.workspaceId,
       userRole: job.actorRole || 'member',
       userId: job.actorUserId || ''
     });
   }
 }
 
-async function enqueueJob(method, args, clientKey = '', modelPackageWorkspaceId = runtime.WORKSPACE_ID, actor = {}) {
+async function enqueueJob(method, args, clientKey = '', actor = {}) {
   const workspaceId = runtime.WORKSPACE_ID;
   const normalizedClientKey = String(clientKey || '').slice(0, 160);
   const scopedClientKey = normalizedClientKey ? `${workspaceId}:${normalizedClientKey}` : '';
@@ -572,7 +572,6 @@ async function enqueueJob(method, args, clientKey = '', modelPackageWorkspaceId 
   const job = {
     id: crypto.randomUUID(),
     workspaceId,
-    modelPackageWorkspaceId,
     actorRole: String(actor?.role || 'member'),
     actorUserId: String(actor?.id || ''),
     clientKey: normalizedClientKey,
@@ -961,7 +960,7 @@ const rpc = {
   getApiSettings: () => runtime.loadApiSettings(),
   saveApiSettings: ([payload]) => runtime.saveApiSettings(payload || {}),
   testApiSettings: ([payload]) => runtime.testApiSettings(payload || {}),
-  testAnalysisApi: ([payload]) => runtime.testAnalysisApi(payload || {}),
+  testRelayHealth: ([payload]) => runtime.testRelayHealth(payload || {}),
   saveConfig: async ([config]) => publicConfig(await runtime.saveConfig(safeConfig(config || {}))),
   resetConfig: async () => publicConfig(await runtime.resetConfig()),
   getPromptSettings: async (args, context) => {
@@ -1233,9 +1232,7 @@ async function startServer() {
     const user = await auth.userFromRequest(req);
     if (!user) return res.status(401).json({ error: '请先登录' });
     req.user = user;
-    req.modelPackageWorkspaceId = await modelPackageWorkspaceForUser(user);
     return runtime.runWithWorkspace(user.workspaceId, () => next(), {
-      modelPackageWorkspaceId: req.modelPackageWorkspaceId,
       userRole: user.role,
       userId: user.id
     });
@@ -1298,10 +1295,16 @@ async function startServer() {
   app.get('/api/billing/me', async (req, res) => {
     try {
       const days = Math.max(1, Math.min(3660, Math.trunc(Number(req.query.days) || 30)));
-      const data = await runtime.billing.getSummary(req.user.workspaceId, 30);
+      const relayChoices = await runtime.loadRelayChoices(true);
+      const requestedRelayId = String(req.query.relayId || relayChoices.activeRelayId || 'default-relay');
+      const relay = relayChoices.relays.find(item => item.id === requestedRelayId);
+      const relayId = relay?.id || relayChoices.activeRelayId || 'default-relay';
+      const data = await runtime.billing.getSummary(req.user.workspaceId, relayId, 30);
+      data.relays = relayChoices.relays;
+      data.activeRelayId = relayChoices.activeRelayId;
       if (![1, 7, 30].includes(days)) data.spendTotals = {
         ...(data.spendTotals || {}),
-        ...(await runtime.billing.getSpendTotals(req.user.workspaceId, [days]))
+        ...(await runtime.billing.getSpendTotals(req.user.workspaceId, [days], relayId))
       };
       data.customSpendDays = days;
       return res.json({ data });
@@ -1316,9 +1319,10 @@ async function startServer() {
       const allUsers = await auth.listUsers();
       const users = billingVisibleUsersForActor(allUsers, req.user);
       const visibleWorkspaceIds = new Set(users.map(user => user.workspaceId));
+      const relayChoices = await runtime.loadRelayChoices(true);
       const [rules, accounts, transactions] = await Promise.all([
         req.user.role === 'superadmin' ? runtime.billing.getRules() : Promise.resolve(undefined),
-        runtime.billing.listAccounts(users.map(user => user.workspaceId)),
+        runtime.billing.listAccounts(users.map(user => user.workspaceId), relayChoices.relays.map(relay => relay.id)),
         runtime.billing.listTransactions('', 150)
       ]);
       const visibleTransactions = transactions.filter(entry => visibleWorkspaceIds.has(entry.workspaceId));
@@ -1326,6 +1330,8 @@ async function startServer() {
       return res.json({
         data: {
           role: req.user.role,
+          relays: relayChoices.relays,
+          activeRelayId: relayChoices.activeRelayId,
           ...(req.user.role === 'superadmin' ? { rules } : {}),
           users: users.map(user => ({ ...user, billing: byWorkspace.get(user.workspaceId) })),
           transactionUsers: users.map(user => ({
@@ -1356,12 +1362,21 @@ async function startServer() {
     }
   });
 
-  app.get('/api/billing/gateway-usage', async (req, res) => {
-    if (!isSuperAdmin(req.user)) return res.status(403).json({ error: '只有超级管理员可以查看网关合约费用' });
+  app.get('/api/relays', async (req, res) => {
+    if (!isTeamAdmin(req.user)) return res.status(403).json({ error: '只有管理员可以查看中转站' });
     try {
-      return res.json({ data: await runtime.getGatewayUsage() });
-    } catch {
-      return res.status(502).json({ error: '网关合约费用暂时无法读取' });
+      return res.json({ data: await runtime.loadRelayChoices() });
+    } catch (error) {
+      return res.status(400).json({ error: error?.message || String(error) });
+    }
+  });
+
+  app.put('/api/relays/selection', async (req, res) => {
+    if (!isTeamAdmin(req.user)) return res.status(403).json({ error: '只有管理员可以切换中转站' });
+    try {
+      return res.json({ data: await runtime.saveActiveRelay(req.body?.activeRelayId) });
+    } catch (error) {
+      return res.status(400).json({ error: error?.message || String(error) });
     }
   });
 
@@ -1424,20 +1439,26 @@ async function startServer() {
     try {
       const user = (await auth.listUsers()).find(item => item.id === String(req.body?.userId || ''));
       if (!user) return res.status(404).json({ error: '账号不存在' });
+      const relayChoices = await runtime.loadRelayChoices(true);
+      const relayId = String(req.body?.relayId || '');
+      const relay = relayChoices.relays.find(item => item.id === relayId);
+      if (!relay) return res.status(400).json({ error: '请选择有效的中转站' });
       let result;
       const amountMinor = billingAmountMinorFromRequest(req.body || {});
       if (req.user.role === 'superadmin') {
-        result = await runtime.billing.adjustBalance(user.workspaceId, amountMinor, {
+        result = await runtime.billing.adjustBalance(user.workspaceId, relayId, amountMinor, {
           description: req.body?.description,
-          operatorUserId: req.user.id
+          operatorUserId: req.user.id,
+          relayName: relay.name
         });
       } else {
         if (!canManageUser(req.user, user)) return res.status(403).json({ error: '只能给自己的成员账号划拨算力余额' });
         if (!Number.isSafeInteger(amountMinor) || amountMinor <= 0) return res.status(400).json({ error: '管理员只能输入正数划拨算力余额' });
-        result = await runtime.billing.transferBalance(req.user.workspaceId, user.workspaceId, amountMinor, {
+        result = await runtime.billing.transferBalance(req.user.workspaceId, user.workspaceId, relayId, amountMinor, {
           debitDescription: '成员账户划拨',
           creditDescription: '账户充值到账',
-          operatorUserId: req.user.id
+          operatorUserId: req.user.id,
+          relayName: relay.name
         });
       }
       return res.json({ data: result });
@@ -1446,19 +1467,34 @@ async function startServer() {
     }
   });
 
-  app.get('/api/model-packages', async (req, res) => {
-    if (!isTeamAdmin(req.user)) return res.status(403).json({ error: '只有管理员可以选择模型' });
+  app.post('/api/billing/transfer', async (req, res) => {
+    if (!isTeamAdmin(req.user)) return res.status(403).json({ error: '只有管理员可以划拨余额' });
     try {
-      return res.json({ data: await runtime.loadModelPackageSettings(req.user) });
-    } catch (error) {
-      return res.status(400).json({ error: error?.message || String(error) });
-    }
-  });
-
-  app.put('/api/model-packages/selection', async (req, res) => {
-    if (!isTeamAdmin(req.user)) return res.status(403).json({ error: '只有管理员可以切换模型' });
-    try {
-      return res.json({ data: await runtime.saveSelectedModelPackage(req.body?.selectedModelPackageId) });
+      const users = await auth.listUsers();
+      const fromUser = users.find(item => item.id === String(req.body?.fromUserId || ''));
+      const toUser = users.find(item => item.id === String(req.body?.toUserId || ''));
+      if (!fromUser || !toUser) return res.status(404).json({ error: '转出或转入账号不存在' });
+      if (!canTransferUserBalance(req.user, fromUser) || !canTransferUserBalance(req.user, toUser)) {
+        return res.status(403).json({ error: '只能在自己和自己的员工账号之间划拨余额' });
+      }
+      const relayChoices = await runtime.loadRelayChoices(true);
+      const relayId = String(req.body?.relayId || '');
+      const relay = relayChoices.relays.find(item => item.id === relayId);
+      if (!relay) return res.status(400).json({ error: '请选择有效的中转站' });
+      const amountMinor = billingAmountMinorFromRequest(req.body || {});
+      const result = await runtime.billing.transferBalance(fromUser.workspaceId, toUser.workspaceId, relayId, amountMinor, {
+        debitDescription: `划拨给 ${toUser.displayName || toUser.username}`,
+        creditDescription: `收到 ${fromUser.displayName || fromUser.username} 划拨`,
+        operatorUserId: req.user.id,
+        relayName: relay.name
+      });
+      return res.json({
+        data: {
+          ...result,
+          fromUserId: fromUser.id,
+          toUserId: toUser.id
+        }
+      });
     } catch (error) {
       return res.status(400).json({ error: error?.message || String(error) });
     }
@@ -1483,7 +1519,7 @@ async function startServer() {
     if (!LONG_JOB_METHODS.has(method) || !rpc[method]) return res.status(404).json({ error: `未知后台任务：${method}` });
     if (!consumeJobRate(req.ip)) return res.status(429).json({ error: '后台任务提交过于频繁，请稍后再试' });
     try {
-      const job = await enqueueJob(method, Array.isArray(req.body?.args) ? req.body.args : [], req.body?.clientKey, req.modelPackageWorkspaceId, req.user);
+      const job = await enqueueJob(method, Array.isArray(req.body?.args) ? req.body.args : [], req.body?.clientKey, req.user);
       return res.status(job.status === 'completed' ? 200 : 202).json({ data: publicJob(job) });
     } catch (error) {
       return res.status(400).json({ error: error?.message || String(error) });
@@ -1678,7 +1714,6 @@ module.exports = {
   decodeFileToken,
   deleteAssetFiles,
   isWithin,
-  modelPackageWorkspaceForUser,
   normalizedThumbnailWidth,
   safeRelative,
   startServer,

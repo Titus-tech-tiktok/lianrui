@@ -39,7 +39,7 @@ API 与提示词是服务器全局设置，由管理员统一维护，普通成�
 
 ```bash
 cp .env.example .env
-# 在 .env 分别填写 CAISHEN_IMAGE_API_KEY / CAISHEN_ANALYSIS_API_KEY
+# 在 .env 填写 CAISHEN_IMAGE_API_KEY
 npm install
 npm run dev
 ```
@@ -65,20 +65,17 @@ npm start
 CAISHEN_API_SERVICE_URL=http://your-api-host
 CAISHEN_API_BASE_URL=https://api.change2pro.com
 CAISHEN_IMAGE_API_KEY=your-image2-group-key
-CAISHEN_ANALYSIS_API_KEY=your-text-analysis-group-key
-CAISHEN_ANALYSIS_WIRE_API=chat_completions
 CAISHEN_IMAGE_MODEL=gpt-image-2
-CAISHEN_REVERSE_PROMPT_MODEL=gpt-5-3
 CAISHEN_FILE_TOKEN_SECRET=至少32位随机字符串
 CAISHEN_SESSION_SECRET=至少32位随机字符串
 ```
 
 - 模型与服务检测：`GET /v1/models`
-- 模板分析、商品资料、AI 质检：`POST /v1/chat/completions`
 - 母版、模板换印花、重新生成、自由生图：`POST /v1/images/edits`
+- 模板区域由运营人工框选，标题由本地关键词规则生成，不调用外部分析模型。
 - 图片编辑严格使用 multipart，多张参考图重复提交 `image` 字段。
 
-生图、AI 分析和重生成都由服务端持久后台任务执行，任务记录保存在 `data/workspaces/<workspace>/jobs`。浏览器只轮询状态，不会让单次生图请求长期占用反向代理连接。
+生图和重生成都由服务端持久后台任务执行，任务记录保存在 `data/workspaces/<workspace>/jobs`。浏览器只轮询状态，不会让单次生图请求长期占用反向代理连接。
 
 ## Docker 部署
 

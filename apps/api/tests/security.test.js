@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const os = require('node:os');
 const fs = require('node:fs/promises');
-const { canAccessRpc, isWithin, modelPackageWorkspaceForUser, safeRelative } = require('../src/server');
+const { canAccessRpc, isWithin, safeRelative } = require('../src/server');
 const { createAuthService } = require('../src/auth');
 const { isSameOrChildPath } = require('../src/core/path-utils');
 const runtime = require('../src/runtime');
@@ -46,7 +46,7 @@ test('role access separates prompt management from API management', () => {
   assert.equal(canAccessRpc(member, 'getPromptSettings'), false);
   assert.equal(canAccessRpc(admin, 'getPromptSettings'), true);
   assert.equal(canAccessRpc(superadmin, 'getPromptSettings'), true);
-  for (const method of ['getApiSettings', 'saveApiSettings', 'testApiSettings', 'testAnalysisApi']) {
+  for (const method of ['getApiSettings', 'saveApiSettings', 'testApiSettings', 'testRelayHealth']) {
     assert.equal(canAccessRpc(member, method), false);
     assert.equal(canAccessRpc(admin, method), false);
     assert.equal(canAccessRpc(superadmin, method), true);
@@ -57,19 +57,6 @@ test('role access separates prompt management from API management', () => {
     assert.equal(canAccessRpc(member, method), true);
     assert.equal(canAccessRpc(admin, method), true);
     assert.equal(canAccessRpc(superadmin, method), true);
-  }
-});
-
-test('all account roles use one analysis and generation execution configuration', async () => {
-  const expected = runtime.WORKSPACE_ID;
-  const users = [
-    { role: 'superadmin', workspaceId: 'local' },
-    { role: 'admin', workspaceId: 'user-admin' },
-    { role: 'member', workspaceId: 'user-member', parentUserId: 'admin-id' },
-    { role: 'member', workspaceId: 'user-new-member', parentUserId: '' }
-  ];
-  for (const user of users) {
-    assert.equal(await modelPackageWorkspaceForUser(user), expected);
   }
 });
 

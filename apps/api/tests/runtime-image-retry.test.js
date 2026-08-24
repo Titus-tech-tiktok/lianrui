@@ -66,7 +66,18 @@ test('template-print regeneration entrypoints use the image API', async (t) => {
   await fs.writeFile(path.join(templateRoot, '1.png'), templateImage);
   await fs.writeFile(printPath, resultPng);
   await runtime.saveConfig({ outputPath: outputRoot, auditMode: 'economy' });
-  await runtime.billing.saveRules({ enabled: true, imageFeeMinor: 1, llmFeeMinor: 1, defaultBalanceMinor: 3000000 });
+  await runtime.billing.saveRules({ enabled: true });
+  const apiSettings = await runtime.loadApiSettings();
+  await runtime.saveApiSettings({
+    ...apiSettings,
+    relays: apiSettings.relays.map(relay => ({
+      ...relay,
+      imagePriceMinMinor: 300000,
+      imagePriceMaxMinor: 300000
+    }))
+  });
+  const activeRelayId = (await runtime.loadApiSettings()).activeRelayId;
+  await runtime.billing.adjustBalance('image-retry', activeRelayId, 3000000);
   await runtime.saveTemplateRegions({
     folder: templateRoot,
     items: [{
@@ -97,7 +108,7 @@ test('template-print regeneration entrypoints use the image API', async (t) => {
   const panelOffset = (28 * 96 + 48) * 3;
   assert.deepEqual([...outputPixel.subarray(panelOffset, panelOffset + 3)], [0x88, 0xaa, 0xee]);
   assert.equal(generated.summary.apiGenerated, 1);
-  const afterInitialBilling = await runtime.billing.getSummary('image-retry');
+  const afterInitialBilling = await runtime.billing.getSummary('image-retry', activeRelayId);
   assert.equal(afterInitialBilling.account.balanceMinor, 2400000);
   assert.equal(requests, 2, 'standard template-print should call the image API and retry once');
 
@@ -107,17 +118,17 @@ test('template-print regeneration entrypoints use the image API', async (t) => {
   await fs.rm(outputFile, { force: true });
   await runtime.generateTemplateSetForFolder(generated.folder, true);
   await fs.access(outputFile);
-  const afterMissingBilling = await runtime.billing.getSummary('image-retry');
+  const afterMissingBilling = await runtime.billing.getSummary('image-retry', activeRelayId);
   assert.equal(afterMissingBilling.account.balanceMinor, 2100000);
   assert.equal(requests, 3, '补生成缺失图片仍应调用图片 API');
 
   await runtime.generateTemplateSetForFolder(generated.folder, false);
-  const afterSetRegenerationBilling = await runtime.billing.getSummary('image-retry');
+  const afterSetRegenerationBilling = await runtime.billing.getSummary('image-retry', activeRelayId);
   assert.equal(afterSetRegenerationBilling.account.balanceMinor, 1800000);
   assert.equal(requests, 4, '重新生成整套图仍应调用图片 API');
 
   await runtime.regenerateSingleTemplate({ folder: generated.folder, relativePath: '1.png', extraInstruction: 'keep the print centered' });
-  const afterSingleRegenerationBilling = await runtime.billing.getSummary('image-retry');
+  const afterSingleRegenerationBilling = await runtime.billing.getSummary('image-retry', activeRelayId);
   assert.equal(afterSingleRegenerationBilling.account.balanceMinor, 1500000);
   assert.equal(requests, 5, '单张重新生成仍应调用图片 API');
 
@@ -126,7 +137,7 @@ test('template-print regeneration entrypoints use the image API', async (t) => {
     runtime.regenerateSingleTemplate({ folder: generated.folder, relativePath: '1.png' })
   ]);
   assert.equal(requests, 7, '连续提交的单张重新生成应安全排队且全部调用图片 API');
-  const afterQueuedRegenerationBilling = await runtime.billing.getSummary('image-retry');
+  const afterQueuedRegenerationBilling = await runtime.billing.getSummary('image-retry', activeRelayId);
   assert.equal(afterQueuedRegenerationBilling.account.balanceMinor, 900000);
 
 });
@@ -231,7 +242,7 @@ test('template-print queue completes all thirty images through the adaptive imag
   await Promise.all(relativePaths.map(name => fs.access(path.join(generated.folder, name))));
 });
 
-test('template generation outer loop uses image concurrency instead of analysis concurrency', async () => {
+test('template generation outer loop uses the configured image concurrency', async () => {
   const source = await fs.readFile(require.resolve('../src/runtime'), 'utf8');
   const start = source.indexOf('const waitingUpstream = new Set()');
   const end = source.indexOf('await imageEventWrite;', start);
@@ -281,14 +292,17 @@ test('every failed outbound image attempt is billed', { concurrency: false }, as
   const image = await cabinetTemplateBuffer();
   await fs.writeFile(productPath, image);
   await fs.writeFile(printPath, image);
-  await runtime.billing.saveRules({
-    enabled: true,
-    imageFeeMinMinor: 1,
-    imageFeeMaxMinor: 1,
-    llmFeeMinMinor: 0,
-    llmFeeMaxMinor: 0,
-    defaultBalanceMinor: 100000000
+  await runtime.billing.saveRules({ enabled: true });
+  await runtime.saveApiSettings({
+    activeRelayId: 'primary',
+    relays: [{
+      id: 'primary', name: 'Primary relay', enabled: true,
+      baseUrl: `http://127.0.0.1:${server.address().port}/v1`,
+      imageApiKey: 'image-key', imageModel: 'gpt-image-2',
+      imagePriceMinMinor: 1, imagePriceMaxMinor: 1
+    }]
   });
+  await runtime.billing.adjustBalance('failed-attempt-billing', 'primary', 100000000);
 
   await assert.rejects(
     runtime.generateTemplateTaskMaster({ id: 'failed-master', productPath, printPath }),

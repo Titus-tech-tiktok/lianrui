@@ -7,6 +7,7 @@ const BILLING_TYPES = new Set(['image', 'llm']);
 const BILLING_CURRENCY = 'USD';
 const BILLING_SCALE = 1_000_000;
 const LEGACY_CENT_TO_MICRO = 10_000;
+const DEFAULT_RELAY_ID = 'default-relay';
 
 function createBillingService(dataRoot) {
   const root = path.join(dataRoot, 'system');
@@ -14,19 +15,13 @@ function createBillingService(dataRoot) {
   const accountsFile = path.join(root, 'billing-accounts.json');
   const ledgerFile = path.join(root, 'billing-ledger.jsonl');
   let mutationChain = Promise.resolve();
+  let legacyRelayId = DEFAULT_RELAY_ID;
 
   const defaultRules = () => ({
-    version: 1,
+    version: 2,
     enabled: false,
     currency: BILLING_CURRENCY,
     amountScale: BILLING_SCALE,
-    imageFeeMinor: 0,
-    imageFeeMinMinor: 0,
-    imageFeeMaxMinor: 0,
-    llmFeeMinor: 0,
-    llmFeeMinMinor: 0,
-    llmFeeMaxMinor: 0,
-    defaultBalanceMinor: 0,
     updatedAt: ''
   });
 
@@ -50,6 +45,17 @@ function createBillingService(dataRoot) {
     return workspaceId;
   }
 
+  function normalizeRelayId(value) {
+    const relayId = String(value || '').trim().toLowerCase();
+    if (!/^[a-z0-9_-]{1,80}$/.test(relayId)) throw new Error('中转站编号无效');
+    return relayId;
+  }
+
+  function setLegacyRelayId(value) {
+    legacyRelayId = normalizeRelayId(value || DEFAULT_RELAY_ID);
+    return legacyRelayId;
+  }
+
   function normalizeBillingOnceKey(value) {
     const text = String(value || '').trim();
     return text ? crypto.createHash('sha256').update(text).digest('hex') : '';
@@ -69,25 +75,11 @@ function createBillingService(dataRoot) {
 
   async function readRules() {
     const value = await readJson(rulesFile, {});
-    const sourceScale = value?.amountScale === BILLING_SCALE ? BILLING_SCALE : 100;
-    const imageFee = Math.max(0, migrateMoney(value?.imageFeeMinor, sourceScale));
-    const llmFee = Math.max(0, migrateMoney(value?.llmFeeMinor, sourceScale));
-    const imageMin = Math.max(0, value?.imageFeeMinMinor === undefined ? imageFee : migrateMoney(value?.imageFeeMinMinor, sourceScale));
-    const imageMax = Math.max(imageMin, value?.imageFeeMaxMinor === undefined ? (imageFee || imageMin) : migrateMoney(value?.imageFeeMaxMinor, sourceScale));
-    const llmMin = Math.max(0, value?.llmFeeMinMinor === undefined ? llmFee : migrateMoney(value?.llmFeeMinMinor, sourceScale));
-    const llmMax = Math.max(llmMin, value?.llmFeeMaxMinor === undefined ? (llmFee || llmMin) : migrateMoney(value?.llmFeeMaxMinor, sourceScale));
     return {
       ...defaultRules(),
       enabled: value?.enabled === true,
       currency: BILLING_CURRENCY,
       amountScale: BILLING_SCALE,
-      imageFeeMinor: imageMax,
-      imageFeeMinMinor: imageMin,
-      imageFeeMaxMinor: imageMax,
-      llmFeeMinor: llmMax,
-      llmFeeMinMinor: llmMin,
-      llmFeeMaxMinor: llmMax,
-      defaultBalanceMinor: Math.max(0, migrateMoney(value?.defaultBalanceMinor, sourceScale)),
       updatedAt: String(value?.updatedAt || '')
     };
   }
@@ -97,15 +89,18 @@ function createBillingService(dataRoot) {
     const sourceScale = value?.amountScale === BILLING_SCALE ? BILLING_SCALE : 100;
     const accounts = value?.accounts && typeof value.accounts === 'object' ? value.accounts : {};
     if (sourceScale !== BILLING_SCALE) {
-      for (const account of Object.values(accounts)) {
-        if (!account || typeof account !== 'object') continue;
-        account.balanceMinor = migrateMoney(account.balanceMinor, sourceScale);
-        for (const reservation of Object.values(account.reservations || {})) {
-          if (reservation && typeof reservation === 'object') reservation.amountMinor = migrateMoney(reservation.amountMinor, sourceScale);
+      for (const record of Object.values(accounts)) {
+        if (!record || typeof record !== 'object') continue;
+        const wallets = record.wallets && typeof record.wallets === 'object' ? Object.values(record.wallets) : [record];
+        for (const wallet of wallets) {
+          wallet.balanceMinor = migrateMoney(wallet.balanceMinor, sourceScale);
+          for (const reservation of Object.values(wallet.reservations || {})) {
+            if (reservation && typeof reservation === 'object') reservation.amountMinor = migrateMoney(reservation.amountMinor, sourceScale);
+          }
         }
       }
     }
-    return { version: 1, currency: BILLING_CURRENCY, amountScale: BILLING_SCALE, accounts };
+    return { version: 2, currency: BILLING_CURRENCY, amountScale: BILLING_SCALE, accounts };
   }
 
   function mutate(worker) {
@@ -121,7 +116,7 @@ function createBillingService(dataRoot) {
     }
   }
 
-  function normalizeAccount(account, initialBalance = 0) {
+  function normalizeWallet(account, initialBalance = 0) {
     const value = account && typeof account === 'object' ? account : {};
     const existingBalance = Number(value.balanceMinor);
     value.balanceMinor = Number.isFinite(existingBalance) && existingBalance >= 0
@@ -135,18 +130,62 @@ function createBillingService(dataRoot) {
     return value;
   }
 
+  function normalizeAccountRecord(record) {
+    const source = record && typeof record === 'object' ? record : {};
+    if (!source.wallets || typeof source.wallets !== 'object') {
+      const legacyWallet = normalizeWallet({
+        balanceMinor: source.balanceMinor,
+        reservations: source.reservations,
+        chargedOnce: source.chargedOnce,
+        createdAt: source.createdAt,
+        updatedAt: source.updatedAt
+      });
+      source.wallets = { [legacyRelayId]: legacyWallet };
+      delete source.balanceMinor;
+      delete source.reservations;
+      delete source.chargedOnce;
+    }
+    source.createdAt ||= new Date().toISOString();
+    source.updatedAt ||= source.createdAt;
+    for (const [relayId, wallet] of Object.entries(source.wallets)) {
+      source.wallets[normalizeRelayId(relayId)] = normalizeWallet(wallet);
+    }
+    return source;
+  }
+
+  function accountWallet(state, workspaceId, relayIdValue, create = true) {
+    const relayId = normalizeRelayId(relayIdValue || legacyRelayId);
+    const record = normalizeAccountRecord(state.accounts[workspaceId]);
+    state.accounts[workspaceId] = record;
+    if (!record.wallets[relayId] && create) record.wallets[relayId] = normalizeWallet({});
+    return { record, relayId, wallet: record.wallets[relayId] || null };
+  }
+
   function reservedMinor(account) {
     return Object.values(account.reservations || {}).reduce((total, item) => total + Math.max(0, Number(item?.amountMinor) || 0), 0);
   }
 
-  function publicAccount(workspaceId, account) {
+  function publicAccount(workspaceId, relayId, account) {
     const reserved = reservedMinor(account);
     return {
       workspaceId,
+      relayId,
       balanceMinor: account.balanceMinor,
       reservedMinor: reserved,
       availableMinor: Math.max(0, account.balanceMinor - reserved),
       updatedAt: account.updatedAt || ''
+    };
+  }
+
+  function publicWorkspaceAccount(workspaceId, record) {
+    const wallets = Object.entries(normalizeAccountRecord(record).wallets).map(([relayId, wallet]) => publicAccount(workspaceId, relayId, wallet));
+    return {
+      workspaceId,
+      wallets,
+      balanceMinor: wallets.reduce((total, wallet) => total + wallet.balanceMinor, 0),
+      reservedMinor: wallets.reduce((total, wallet) => total + wallet.reservedMinor, 0),
+      availableMinor: wallets.reduce((total, wallet) => total + wallet.availableMinor, 0),
+      updatedAt: wallets.map(wallet => wallet.updatedAt).sort().at(-1) || ''
     };
   }
 
@@ -155,31 +194,40 @@ function createBillingService(dataRoot) {
     await fs.appendFile(ledgerFile, `${JSON.stringify(entry)}\n`, { encoding: 'utf8', mode: 0o600 });
   }
 
-  async function ensureAccount(workspaceIdValue) {
+  async function ensureAccount(workspaceIdValue, relayIdValue = legacyRelayId) {
     const workspaceId = normalizeWorkspaceId(workspaceIdValue);
     return mutate(async () => {
-      const [rules, state] = await Promise.all([readRules(), readAccounts()]);
-      const existed = Boolean(state.accounts[workspaceId]);
-      const account = normalizeAccount(state.accounts[workspaceId], rules.defaultBalanceMinor);
-      state.accounts[workspaceId] = account;
+      const state = await readAccounts();
+      const existed = Boolean(state.accounts[workspaceId] && normalizeAccountRecord(state.accounts[workspaceId]).wallets?.[normalizeRelayId(relayIdValue)]);
+      const { relayId, wallet } = accountWallet(state, workspaceId, relayIdValue);
       if (!existed) await writeJson(accountsFile, state);
-      return publicAccount(workspaceId, account);
+      return publicAccount(workspaceId, relayId, wallet);
     });
   }
 
-  async function getSummary(workspaceIdValue, limit = 20) {
+  async function getSummary(workspaceIdValue, relayIdValue = legacyRelayId, limitValue = 20) {
     const workspaceId = normalizeWorkspaceId(workspaceIdValue);
-    const [rules, account, transactions] = await Promise.all([
+    if (typeof relayIdValue === 'number') {
+      limitValue = relayIdValue;
+      relayIdValue = legacyRelayId;
+    }
+    const relayId = normalizeRelayId(relayIdValue || legacyRelayId);
+    const [rules, account, transactions, allTransactions] = await Promise.all([
       readRules(),
-      ensureAccount(workspaceId),
-      listTransactions(workspaceId, limit)
+      ensureAccount(workspaceId, relayId),
+      listTransactions(workspaceId, limitValue, relayId),
+      listTransactions(workspaceId, Math.max(100, limitValue))
     ]);
-    const spendTotals = await getSpendTotals(workspaceId, [1, 7, 30]);
-    return { rules, account, transactions, spendTotals };
+    const state = await readAccounts();
+    const record = normalizeAccountRecord(state.accounts[workspaceId]);
+    const wallets = Object.entries(record.wallets).map(([walletRelayId, wallet]) => publicAccount(workspaceId, walletRelayId, wallet));
+    const spendTotals = await getSpendTotals(workspaceId, [1, 7, 30], relayId);
+    return { rules, relayId, account, wallets, transactions, allTransactions, spendTotals };
   }
 
-  async function getSpendTotals(workspaceIdValue = '', daysValues = [1, 7, 30]) {
+  async function getSpendTotals(workspaceIdValue = '', daysValues = [1, 7, 30], relayIdValue = '') {
     const workspaceId = workspaceIdValue ? normalizeWorkspaceId(workspaceIdValue) : '';
+    const relayId = relayIdValue ? normalizeRelayId(relayIdValue) : '';
     const days = [...new Set((Array.isArray(daysValues) ? daysValues : [daysValues])
       .map(value => Math.max(1, Math.min(3660, Math.trunc(Number(value) || 0))))
       .filter(Boolean))];
@@ -195,6 +243,8 @@ function createBillingService(dataRoot) {
       try {
         const entry = JSON.parse(line);
         if (workspaceId && entry.workspaceId !== workspaceId) continue;
+        const entryRelayId = String(entry.relayId || legacyRelayId);
+        if (relayId && entryRelayId !== relayId) continue;
         if (!BILLING_TYPES.has(String(entry.kind || ''))) continue;
         const created = new Date(entry.createdAt).getTime();
         if (!Number.isFinite(created)) continue;
@@ -252,15 +302,14 @@ function createBillingService(dataRoot) {
   }
 
   async function buildBalanceSummary(userLookup = new Map()) {
-    const [rules, state] = await Promise.all([readRules(), readAccounts()]);
+    const state = await readAccounts();
     const totals = { count: 0, balanceMinor: 0, availableMinor: 0, reservedMinor: 0 };
     const byRole = new Map();
     const byAccount = [];
     for (const [lookupWorkspaceId, user] of userLookup.entries()) {
       const workspaceId = String(user?.workspaceId || lookupWorkspaceId || '').trim();
       if (!workspaceId || user?.role === 'superadmin') continue;
-      const account = normalizeAccount(state.accounts[workspaceId], rules.defaultBalanceMinor);
-      const publicValue = publicAccount(workspaceId, account);
+      const publicValue = publicWorkspaceAccount(workspaceId, state.accounts[workspaceId]);
       const role = String(user?.role || 'member');
       const roleSummary = byRole.get(role) || { role, count: 0, balanceMinor: 0, availableMinor: 0, reservedMinor: 0 };
       roleSummary.count += 1;
@@ -410,22 +459,9 @@ function createBillingService(dataRoot) {
 
   async function saveRules(payload = {}) {
     return mutate(async () => {
-      const imageMin = normalizeMinor(payload.imageFeeMinMinor ?? payload.imageFeeMinor, '成功生图最低单价');
-      const imageMax = normalizeMinor(payload.imageFeeMaxMinor ?? payload.imageFeeMinor, '成功生图最高单价');
-      const llmMin = normalizeMinor(payload.llmFeeMinMinor ?? payload.llmFeeMinor, '语言模型最低单价');
-      const llmMax = normalizeMinor(payload.llmFeeMaxMinor ?? payload.llmFeeMinor, '语言模型最高单价');
-      if (imageMax < imageMin) throw new Error('成功生图最高扣费不能低于最低扣费');
-      if (llmMax < llmMin) throw new Error('语言模型最高扣费不能低于最低扣费');
       const rules = {
         ...defaultRules(),
         enabled: payload.enabled === true,
-        imageFeeMinor: imageMax,
-        imageFeeMinMinor: imageMin,
-        imageFeeMaxMinor: imageMax,
-        llmFeeMinor: llmMax,
-        llmFeeMinMinor: llmMin,
-        llmFeeMaxMinor: llmMax,
-        defaultBalanceMinor: normalizeMinor(payload.defaultBalanceMinor, '新账号初始算力余额'),
         updatedAt: new Date().toISOString()
       };
       await writeJson(rulesFile, rules);
@@ -433,41 +469,54 @@ function createBillingService(dataRoot) {
     });
   }
 
-  async function listAccounts(workspaceIds = []) {
-    const rules = await readRules();
+  async function listAccounts(workspaceIds = [], relayIds = []) {
     return mutate(async () => {
       const state = await readAccounts();
       let changed = false;
       const result = [];
       for (const value of workspaceIds) {
         const workspaceId = normalizeWorkspaceId(value);
-        if (!state.accounts[workspaceId]) changed = true;
-        const account = normalizeAccount(state.accounts[workspaceId], rules.defaultBalanceMinor);
-        state.accounts[workspaceId] = account;
-        result.push(publicAccount(workspaceId, account));
+        const record = normalizeAccountRecord(state.accounts[workspaceId]);
+        state.accounts[workspaceId] = record;
+        for (const relayIdValue of relayIds) {
+          const relayId = normalizeRelayId(relayIdValue);
+          if (!record.wallets[relayId]) {
+            record.wallets[relayId] = normalizeWallet({});
+            changed = true;
+          }
+        }
+        result.push(publicWorkspaceAccount(workspaceId, record));
       }
       if (changed) await writeJson(accountsFile, state);
       return result;
     });
   }
 
-  async function adjustBalance(workspaceIdValue, amountMinorValue, metadata = {}) {
+  async function adjustBalance(workspaceIdValue, relayIdValue, amountMinorValue, metadata = {}) {
     const workspaceId = normalizeWorkspaceId(workspaceIdValue);
+    if (typeof relayIdValue === 'number') {
+      metadata = amountMinorValue || {};
+      amountMinorValue = relayIdValue;
+      relayIdValue = legacyRelayId;
+    }
+    const relayId = normalizeRelayId(relayIdValue || legacyRelayId);
     const amountMinor = Number(amountMinorValue);
     if (!Number.isSafeInteger(amountMinor) || amountMinor === 0 || Math.abs(amountMinor) > 1_000_000_000_000) {
       throw new Error('账户金额变更必须是非零的美元 6 位小数单位整数');
     }
     return mutate(async () => {
-      const [rules, state] = await Promise.all([readRules(), readAccounts()]);
-      const account = normalizeAccount(state.accounts[workspaceId], rules.defaultBalanceMinor);
+      const state = await readAccounts();
+      const { record, wallet: account } = accountWallet(state, workspaceId, relayId);
       const next = account.balanceMinor + amountMinor;
       if (next < 0) throw new Error('扣减金额不能超过当前余额');
       account.balanceMinor = next;
       account.updatedAt = new Date().toISOString();
-      state.accounts[workspaceId] = account;
+      record.updatedAt = account.updatedAt;
       const entry = {
         id: crypto.randomUUID(),
         workspaceId,
+        relayId,
+        relayName: String(metadata.relayName || '').slice(0, 80),
         kind: 'adjustment',
         currency: BILLING_CURRENCY,
         amountScale: BILLING_SCALE,
@@ -479,7 +528,7 @@ function createBillingService(dataRoot) {
       };
       await writeJson(accountsFile, state);
       await appendLedger(entry);
-      return { account: publicAccount(workspaceId, account), transaction: entry };
+      return { account: publicAccount(workspaceId, relayId, account), transaction: entry };
     });
   }
 
@@ -487,26 +536,27 @@ function createBillingService(dataRoot) {
     const workspaceId = normalizeWorkspaceId(workspaceIdValue);
     const type = String(typeValue || '');
     if (!BILLING_TYPES.has(type)) throw new Error('未知计费类型');
+    const relayId = normalizeRelayId(metadata.relayId || legacyRelayId);
     return mutate(async () => {
       const rules = await readRules();
+      if (!rules.enabled) return { billable: false, workspaceId, relayId, type, amountMinor: 0 };
       const overrideAmount = Number(metadata.amountMinor ?? metadata.billingAmountMinor);
       const overrideMin = Number(metadata.amountMinMinor ?? metadata.billingAmountMinMinor);
       const overrideMax = Number(metadata.amountMaxMinor ?? metadata.billingAmountMaxMinor);
-      const globalMin = type === 'image' ? rules.imageFeeMinMinor : rules.llmFeeMinMinor;
-      const globalMax = type === 'image' ? rules.imageFeeMaxMinor : rules.llmFeeMaxMinor;
       const hasOverrideRange = Number.isSafeInteger(overrideMin) && Number.isSafeInteger(overrideMax) && overrideMin >= 0 && overrideMax >= overrideMin;
-      const min = hasOverrideRange ? overrideMin : globalMin;
-      const max = hasOverrideRange ? overrideMax : globalMax;
+      const min = hasOverrideRange ? overrideMin : (Number.isSafeInteger(overrideAmount) && overrideAmount >= 0 ? overrideAmount : NaN);
+      const max = hasOverrideRange ? overrideMax : min;
+      if (!Number.isSafeInteger(min) || !Number.isSafeInteger(max)) throw new Error('当前中转站未配置扣费标准');
       const amountMinor = Number.isSafeInteger(overrideAmount) && overrideAmount >= 0
         ? overrideAmount
         : (min === max ? min : min + crypto.randomInt(max - min + 1));
-      if (!rules.enabled || amountMinor <= 0) return { billable: false, workspaceId, type, amountMinor: 0 };
+      if (amountMinor <= 0) return { billable: false, workspaceId, relayId, type, amountMinor: 0 };
       const state = await readAccounts();
-      const account = normalizeAccount(state.accounts[workspaceId], rules.defaultBalanceMinor);
+      const { record, wallet: account } = accountWallet(state, workspaceId, relayId);
       const onceKey = normalizeBillingOnceKey(metadata.onceKey || metadata.billingOnceKey);
-      if (onceKey && account.chargedOnce?.[onceKey]) return { billable: false, workspaceId, type, amountMinor: 0, onceKey, alreadyCharged: true };
+      if (onceKey && account.chargedOnce?.[onceKey]) return { billable: false, workspaceId, relayId, type, amountMinor: 0, onceKey, alreadyCharged: true };
       if (onceKey && Object.values(account.reservations || {}).some(reservation => reservation?.onceKey === onceKey)) {
-        return { billable: false, workspaceId, type, amountMinor: 0, onceKey, alreadyReserved: true };
+        return { billable: false, workspaceId, relayId, type, amountMinor: 0, onceKey, alreadyReserved: true };
       }
       const available = account.balanceMinor - reservedMinor(account);
       if (available < amountMinor) {
@@ -517,6 +567,9 @@ function createBillingService(dataRoot) {
       const id = crypto.randomUUID();
       account.reservations[id] = {
         id,
+        relayId,
+        relayName: String(metadata.relayName || '').slice(0, 80),
+        modelId: String(metadata.modelId || '').slice(0, 120),
         type,
         amountMinor,
         currency: BILLING_CURRENCY,
@@ -527,9 +580,9 @@ function createBillingService(dataRoot) {
         createdAt: Date.now()
       };
       account.updatedAt = new Date().toISOString();
-      state.accounts[workspaceId] = account;
+      record.updatedAt = account.updatedAt;
       await writeJson(accountsFile, state);
-      return { billable: true, id, workspaceId, type, amountMinor };
+      return { billable: true, id, workspaceId, relayId, type, amountMinor };
     });
   }
 
@@ -537,7 +590,9 @@ function createBillingService(dataRoot) {
     if (!reservation?.billable) return null;
     return mutate(async () => {
       const state = await readAccounts();
-      const account = normalizeAccount(state.accounts[reservation.workspaceId]);
+      const relayId = normalizeRelayId(reservation.relayId || legacyRelayId);
+      const { record, wallet: account } = accountWallet(state, reservation.workspaceId, relayId, false);
+      if (!account) return null;
       const stored = account.reservations?.[reservation.id];
       if (!stored) return null;
       const amountMinor = Math.max(0, Number(stored.amountMinor) || 0);
@@ -546,10 +601,14 @@ function createBillingService(dataRoot) {
       account.updatedAt = new Date().toISOString();
       if (stored.onceKey) account.chargedOnce ||= {};
       if (stored.onceKey) account.chargedOnce[stored.onceKey] = account.updatedAt;
-      state.accounts[reservation.workspaceId] = account;
+      record.updatedAt = account.updatedAt;
       const entry = {
         id: crypto.randomUUID(),
         workspaceId: reservation.workspaceId,
+        relayId,
+        relayName: stored.relayName || '',
+        modelId: stored.modelId || '',
+        unitPriceMinor: amountMinor,
         kind: stored.type,
         currency: BILLING_CURRENCY,
         amountScale: BILLING_SCALE,
@@ -570,37 +629,49 @@ function createBillingService(dataRoot) {
     if (!reservation?.billable) return false;
     return mutate(async () => {
       const state = await readAccounts();
-      const account = normalizeAccount(state.accounts[reservation.workspaceId]);
+      const relayId = normalizeRelayId(reservation.relayId || legacyRelayId);
+      const { record, wallet: account } = accountWallet(state, reservation.workspaceId, relayId, false);
+      if (!account) return false;
       if (!account.reservations?.[reservation.id]) return false;
       delete account.reservations[reservation.id];
       account.updatedAt = new Date().toISOString();
-      state.accounts[reservation.workspaceId] = account;
+      record.updatedAt = account.updatedAt;
       await writeJson(accountsFile, state);
       return true;
     });
   }
 
-  async function transferBalance(fromWorkspaceIdValue, toWorkspaceIdValue, amountMinorValue, metadata = {}) {
+  async function transferBalance(fromWorkspaceIdValue, toWorkspaceIdValue, relayIdValue, amountMinorValue, metadata = {}) {
     const fromWorkspaceId = normalizeWorkspaceId(fromWorkspaceIdValue);
     const toWorkspaceId = normalizeWorkspaceId(toWorkspaceIdValue);
+    if (typeof relayIdValue === 'number') {
+      metadata = amountMinorValue || {};
+      amountMinorValue = relayIdValue;
+      relayIdValue = legacyRelayId;
+    }
+    const relayId = normalizeRelayId(relayIdValue || legacyRelayId);
     if (fromWorkspaceId === toWorkspaceId) throw new Error('不能给自己划拨算力余额');
     const amountMinor = normalizeMinor(amountMinorValue, '划拨金额');
     if (amountMinor <= 0) throw new Error('划拨金额必须大于 0');
     return mutate(async () => {
-      const [rules, state] = await Promise.all([readRules(), readAccounts()]);
-      const from = normalizeAccount(state.accounts[fromWorkspaceId], rules.defaultBalanceMinor);
-      const to = normalizeAccount(state.accounts[toWorkspaceId], rules.defaultBalanceMinor);
-      if (from.balanceMinor - reservedMinor(from) < amountMinor) throw new Error('管理员可用算力余额不足，无法划拨');
+      const state = await readAccounts();
+      const { record: fromRecord, wallet: from } = accountWallet(state, fromWorkspaceId, relayId);
+      const { record: toRecord, wallet: to } = accountWallet(state, toWorkspaceId, relayId);
+      if (from.balanceMinor - reservedMinor(from) < amountMinor) throw new Error('转出账户可用算力余额不足，无法划拨');
       const now = new Date().toISOString();
+      const transferId = crypto.randomUUID();
       from.balanceMinor -= amountMinor;
       to.balanceMinor += amountMinor;
       from.updatedAt = now;
       to.updatedAt = now;
-      state.accounts[fromWorkspaceId] = from;
-      state.accounts[toWorkspaceId] = to;
+      fromRecord.updatedAt = now;
+      toRecord.updatedAt = now;
       const debit = {
         id: crypto.randomUUID(),
+        transferId,
         workspaceId: fromWorkspaceId,
+        relayId,
+        relayName: String(metadata.relayName || '').slice(0, 80),
         kind: 'transfer',
         currency: BILLING_CURRENCY,
         amountScale: BILLING_SCALE,
@@ -613,7 +684,10 @@ function createBillingService(dataRoot) {
       };
       const credit = {
         id: crypto.randomUUID(),
+        transferId,
         workspaceId: toWorkspaceId,
+        relayId,
+        relayName: String(metadata.relayName || '').slice(0, 80),
         kind: 'transfer',
         currency: BILLING_CURRENCY,
         amountScale: BILLING_SCALE,
@@ -628,16 +702,18 @@ function createBillingService(dataRoot) {
       await appendLedger(debit);
       await appendLedger(credit);
       return {
-        from: publicAccount(fromWorkspaceId, from),
-        to: publicAccount(toWorkspaceId, to),
+        relayId,
+        from: publicAccount(fromWorkspaceId, relayId, from),
+        to: publicAccount(toWorkspaceId, relayId, to),
         transactions: [debit, credit]
       };
     });
   }
 
-  async function listTransactions(workspaceIdValue = '', limitValue = 50) {
+  async function listTransactions(workspaceIdValue = '', limitValue = 50, relayIdValue = '') {
     const workspaceId = workspaceIdValue ? normalizeWorkspaceId(workspaceIdValue) : '';
     const limit = Math.max(1, Math.min(500, Number(limitValue) || 50));
+    const relayId = relayIdValue ? normalizeRelayId(relayIdValue) : '';
     let text = '';
     try { text = await fs.readFile(ledgerFile, 'utf8'); } catch { return []; }
     const entries = text.trim().split('\n').filter(Boolean).reverse();
@@ -652,7 +728,8 @@ function createBillingService(dataRoot) {
         }
         entry.currency = BILLING_CURRENCY;
         entry.amountScale = BILLING_SCALE;
-        if (!workspaceId || entry.workspaceId === workspaceId) result.push(entry);
+        entry.relayId = String(entry.relayId || legacyRelayId);
+        if ((!workspaceId || entry.workspaceId === workspaceId) && (!relayId || entry.relayId === relayId)) result.push(entry);
       } catch {}
       if (result.length >= limit) break;
     }
@@ -670,20 +747,62 @@ function createBillingService(dataRoot) {
     return { cleared };
   }
 
+  async function getRelayUsageState(relayIdValue) {
+    const relayId = normalizeRelayId(relayIdValue);
+    const state = await readAccounts();
+    let balanceMinor = 0;
+    let reserved = 0;
+    let walletCount = 0;
+    for (const record of Object.values(state.accounts)) {
+      const wallet = record?.wallets?.[relayId];
+      if (!wallet) continue;
+      walletCount += 1;
+      balanceMinor += Math.max(0, Number(wallet.balanceMinor) || 0);
+      reserved += reservedMinor(wallet);
+    }
+    const transactions = await listTransactions('', 500);
+    return {
+      relayId,
+      walletCount,
+      balanceMinor,
+      reservedMinor: reserved,
+      transactionCount: transactions.filter(entry => entry.relayId === relayId).length,
+      inUse: balanceMinor > 0 || reserved > 0 || transactions.some(entry => entry.relayId === relayId)
+    };
+  }
+
+  async function migrateLegacyBalances(relayIdValue) {
+    const relayId = setLegacyRelayId(relayIdValue || DEFAULT_RELAY_ID);
+    return mutate(async () => {
+      const state = await readAccounts();
+      let migrated = 0;
+      for (const [workspaceId, value] of Object.entries(state.accounts)) {
+        if (value?.wallets && typeof value.wallets === 'object') continue;
+        state.accounts[workspaceId] = normalizeAccountRecord(value);
+        migrated += 1;
+      }
+      if (migrated) await writeJson(accountsFile, state);
+      return { relayId, migrated };
+    });
+  }
+
   return {
     adjustBalance,
     clearTransactions,
     commit,
     ensureAccount,
     getGlobalStats,
+    getRelayUsageState,
     getRules: readRules,
     getSummary,
     getSpendTotals,
     listAccounts,
     listTransactions,
+    migrateLegacyBalances,
     release,
     reserve,
     saveRules,
+    setLegacyRelayId,
     transferBalance
   };
 }

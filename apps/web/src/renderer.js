@@ -109,14 +109,15 @@ const state = {
   currentUser: null,
   teamUsers: [],
   billingSummary: null,
+  billingDetailSummary: null,
+  billingDetailRelayId: '',
   billingAdmin: null,
   billingAdminFilter: '',
+  billingAdminRelayId: '',
   globalStats: null,
   globalStatsRange: 'today',
   mobileStats: null,
   mobileStatsRange: 'today',
-  mobileGatewayUsage: null,
-  mobileGatewayBalanceVisible: false,
   mobileFinanceExpanded: false,
   mobileFinanceMonth: '',
   mobileFinanceFilter: 'all',
@@ -177,13 +178,12 @@ const state = {
   activePromptId: '',
   freePromptDefaultApplied: false,
   apiSettings: null,
-  modelPackageSettings: null,
-  selectedModelPackageId: '',
+  relayChoices: null,
+  selectedRelayId: '',
   allowAdminPromptView: false,
   apiConcurrencySettings: null,
   imageApiModels: [],
-  analysisApiModels: [],
-  apiModelChannel: 'image',
+  apiModelRelayId: '',
   selectedApiModelId: '',
   settingsTab: 'general',
   billingCustomDays: 30,
@@ -275,7 +275,7 @@ function applyCurrentUser(user) {
   $('[data-settings-tab="general"]').hidden = user.role === 'admin';
   $('#apiSettingsTab').hidden = !isTeamAdmin();
   const apiTabStatus = $('#apiTabStatus');
-  $('#apiSettingsTab').firstChild.textContent = isSuperAdmin() ? 'API 设置 ' : '模型选择 ';
+  $('#apiSettingsTab').firstChild.textContent = isSuperAdmin() ? 'API 设置 ' : '中转站 ';
   if (apiTabStatus) apiTabStatus.textContent = '未配置';
   $('#billingSettingsTab').hidden = !isSuperAdmin();
   $('#teamSettingsTab').hidden = !isTeamAdmin();
@@ -404,8 +404,8 @@ function globalStatsOperationLabel(key = '') {
     regeneration: '重新生成',
     master: '母版生成',
     free: '自由生图',
-    analysis: '套图分析',
-    llm: '文字分析',
+    analysis: '模板配置',
+    llm: '旧版模型调用',
     other: '其他'
   })[key] || key || '其他';
 }
@@ -445,7 +445,7 @@ function ensureGlobalStatsPage() {
         <div>
           <span class="eyebrow">SUPER ADMIN</span>
           <h1>全局统计</h1>
-          <p>查看全站生成、重新生成、分析、成本和成功率。</p>
+          <p>查看全站生成、重新生成、模板配置、成本和成功率。</p>
         </div>
         <div class="global-stats-toolbar">
           <div class="global-stats-range" role="tablist" aria-label="统计范围">
@@ -517,7 +517,7 @@ function renderGlobalStats() {
       <article><span>${rangeText}总消耗</span><b>${formatMoney(totals.totalCostMinor)}</b><em>平均每张 ${formatMoney(totals.averageCostMinor)}</em></article>
       <article><span>生成图片</span><b>${formatInteger(totalImages)}</b><em>首次 ${formatInteger(totals.imageGenerated)} / 重生成 ${formatInteger(totals.imageRegenerated)}</em></article>
       <article><span>一次成功率</span><b>${formatPercent(totals.successRate)}</b><em>一次通过 ${formatInteger(totals.firstPassImages)} 张</em></article>
-      <article><span>分析套图</span><b>${formatInteger(totals.templateAnalysisFolders)}</b><em>分析调用 ${formatInteger(totals.analysisCalls)} 次</em></article>
+      <article><span>配置套图</span><b>${formatInteger(totals.templateAnalysisFolders)}</b><em>历史模型调用 ${formatInteger(totals.analysisCalls)} 次</em></article>
     </div>
     <div class="global-stats-layout">
       <section class="panel global-stats-card">
@@ -541,7 +541,7 @@ function renderGlobalStats() {
         <div class="section-head"><div><span class="eyebrow">ACCOUNT</span><h2>账号排行</h2></div><small>${formatInteger(totals.activeWorkspaces)} 个账号有消耗</small></div>
         <div class="global-stats-table-wrap">
           <table class="global-stats-table">
-            <thead><tr><th>#</th><th>账号</th><th>消耗</th><th>生图</th><th>重生成</th><th>分析</th><th>成功率</th></tr></thead>
+            <thead><tr><th>#</th><th>账号</th><th>消耗</th><th>生图</th><th>重生成</th><th>模型调用</th><th>成功率</th></tr></thead>
             <tbody>${accountsHtml}</tbody>
           </table>
         </div>
@@ -602,12 +602,6 @@ function mobileStatsTotalImages(totals = {}) {
   return (totals.imageGenerated || 0) + (totals.imageRegenerated || 0) + (totals.masterGenerated || 0) + (totals.freeGenerated || 0);
 }
 
-function formatGatewayContractBalance(value) {
-  if (!state.mobileGatewayBalanceVisible) return '$••••••';
-  const amount = Number(value);
-  return Number.isFinite(amount) ? `$${amount.toFixed(2)}` : 'Unavailable';
-}
-
 function currentChinaDate() {
   return new Intl.DateTimeFormat('sv-SE', {
     timeZone: 'Asia/Shanghai',
@@ -628,20 +622,12 @@ function formatFinanceCny(minor = 0) {
 }
 
 function financeGatewayCost(month) {
-  const dailyUsage = Array.isArray(state.mobileGatewayUsage?.dailyUsage) ? state.mobileGatewayUsage.dailyUsage : [];
-  const matching = dailyUsage.filter(item => String(item?.date || '').startsWith(`${month}-`));
-  return {
-    available: state.mobileGatewayUsage?.dailyUsageAvailable === true,
-    minor: Math.round(matching.reduce((total, item) => total + Math.max(0, Number(item?.actualCost) || 0), 0) * 100)
-  };
+  void month;
+  return { available: false, minor: 0 };
 }
 
 function financeGatewayCumulativeCost() {
-  const actualCost = Number(state.mobileGatewayUsage?.total?.actualCost);
-  return {
-    available: Number.isFinite(actualCost) && actualCost >= 0,
-    minor: Math.round(Math.max(0, actualCost || 0) * 100)
-  };
+  return { available: false, minor: 0 };
 }
 
 function financeCategoryLabel(category) {
@@ -866,17 +852,6 @@ function renderMobileStats() {
     <nav class="mobile-stats-range-switch" aria-label="Select analytics range">
       ${ranges.map(item => `<button type="button" data-mobile-stats-range="${item.key}" class="${item.key === selectedRange.key ? 'active' : ''}">${escapeHtml(item.label)}</button>`).join('')}
     </nav>
-    <section class="mobile-stats-gateway-card">
-      <div><span>OpenAI Service Credits</span><small>${state.mobileGatewayUsage?.available ? 'Live available balance' : 'Balance unavailable'}</small></div>
-      <div class="mobile-stats-gateway-value">
-        <strong>${formatGatewayContractBalance(state.mobileGatewayUsage?.balance)}</strong>
-        <button type="button" id="mobileGatewayBalanceToggle" aria-label="${state.mobileGatewayBalanceVisible ? 'Hide OpenAI service credits' : 'Show OpenAI service credits'}" aria-pressed="${state.mobileGatewayBalanceVisible}">
-          ${state.mobileGatewayBalanceVisible
-            ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18M10.6 10.7a2 2 0 0 0 2.7 2.7M9.9 4.2A10.7 10.7 0 0 1 12 4c5.5 0 9 5 9 5a15.7 15.7 0 0 1-2.1 2.5M6.6 6.6C4.4 8 3 10 3 10s3.5 5 9 5c1.2 0 2.3-.2 3.3-.6"/></svg>'
-            : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12s3.5-5 9-5 9 5 9 5-3.5 5-9 5-9-5-9-5Z"/><circle cx="12" cy="12" r="2.5"/></svg>'}
-        </button>
-      </div>
-    </section>
     <section class="mobile-stats-hero-card">
       <div>
         <span>${escapeHtml(selectedRange.label)} Spend</span>
@@ -906,13 +881,6 @@ function renderMobileStats() {
       renderMobileStats();
     };
   });
-  const balanceToggle = $('#mobileGatewayBalanceToggle');
-  if (balanceToggle) {
-    balanceToggle.onclick = () => {
-      state.mobileGatewayBalanceVisible = !state.mobileGatewayBalanceVisible;
-      renderMobileStats();
-    };
-  }
   const financeMore = $('#mobileFinanceMore');
   if (financeMore) {
     financeMore.onclick = () => {
@@ -954,15 +922,13 @@ async function loadMobileStats() {
   const button = $('#refreshMobileStatsButton');
   if (button) button.disabled = true;
   try {
-    const [today, yesterday, d7, month, gatewayUsage] = await Promise.all([
+    const [today, yesterday, d7, month] = await Promise.all([
       window.caishen.getGlobalStats('today'),
       window.caishen.getGlobalStats('yesterday'),
       window.caishen.getGlobalStats('7d'),
-      window.caishen.getGlobalStats('month'),
-      window.caishen.getGatewayUsage().catch(() => null)
+      window.caishen.getGlobalStats('month')
     ]);
     state.mobileStats = { today, yesterday, d7, month };
-    state.mobileGatewayUsage = gatewayUsage;
     state.mobileStatsUpdatedAt = new Date().toISOString();
     renderMobileStats();
   } catch (error) {
@@ -1032,6 +998,10 @@ function moneyMinorToInput(minor = 0) {
   return formatUsdAmount((Number(minor) || 0) / BILLING_AMOUNT_SCALE);
 }
 
+function moneyMinorToSixDecimalInput(minor = 0) {
+  return (Math.max(0, Number(minor) || 0) / BILLING_AMOUNT_SCALE).toFixed(6);
+}
+
 function billingKindName(kind) {
   return { image: '成功生图', llm: '语言模型调用', adjustment: '账户充值到账', transfer: '账户划拨' }[kind] || '费用记录';
 }
@@ -1043,7 +1013,8 @@ function renderBillingLedger(entries = [], userMap = new Map()) {
     const user = userMap.get(entry.workspaceId);
     const owner = user ? `${user.displayName || user.username} · ` : '';
     const label = entry.description || (entry.kind === 'adjustment' && amount < 0 ? '算力余额扣减' : billingKindName(entry.kind));
-    return `<div class="billing-ledger-row"><div><b>${escapeHtml(label)}</b><span>${escapeHtml(owner + billingKindName(entry.kind))}${entry.reference ? ` · ${escapeHtml(entry.reference)}` : ''}</span><small>${escapeHtml(new Date(entry.createdAt).toLocaleString('zh-CN', { hour12: false }))}</small></div><div class="billing-ledger-amount ${amount >= 0 ? 'credit' : 'debit'}">${amount >= 0 ? '+' : '-'}${formatMoney(Math.abs(amount))}</div></div>`;
+    const relayLabel = entry.relayName || entry.relayId || '旧版默认中转站';
+    return `<div class="billing-ledger-row"><div><b>${escapeHtml(label)}</b><span>${escapeHtml(owner + relayLabel + ' · ' + billingKindName(entry.kind))}${entry.reference ? ` · ${escapeHtml(entry.reference)}` : ''}</span><small>${escapeHtml(new Date(entry.createdAt).toLocaleString('zh-CN', { hour12: false }))}</small></div><div class="billing-ledger-amount ${amount >= 0 ? 'credit' : 'debit'}">${amount >= 0 ? '+' : '-'}${formatMoney(Math.abs(amount))}</div></div>`;
   }).join('');
 }
 
@@ -1062,19 +1033,37 @@ function renderBillingSpendTotals(summary) {
 function renderBillingSummary() {
   const summary = state.billingSummary;
   if (!summary) return;
+  const relay = (summary.relays || []).find(item => item.id === summary.relayId) || {};
   $('#currentBalance').textContent = formatMoney(summary.account?.balanceMinor);
-  $('#currentBillingHint').textContent = '点击查看算力余额明细';
-  $('#billingDetailSummary').textContent = `当前可用算力余额 ${formatMoney(summary.account?.availableMinor)}${summary.account?.reservedMinor ? `，任务预占 ${formatMoney(summary.account.reservedMinor)}` : ''}`;
-  $('#billingDetailRates').innerHTML = renderBillingSpendTotals(summary);
+  $('#openBillingDetailButton span').textContent = '当前线路算力余额';
+  $('#currentBillingHint').textContent = `${relay.name || '当前中转站'} · ${feeRangeLabel(relay.imagePriceMinMinor, relay.imagePriceMaxMinor)}/张`;
+  renderBillingDetail();
+}
+
+function renderBillingDetail() {
+  const summary = state.billingDetailSummary || state.billingSummary;
+  if (!summary) return;
+  const relays = summary.relays || state.billingSummary?.relays || [];
+  const relay = relays.find(item => item.id === summary.relayId) || {};
+  const wallets = summary.wallets || [];
+  $('#billingDetailSummary').textContent = `${relay.name || '当前中转站'}：可用 ${formatMoney(summary.account?.availableMinor)}${summary.account?.reservedMinor ? `，任务预占 ${formatMoney(summary.account.reservedMinor)}` : ''}，扣费 ${feeRangeLabel(relay.imagePriceMinMinor, relay.imagePriceMaxMinor)}/张`;
+  const walletCards = relays.map(item => {
+    const wallet = wallets.find(value => value.relayId === item.id) || { balanceMinor: 0, availableMinor: 0 };
+    return `<button class="billing-rate-item${item.id === summary.relayId ? ' active' : ''}" type="button" data-billing-detail-relay="${escapeHtml(item.id)}"><span>${escapeHtml(item.name)}</span><b>${formatMoney(wallet.balanceMinor)}</b><em>${feeRangeLabel(item.imagePriceMinMinor, item.imagePriceMaxMinor)}/张</em></button>`;
+  }).join('');
+  $('#billingDetailRates').innerHTML = walletCards + renderBillingSpendTotals(summary);
   $('#billingDetailRates').hidden = false;
   $('#billingDetailList').innerHTML = renderBillingLedger(summary.transactions || []);
   const customInput = $('#billingCustomDaysInput');
   if (customInput) {
     customInput.onchange = async () => {
       state.billingCustomDays = Math.max(1, Math.min(3660, Number(customInput.value) || 30));
-      await loadBillingSummary();
+      await loadBillingDetail(summary.relayId);
     };
   }
+  $$('[data-billing-detail-relay]').forEach(button => {
+    button.onclick = () => loadBillingDetail(button.dataset.billingDetailRelay);
+  });
 }
 
 async function loadBillingSummary() {
@@ -1090,10 +1079,20 @@ async function loadBillingSummary() {
 async function openBillingDetail() {
   $('#billingDetailModal').hidden = false;
   await loadBillingSummary();
+  await loadBillingDetail(state.billingSummary?.relayId);
+}
+
+async function loadBillingDetail(relayId) {
+  try {
+    state.billingDetailSummary = await window.caishen.getBillingSummary(state.billingCustomDays, relayId || '');
+    state.billingDetailRelayId = state.billingDetailSummary.relayId || '';
+    renderBillingDetail();
+  } catch (error) { toast(errorText(error), true); }
 }
 
 function closeBillingDetail() {
   $('#billingDetailModal').hidden = true;
+  state.billingDetailSummary = null;
 }
 
 function apiTestErrorText(error) {
@@ -1241,7 +1240,7 @@ function setPage(name) {
     if (name === 'assets') loadAssetLibraryPreview(state.assetPreviewKey, { preserveSelection: true });
     if (name === 'global-stats') loadGlobalStats();
     if (name === 'mobile-stats') loadMobileStats();
-    if (name === 'settings' && isTeamAdmin() && !state.modelPackageSettings) loadModelPackageSettings();
+    if (name === 'settings' && isTeamAdmin() && !state.relayChoices) loadRelayChoices();
     if (name === 'settings' && isSuperAdmin() && !state.apiSettings) loadApiSettings();
   });
 }
@@ -4903,7 +4902,7 @@ function renderSettingsTabs(name = state.settingsTab) {
   $('.settings-toolbar-actions').hidden = ['billing', 'team'].includes(name) || !isSuperAdmin();
   if (name === 'api' && isTeamAdmin()) {
     if (!isSuperAdmin()) renderApiSettings();
-    loadModelPackageSettings();
+    loadRelayChoices();
   }
   if (name === 'team') loadTeamUsers();
   if (name === 'billing') loadBillingAdmin();
@@ -4914,42 +4913,63 @@ function renderBillingAdmin() {
   if (!data) return;
   const rules = data.rules || {};
   const users = data.users || [];
+  const relays = data.relays || [];
+  if (!relays.some(relay => relay.id === state.billingAdminRelayId)) state.billingAdminRelayId = data.activeRelayId || relays[0]?.id || '';
+  const activeRelay = relays.find(relay => relay.id === state.billingAdminRelayId) || {};
   if (state.billingAdminFilter && !users.some(user => user.id === state.billingAdminFilter)) state.billingAdminFilter = '';
   const filteredUsers = state.billingAdminFilter ? users.filter(user => user.id === state.billingAdminFilter) : users;
   const visibleWorkspaceIds = new Set(filteredUsers.map(user => user.workspaceId));
   const filteredTransactions = state.billingAdminFilter
-    ? (data.transactions || []).filter(entry => visibleWorkspaceIds.has(entry.workspaceId))
-    : (data.transactions || []);
+    ? (data.transactions || []).filter(entry => visibleWorkspaceIds.has(entry.workspaceId) && entry.relayId === state.billingAdminRelayId)
+    : (data.transactions || []).filter(entry => entry.relayId === state.billingAdminRelayId);
   $('.billing-settings-grid').hidden = false;
   $('.billing-rule-card').hidden = !isSuperAdmin();
   $('#clearBillingLedgerButton').hidden = !isSuperAdmin();
   $('#billingEnabled').checked = rules.enabled === true;
-  $('#billingImageFeeMin').value = moneyMinorToInput(rules.imageFeeMinMinor || 0);
-  $('#billingImageFeeMax').value = moneyMinorToInput(rules.imageFeeMaxMinor || rules.imageFeeMinor || 0);
-  $('#billingLlmFeeMin').value = moneyMinorToInput(rules.llmFeeMinMinor || 0);
-  $('#billingLlmFeeMax').value = moneyMinorToInput(rules.llmFeeMaxMinor || rules.llmFeeMinor || 0);
-  $('#billingDefaultBalance').value = moneyMinorToInput(rules.defaultBalanceMinor || 0);
   $('#billingStatusBadge').textContent = isSuperAdmin() ? (rules.enabled ? '计费中' : '未启用') : '余额查看';
   $('#billingStatusBadge').classList.toggle('ready', Boolean(rules.enabled));
   $('#billingUserFilter').innerHTML = `<option value="">全部人员</option>${users.map(user => `<option value="${escapeHtml(user.id)}"${user.id === state.billingAdminFilter ? ' selected' : ''}>${escapeHtml(user.displayName || user.username)} · ${roleLabel(user.role)}</option>`).join('')}`;
+  const relayFilter = $('#billingRelayFilter');
+  relayFilter.innerHTML = relays.length
+    ? relays.map(relay => `<option value="${escapeHtml(relay.id)}"${relay.id === state.billingAdminRelayId ? ' selected' : ''}>${escapeHtml(relay.name)} · ${feeRangeLabel(relay.imagePriceMinMinor, relay.imagePriceMaxMinor)}/张</option>`).join('')
+    : '<option value="">暂无可用中转站</option>';
+  relayFilter.disabled = relays.length === 0;
   $('#billingAccountCount').textContent = state.billingAdminFilter ? `${filteredUsers.length}/${users.length} 个账号` : `${users.length} 个账号`;
   $('#billingAccountList').innerHTML = filteredUsers.map(user => {
     const canAdjust = isSuperAdmin() || (state.currentUser?.role === 'admin' && user.role === 'member' && (!user.parentUserId || user.parentUserId === state.currentUser.id));
+    const wallet = user.billing?.wallets?.find(item => item.relayId === state.billingAdminRelayId) || { balanceMinor: 0 };
     return `
     <div class="billing-account-row" data-billing-user="${escapeHtml(user.id)}">
       <div class="billing-account-copy"><b>${escapeHtml(user.displayName || user.username)}${user.id === state.currentUser?.id ? '（当前）' : ''}</b><span>${escapeHtml(user.username)} · ${roleLabel(user.role)}${user.active ? '' : ' · 已停用'}</span></div>
-      <div class="billing-account-balance">${formatMoney(user.billing?.balanceMinor)}</div>
-      ${canAdjust ? `<div class="billing-adjust-controls"><input type="number" step="0.01" min="-${moneyMinorToInput(user.billing?.balanceMinor)}" placeholder="在此输入划拨金额" aria-label="调整金额"><button class="secondary" type="button" data-adjust-billing="${escapeHtml(user.id)}">确认调整</button></div>` : '<div class="billing-adjust-note">仅查看</div>'}
+      <div class="billing-account-balance"><small>${escapeHtml(activeRelay.name || '中转站')}</small>${formatMoney(wallet.balanceMinor)}</div>
+      ${canAdjust ? `<div class="billing-adjust-controls"><input type="number" step="0.000001" min="-${moneyMinorToInput(wallet.balanceMinor)}" placeholder="充值或扣减金额" aria-label="调整金额"><button class="secondary" type="button" data-adjust-billing="${escapeHtml(user.id)}">确认调整</button></div>` : '<div class="billing-adjust-note">仅查看</div>'}
     </div>`;
   }).join('') || '<div class="empty-inline">没有符合筛选的账号</div>';
   const userMap = new Map(users.map(user => [user.workspaceId, user]));
   $('#billingLedgerList').innerHTML = renderBillingLedger(filteredTransactions, userMap);
 }
 
+function billingAdminWithRelayFallback(billing, relayChoices) {
+  const data = billing || {};
+  const primaryRelays = Array.isArray(data.relays) ? data.relays : [];
+  const fallbackRelays = Array.isArray(relayChoices?.relays) ? relayChoices.relays : [];
+  if (primaryRelays.length || !fallbackRelays.length) return data;
+  return {
+    ...data,
+    relays: fallbackRelays,
+    activeRelayId: data.activeRelayId || relayChoices.activeRelayId || fallbackRelays[0]?.id || ''
+  };
+}
+
 async function loadBillingAdmin() {
   if (!isTeamAdmin()) return;
   try {
-    state.billingAdmin = await window.caishen.getBillingAdmin();
+    const [billing, relayChoices] = await Promise.all([
+      window.caishen.getBillingAdmin(),
+      window.caishen.getRelayChoices().catch(() => state.relayChoices)
+    ]);
+    state.relayChoices = relayChoices || state.relayChoices;
+    state.billingAdmin = billingAdminWithRelayFallback(billing, state.relayChoices);
     renderBillingAdmin();
   } catch (error) { toast(errorText(error), true); }
 }
@@ -4961,19 +4981,14 @@ async function saveBillingRules() {
   button.textContent = '保存中…';
   try {
     await window.caishen.saveBillingRules({
-      enabled: $('#billingEnabled').checked,
-      imageFeeMinMinor: moneyInputToMinor($('#billingImageFeeMin').value, '成功生图最低扣费'),
-      imageFeeMaxMinor: moneyInputToMinor($('#billingImageFeeMax').value, '成功生图最高扣费'),
-      llmFeeMinMinor: moneyInputToMinor($('#billingLlmFeeMin').value, '语言模型最低扣费'),
-      llmFeeMaxMinor: moneyInputToMinor($('#billingLlmFeeMax').value, '语言模型最高扣费'),
-      defaultBalanceMinor: moneyInputToMinor($('#billingDefaultBalance').value, '初始算力余额')
+      enabled: $('#billingEnabled').checked
     });
     await Promise.all([loadBillingAdmin(), loadBillingSummary()]);
     toast('计费规则已保存');
   } catch (error) { toast(errorText(error), true); }
   finally {
     button.disabled = false;
-    button.textContent = '保存计费规则';
+    button.textContent = '保存计费开关';
   }
 }
 
@@ -5004,6 +5019,7 @@ async function adjustBillingBalance(button) {
   try {
     await window.caishen.adjustBillingBalance({
       userId: button.dataset.adjustBilling,
+      relayId: state.billingAdminRelayId,
       amountMinor,
       amountUsd: amount,
       description: amountMinor > 0 ? '账户充值到账' : '算力余额扣减'
@@ -5017,33 +5033,67 @@ async function adjustBillingBalance(button) {
 }
 
 function renderTeamUsers() {
+  const activeRelayId = state.billingAdmin?.activeRelayId || state.relayChoices?.activeRelayId || '';
   $('#teamUserCount').textContent = `${state.teamUsers.length} 人`;
   $('#teamUserList').innerHTML = state.teamUsers.length ? state.teamUsers.map(user => `
     <div class="team-user-row${user.active ? '' : ' inactive'}" data-team-user="${escapeHtml(user.id)}">
-      <div><b>${escapeHtml(user.displayName || user.username)}${user.id === state.currentUser?.id ? '（当前）' : ''}</b><span>${escapeHtml(user.username)} · ${roleLabel(user.role)} · ${user.active ? '可登录' : '已停用'}${user.billing ? ` · 算力余额 ${formatMoney(user.billing.balanceMinor)}` : ''}</span></div>
+      <div><b>${escapeHtml(user.displayName || user.username)}${user.id === state.currentUser?.id ? '（当前）' : ''}</b><span>${escapeHtml(user.username)} · ${roleLabel(user.role)} · ${user.active ? '可登录' : '已停用'}${user.billing ? ` · 当前线路 ${formatMoney(user.billing.wallets?.find(wallet => wallet.relayId === activeRelayId)?.balanceMinor || 0)}` : ''}</span></div>
       <div class="team-user-actions">
         ${user.id === state.currentUser?.id ? '' : `<button class="secondary" type="button" data-team-user-edit="${escapeHtml(user.id)}">编辑</button><button class="secondary${user.active ? ' danger-outline' : ''}" type="button" data-team-user-active="${escapeHtml(user.id)}" data-active="${user.active ? 'false' : 'true'}">${user.active ? '停用' : '恢复'}</button><button class="secondary danger-outline" type="button" data-team-user-delete="${escapeHtml(user.id)}">删除</button>`}
       </div>
-      ${state.currentUser?.role === 'admin' && user.role === 'member' ? `<div class="team-transfer-controls"><input type="number" step="0.01" min="0.01" placeholder="划拨金额" aria-label="划拨金额"><button class="secondary" type="button" data-transfer-billing="${escapeHtml(user.id)}">划拨</button></div>` : ''}
     </div>`).join('') : '<div class="empty-inline">还没有团队账号</div>';
+  renderTeamBalanceTransfer();
 }
 
-function normalizeTeamTransferInputs() {
-  $$('.team-transfer-controls input').forEach(input => {
-    input.step = '0.000001';
-    input.min = '0.000001';
-    input.placeholder = '在此输入划拨金额';
-  });
+function renderTeamBalanceTransfer() {
+  const card = $('#teamBalanceTransferCard');
+  if (!card) return;
+  const enabled = state.currentUser?.role === 'admin';
+  card.hidden = !enabled;
+  if (!enabled) return;
+  const users = state.teamUsers.filter(user => user.id === state.currentUser?.id || user.role === 'member');
+  const transferForm = card.querySelector('.team-balance-transfer-form');
+  const emptyHint = $('#teamBalanceTransferEmpty');
+  transferForm.hidden = users.length < 2;
+  emptyHint.hidden = users.length >= 2;
+  if (users.length < 2) return;
+  const relays = state.billingAdmin?.relays || [];
+  const relaySelect = $('#teamTransferRelay');
+  const previousRelayId = relaySelect.value;
+  relaySelect.innerHTML = relays.map(relay => `<option value="${escapeHtml(relay.id)}">${escapeHtml(relay.name)} · ${feeRangeLabel(relay.imagePriceMinMinor, relay.imagePriceMaxMinor)}/张</option>`).join('');
+  relaySelect.value = relays.some(relay => relay.id === previousRelayId) ? previousRelayId : state.billingAdmin?.activeRelayId || relays[0]?.id || '';
+  const relayId = relaySelect.value;
+  const fromSelect = $('#teamTransferFrom');
+  const toSelect = $('#teamTransferTo');
+  const previousFrom = fromSelect.value;
+  const previousTo = toSelect.value;
+  const optionForUser = user => {
+    const wallet = user.billing?.wallets?.find(item => item.relayId === relayId);
+    return `<option value="${escapeHtml(user.id)}">${escapeHtml(user.displayName || user.username)}${user.id === state.currentUser?.id ? '（管理员）' : ''} · ${formatMoney(wallet?.balanceMinor || 0)}</option>`;
+  };
+  fromSelect.innerHTML = users.map(optionForUser).join('');
+  fromSelect.value = users.some(user => user.id === previousFrom) ? previousFrom : state.currentUser?.id || users[0]?.id || '';
+  const targetUsers = users.filter(user => user.id !== fromSelect.value);
+  toSelect.innerHTML = targetUsers.map(optionForUser).join('');
+  toSelect.value = targetUsers.some(user => user.id === previousTo) ? previousTo : targetUsers[0]?.id || '';
+  $('#teamTransferButton').disabled = false;
+  relaySelect.onchange = renderTeamBalanceTransfer;
+  fromSelect.onchange = renderTeamBalanceTransfer;
 }
 
 async function loadTeamUsers() {
   if (!isTeamAdmin()) return;
   try {
-    const [users, billing] = await Promise.all([window.caishen.listUsers(), window.caishen.getBillingAdmin().catch(() => null)]);
+    const [users, billing, relayChoices] = await Promise.all([
+      window.caishen.listUsers(),
+      window.caishen.getBillingAdmin().catch(() => null),
+      window.caishen.getRelayChoices().catch(() => state.relayChoices)
+    ]);
+    state.relayChoices = relayChoices || state.relayChoices;
+    state.billingAdmin = billingAdminWithRelayFallback(billing, state.relayChoices);
     const byId = new Map((billing?.users || []).map(user => [user.id, user.billing]));
     state.teamUsers = users.map(user => ({ ...user, billing: byId.get(user.id) }));
     renderTeamUsers();
-    normalizeTeamTransferInputs();
   } catch (error) { toast(errorText(error), true); }
 }
 
@@ -5119,231 +5169,187 @@ async function deleteTeamUser(id) {
   }
 }
 
-async function transferTeamBalance(button) {
-  const row = button.closest('[data-team-user]');
-  const input = row?.querySelector('.team-transfer-controls input');
-  const amount = Number(input?.value);
+async function transferTeamBalance() {
+  if (state.currentUser?.role !== 'admin') return toast('只有管理员可以划拨员工余额', true);
+  const fromUserId = $('#teamTransferFrom').value;
+  const toUserId = $('#teamTransferTo').value;
+  const relayId = $('#teamTransferRelay').value;
+  const amountInput = $('#teamTransferAmount');
+  const amount = Number(amountInput?.value);
+  if (!relayId || !fromUserId || !toUserId) return toast('请选择中转站、转出和转入账号', true);
+  if (fromUserId === toUserId) return toast('转出和转入账号不能相同', true);
   if (!Number.isFinite(amount) || amount <= 0) return toast('请输入大于 0 的划拨金额', true);
+  const fromUser = state.teamUsers.find(user => user.id === fromUserId);
+  const toUser = state.teamUsers.find(user => user.id === toUserId);
+  const message = `确定从“${fromUser?.displayName || fromUser?.username || '转出账号'}”划拨 $${amount.toFixed(6)} 给“${toUser?.displayName || toUser?.username || '转入账号'}”吗？`;
+  if (!window.confirm(message)) return;
+  const button = $('#teamTransferButton');
   button.disabled = true;
+  button.textContent = '划拨中…';
   try {
-    await window.caishen.adjustBillingBalance({
-      userId: button.dataset.transferBilling,
+    await window.caishen.transferBillingBalance({
+      fromUserId,
+      toUserId,
+      relayId,
       amountMinor: Math.round(amount * BILLING_AMOUNT_SCALE),
-      amountUsd: amount,
-      description: '账户充值到账'
+      amountUsd: amount
     });
-    if (input) input.value = '';
+    amountInput.value = '';
     await Promise.all([loadTeamUsers(), loadBillingSummary()]);
-    toast('算力余额已划拨');
-  } catch (error) {
-    button.disabled = false;
-    toast(errorText(error), true);
-  }
-}
-
-function defaultModelPackages() {
-  const baseUrl = state.apiSettings?.baseUrl || '';
-  const imageModel = state.apiSettings?.imageModel || 'gpt-image-2';
-  const analysisModel = getConfiguredAnalysisModel(state.apiSettings?.analysisModel);
-  const analysisWireApi = state.apiSettings?.analysisWireApi || 'chat_completions';
-  return [
-    { id: 'flagship', name: '旗舰版', description: '主推套餐，保持当前100%效率和质量', enabled: true, default: true, recommended: true, apiBaseUrl: baseUrl, modelId: imageModel, analysisApiBaseUrl: baseUrl, analysisModel, analysisWireApi, maxConcurrency: 30, startIntervalMs: 200, promptQuality: 'flagship', promptMode: 'full', userPromptPolicy: 'full', hiddenPrompt: '', analysisPrompt: '', imagePrompt: '', imagePriceMinMinor: 300000, imagePriceMaxMinor: 300000, analysisPriceMinMinor: 0, analysisPriceMaxMinor: 0, enableMasterReference: false, queuePriority: 10 },
-    { id: 'fast', name: '快速版', description: '5分钱/张，低价留客，效果质量与标准版一致', enabled: true, default: false, recommended: false, apiBaseUrl: baseUrl, modelId: imageModel, analysisApiBaseUrl: baseUrl, analysisModel, analysisWireApi, maxConcurrency: 2, startIntervalMs: 1200, promptQuality: 'basic', promptMode: 'internal', userPromptPolicy: 'ignore', hiddenPrompt: '', analysisPrompt: '低价基础分析：只做必要判断，不做深度商业优化。', imagePrompt: '低价基础出图：效果目标约为旗舰版 30%，只完成核心生成，不做高级商业质感、复杂光影、材质精修和额外卖点补全。', imagePriceMinMinor: 50000, imagePriceMaxMinor: 50000, analysisPriceMinMinor: 50000, analysisPriceMaxMinor: 50000, queuePriority: 2 },
-    { id: 'standard', name: '标准版', description: '7分钱/张，效果质量约为旗舰版30%', enabled: true, default: false, recommended: false, apiBaseUrl: baseUrl, modelId: imageModel, analysisApiBaseUrl: baseUrl, analysisModel, analysisWireApi, maxConcurrency: 3, startIntervalMs: 1000, promptQuality: 'standard', promptMode: 'hybrid', userPromptPolicy: 'partial', hiddenPrompt: '', analysisPrompt: '标准版分析：只保留必要理解和判断，不做旗舰版深度优化。', imagePrompt: '标准版出图：效果目标约为旗舰版 30%，做基础画面整理和必要生成，不做高级商业海报质感、复杂光影、材质精修、精细构图增强和额外卖点补全。', imagePriceMinMinor: 70000, imagePriceMaxMinor: 70000, analysisPriceMinMinor: 70000, analysisPriceMaxMinor: 70000, queuePriority: 5 }
-  ];
-}
-
-function getConfiguredAnalysisModel(preferredModel = '') {
-  const preferred = String(preferredModel || '').trim();
-  if (!Array.isArray(state.analysisApiModels) || !state.analysisApiModels.length) return preferred;
-  const isSupported = state.analysisApiModels.some(item => item?.id === preferred);
-  return isSupported ? preferred : state.analysisApiModels[0]?.id || '';
-}
-
-function getInputAnalysisModel() {
-  return String($('#analysisModel')?.value || '').trim() || state.apiSettings?.analysisModel || '';
-}
-
-function syncPackageAnalysisModelsFromInput() {
-  const nextModel = getInputAnalysisModel();
-  if (!nextModel) return;
-  const sourceModel = String(state.apiSettings?.analysisModel || '').trim();
-  $$('.model-package-editor').forEach(row => {
-    const input = row.querySelector('[data-package-field="analysisModel"]');
-    if (!input) return;
-    const currentModel = input.value.trim();
-    if (!currentModel || currentModel === sourceModel) input.value = nextModel;
-  });
-}
-
-function currentModelPackages() {
-  const packages = isSuperAdmin()
-    ? (state.apiSettings?.modelPackages || state.modelPackageSettings?.modelPackages || [])
-    : (state.modelPackageSettings?.modelPackages || []);
-  return Array.isArray(packages) ? packages : [];
-}
-
-function renderModelPackages() {
-  const list = $('#modelPackageList');
-  if (!list) return;
-  const packages = currentModelPackages();
-  const selected = state.selectedModelPackageId || state.modelPackageSettings?.selectedModelPackageId || packages.find(item => item.default)?.id || packages[0]?.id || '';
-  state.selectedModelPackageId = selected;
-  const selectedPackage = packages.find(item => item.id === selected);
-  const packageStatusText = selectedPackage ? `当前：${selectedPackage.name}` : '未选择';
-  const statusBadge = $('#apiStatusBadge');
-  const tabStatus = $('#apiTabStatus');
-  if (!isSuperAdmin()) {
-    if (statusBadge) {
-      statusBadge.textContent = packageStatusText;
-      statusBadge.classList.toggle('ready', Boolean(selectedPackage));
-    }
-    if (tabStatus) {
-      tabStatus.textContent = selectedPackage ? selectedPackage.name : '未选择';
-      tabStatus.classList.toggle('ready', Boolean(selectedPackage));
-    }
-  }
-  if ($('#addModelPackageButton')) $('#addModelPackageButton').hidden = true;
-  $('#saveModelPackagesButton').hidden = !isSuperAdmin();
-  $('#modelPackageUserActions').hidden = true;
-  const packageDescription = $('#modelPackageDescription');
-  if (packageDescription) {
-    packageDescription.hidden = !isSuperAdmin();
-    packageDescription.textContent = isSuperAdmin() ? '配置模型套餐' : '';
-  }
-  if (!packages.length) {
-    list.innerHTML = isSuperAdmin()
-      ? '<div class="empty-inline">固定套餐尚未初始化，请保存一次 API 设置。</div>'
-      : '<div class="empty-inline">超级管理员还没有启用模型套餐。</div>';
-    return;
-  }
-  if (!isSuperAdmin()) {
-    list.innerHTML = packages.map(item => `
-      <button class="model-package-choice${item.id === selected ? ' active' : ''}" type="button" data-select-model-package="${escapeHtml(item.id)}">
-        <span><b>${escapeHtml(item.name)}</b><small>${escapeHtml(item.description || '可用模型')}</small></span>
-        <em>${item.id === selected ? '当前使用' : item.recommended ? '推荐' : '可选'}</em>
-      </button>`).join('');
-    return;
-  }
-  list.innerHTML = packages.map((item, index) => `
-    <article class="model-package-editor" data-model-package-index="${index}">
-      <div class="model-package-editor-head">
-        <div><b>${escapeHtml(item.name || `模型 ${index + 1}`)}</b><span>${escapeHtml(item.id || '')}${item.recommended ? ' · 推荐' : ''}${item.default ? ' · 默认' : ''}</span></div>
-        <div class="inline-actions"><button class="secondary" type="button" data-select-model-package="${escapeHtml(item.id)}">${item.id === selected ? '当前使用' : '设为当前'}</button></div>
-      </div>
-      <div class="model-package-form-grid">
-        <label>套餐编号<input data-package-field="id" value="${escapeHtml(item.id || '')}" spellcheck="false"></label>
-        <label>管理员看到的名称<input data-package-field="name" value="${escapeHtml(item.name || '')}"></label>
-        <label>管理员看到的说明<input data-package-field="description" value="${escapeHtml(item.description || '')}"></label>
-        <label>生图模型 ID<input data-package-field="modelId" value="${escapeHtml(item.modelId || '')}" spellcheck="false"></label>
-        <label>分析模型 ID<input data-package-field="analysisModel" value="${escapeHtml(item.analysisModel || state.apiSettings?.analysisModel || '')}" spellcheck="false"></label>
-        <label>分析接口协议<select data-package-field="analysisWireApi"><option value="chat_completions">Chat Completions</option><option value="responses">Responses API</option></select></label>
-        <label>生图 API 地址<input data-package-field="apiBaseUrl" value="${escapeHtml(item.apiBaseUrl || '')}" placeholder="${escapeHtml(state.apiSettings?.baseUrl || 'https://api.change2pro.com')}" spellcheck="false"></label>
-        <label>生图 API Key<input data-package-field="apiKey" type="password" placeholder="${item.apiKeyConfigured ? `已保存：${escapeHtml(item.apiKeyMasked || '')}` : '留空使用全局 Image2 Key'}" autocomplete="new-password" spellcheck="false"></label>
-        <label>分析 API 地址<input data-package-field="analysisApiBaseUrl" value="${escapeHtml(item.analysisApiBaseUrl || '')}" placeholder="${escapeHtml(state.apiSettings?.baseUrl || '留空使用全局地址')}" spellcheck="false"></label>
-        <label>分析 API Key<input data-package-field="analysisApiKey" type="password" placeholder="${item.analysisApiKeyConfigured ? `已保存：${escapeHtml(item.analysisApiKeyMasked || '')}` : '留空使用全局分析 Key'}" autocomplete="new-password" spellcheck="false"></label>
-        <label>最大并发<input data-package-field="maxConcurrency" type="number" min="1" max="50" step="1" value="${Number(item.maxConcurrency) || 1}"></label>
-        <label>启动间隔 ms<input data-package-field="startIntervalMs" type="number" min="0" max="60000" step="100" value="${Number(item.startIntervalMs) || 0}"></label>
-        <label>生图最低 / 张<div class="money-input"><span>$</span><input data-package-field="imagePriceMinMinor" type="number" min="0" step="0.000001" value="${moneyMinorToInput(item.imagePriceMinMinor ?? item.imagePriceMinor ?? 0)}"></div></label>
-        <label>生图最高 / 张<div class="money-input"><span>$</span><input data-package-field="imagePriceMaxMinor" type="number" min="0" step="0.000001" value="${moneyMinorToInput(item.imagePriceMaxMinor ?? item.imagePriceMinor ?? 0)}"></div></label>
-        <label>分析最低 / 次<div class="money-input"><span>$</span><input data-package-field="analysisPriceMinMinor" type="number" min="0" step="0.000001" value="${moneyMinorToInput(item.analysisPriceMinMinor ?? item.analysisPriceMinor ?? 0)}"></div></label>
-        <label>分析最高 / 次<div class="money-input"><span>$</span><input data-package-field="analysisPriceMaxMinor" type="number" min="0" step="0.000001" value="${moneyMinorToInput(item.analysisPriceMaxMinor ?? item.analysisPriceMinor ?? 0)}"></div></label>
-        <label>内部效果档位<select data-package-field="promptQuality"><option value="basic">低价版效果</option><option value="standard">标准版效果</option><option value="flagship">旗舰版效果</option><option value="custom">自定义效果</option></select></label>
-      </div>
-      <label class="model-package-prompt">分析内部提示词<textarea data-package-field="analysisPrompt" rows="4" spellcheck="false">${escapeHtml(item.analysisPrompt || '')}</textarea></label>
-      <label class="model-package-prompt">生图内部提示词<textarea data-package-field="imagePrompt" rows="4" spellcheck="false">${escapeHtml(item.imagePrompt || item.hiddenPrompt || '')}</textarea></label>
-      <div class="model-package-switches"><label><input data-package-field="enabled" type="checkbox"${item.enabled !== false ? ' checked' : ''}> 启用</label><label><input data-package-field="default" type="checkbox"${item.default ? ' checked' : ''}> 默认</label><label><input data-package-field="recommended" type="checkbox"${item.recommended ? ' checked' : ''}> 推荐</label>${item.id === 'flagship' ? `<label><input data-package-field="enableMasterReference" type="checkbox"${item.enableMasterReference ? ' checked' : ''}> 启用母版参考</label>` : ''}</div>
-    </article>`).join('');
-  packages.forEach((item, index) => {
-    const row = list.querySelector(`[data-model-package-index="${index}"]`);
-    if (!row) return;
-    row.querySelector('[data-package-field="analysisWireApi"]').value = item.analysisWireApi || state.apiSettings?.analysisWireApi || 'chat_completions';
-    row.querySelector('[data-package-field="promptQuality"]').value = item.promptQuality || 'standard';
-  });
-}
-
-function collectModelPackagesFromForm() {
-  syncPackageAnalysisModelsFromInput();
-  return $$('.model-package-editor').map((row, index) => {
-    const read = field => row.querySelector(`[data-package-field="${field}"]`);
-    return {
-      id: read('id')?.value.trim() || `model-${index + 1}`,
-      name: read('name')?.value.trim() || `模型 ${index + 1}`,
-      description: read('description')?.value.trim() || '',
-      modelId: read('modelId')?.value.trim() || state.apiSettings?.imageModel || 'gpt-image-2',
-      apiBaseUrl: read('apiBaseUrl')?.value.trim() || state.apiSettings?.baseUrl || '',
-      apiKey: read('apiKey')?.value.trim() || '',
-      analysisApiBaseUrl: read('analysisApiBaseUrl')?.value.trim() || state.apiSettings?.baseUrl || '',
-      analysisApiKey: read('analysisApiKey')?.value.trim() || '',
-      analysisModel: read('analysisModel')?.value.trim() || getInputAnalysisModel(),
-      analysisWireApi: read('analysisWireApi')?.value || state.apiSettings?.analysisWireApi || 'chat_completions',
-      maxConcurrency: Number(read('maxConcurrency')?.value) || 1,
-      startIntervalMs: Number(read('startIntervalMs')?.value) || 0,
-      imagePriceMinMinor: moneyInputToMinor(read('imagePriceMinMinor')?.value || '0', '模型生图最低价格'),
-      imagePriceMaxMinor: moneyInputToMinor(read('imagePriceMaxMinor')?.value || '0', '模型生图最高价格'),
-      analysisPriceMinMinor: moneyInputToMinor(read('analysisPriceMinMinor')?.value || '0', '模型分析最低价格'),
-      analysisPriceMaxMinor: moneyInputToMinor(read('analysisPriceMaxMinor')?.value || '0', '模型分析最高价格'),
-      promptQuality: read('promptQuality')?.value || 'standard',
-      promptMode: read('promptQuality')?.value === 'flagship' ? 'full' : 'internal',
-      userPromptPolicy: read('promptQuality')?.value === 'flagship' ? 'full' : 'ignore',
-      queuePriority: read('promptQuality')?.value === 'flagship' ? 10 : read('promptQuality')?.value === 'standard' ? 5 : 2,
-      hiddenPrompt: '',
-      analysisPrompt: read('analysisPrompt')?.value || '',
-      imagePrompt: read('imagePrompt')?.value || '',
-      enableMasterReference: read('enableMasterReference')?.checked === true,
-      enabled: read('enabled')?.checked !== false,
-      default: read('default')?.checked === true,
-      recommended: read('recommended')?.checked === true
-    };
-  });
-}
-
-async function loadModelPackageSettings() {
-  if (!isTeamAdmin()) return;
-  try {
-    state.modelPackageSettings = await window.caishen.getModelPackages();
-    state.selectedModelPackageId = state.modelPackageSettings?.selectedModelPackageId || '';
-    state.allowAdminPromptView = state.modelPackageSettings?.allowAdminPromptView === true;
-    $('#promptSettingsNav').hidden = !canViewPrompts();
-    if (isSuperAdmin()) renderModelPackages();
-    else renderApiSettings();
-  } catch (error) {
-    toast(`读取模型失败：${errorText(error)}`, true);
-  }
-}
-
-async function saveSelectedModelPackage() {
-  if (!isTeamAdmin() || !state.selectedModelPackageId) return;
-  try {
-    state.modelPackageSettings = await window.caishen.saveSelectedModelPackage(state.selectedModelPackageId);
-    renderModelPackages();
-    toast('模型已切换');
-  } catch (error) {
-    toast(errorText(error), true);
-  }
-}
-
-function addDefaultModelPackages() {
-  if (!isSuperAdmin()) return;
-  const packages = currentModelPackages();
-  state.apiSettings = { ...(state.apiSettings || {}), modelPackages: packages.length ? [...packages, defaultModelPackages()[Math.min(packages.length, 2)]] : defaultModelPackages() };
-  renderModelPackages();
-}
-
-async function saveModelPackages() {
-  if (!isSuperAdmin()) return;
-  const button = $('#saveModelPackagesButton');
-  button.disabled = true;
-  try {
-    state.apiSettings = await window.caishen.saveApiSettings(apiSettingsPayload());
-    state.modelPackageSettings = await window.caishen.getModelPackages();
-    state.selectedModelPackageId = state.modelPackageSettings?.selectedModelPackageId || '';
-    renderApiSettings();
-    toast('模型套餐已保存');
+    toast('划拨完成：转出账号已扣减，转入账号已到账');
   } catch (error) {
     toast(errorText(error), true);
   } finally {
     button.disabled = false;
+    button.textContent = '确认划拨';
+  }
+}
+
+function newRelayDraft() {
+  return {
+    _unsaved: true,
+    id: `relay-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+    name: '新中转站', description: '', enabled: true, baseUrl: '', imageModel: '',
+    healthPath: '/models', modelsPath: '/models',
+    imagePriceMinMinor: 0, imagePriceMaxMinor: 0
+  };
+}
+
+function relayRowPayload(row) {
+  const read = field => row.querySelector(`[data-relay-field="${field}"]`);
+  const imagePriceMinMinor = moneyInputToMinor(read('imagePriceMinMinor')?.value || '0', '最低扣费');
+  const imagePriceMaxMinor = moneyInputToMinor(read('imagePriceMaxMinor')?.value || '0', '最高扣费');
+  if (imagePriceMaxMinor < imagePriceMinMinor) throw new Error('最高扣费不能低于最低扣费');
+  return {
+    id: row.dataset.relayId,
+    name: read('name')?.value.trim() || '未命名中转站',
+    description: read('description')?.value.trim() || '',
+    enabled: read('enabled')?.checked !== false,
+    baseUrl: read('baseUrl')?.value.trim() || '',
+    imageApiKey: read('imageKey')?.value.trim() || '',
+    imageModel: read('imageModel')?.value.trim() || '',
+    healthPath: read('healthPath')?.value.trim() || '/models',
+    modelsPath: read('modelsPath')?.value.trim() || '/models',
+    imagePriceMinMinor,
+    imagePriceMaxMinor
+  };
+}
+
+function collectRelaysFromForm() {
+  const currentById = new Map((state.apiSettings?.relays || []).map(item => [item.id, item]));
+  return $$('.relay-station-editor').map(row => ({
+    ...(currentById.get(row.dataset.relayId) || {}),
+    ...relayRowPayload(row)
+  }));
+}
+
+function currentRelayChoices() {
+  if (isSuperAdmin()) return state.apiSettings?.relays || [];
+  return state.relayChoices?.relays || [];
+}
+
+function renderRelayStations() {
+  const list = $('#relayStationList');
+  if (!list) return;
+  const relays = currentRelayChoices();
+  const activeId = isSuperAdmin() ? state.apiSettings?.activeRelayId : state.relayChoices?.activeRelayId;
+  state.selectedRelayId = activeId || '';
+  if (!relays.length) {
+    list.innerHTML = isSuperAdmin() ? '<div class="empty-inline">请添加第一个中转站。</div>' : '<div class="empty-inline">超级管理员尚未启用中转站。</div>';
+    return;
+  }
+  if (!isSuperAdmin()) {
+    list.innerHTML = relays.map(item => `
+      <button class="relay-station-choice${item.id === activeId ? ' active' : ''}" type="button" data-select-relay="${escapeHtml(item.id)}">
+        <span><b>${escapeHtml(item.name)}</b><small>${escapeHtml(item.description || '可用中转站')} · ${feeRangeLabel(item.imagePriceMinMinor, item.imagePriceMaxMinor)}/张</small></span>
+        <em>${item.id === activeId ? '当前使用' : '切换'}</em>
+      </button>`).join('');
+    return;
+  }
+  list.innerHTML = relays.map(item => {
+    return `
+      <article class="relay-station-editor${item.id === activeId ? ' active' : ''}" data-relay-id="${escapeHtml(item.id)}">
+        <div class="relay-station-editor-head">
+          <div><b>${escapeHtml(item.name || '未命名中转站')}</b><span>${item.id === activeId ? '当前中转站' : escapeHtml(item.id)}</span></div>
+          <div class="inline-actions"><button class="secondary" type="button" data-select-relay="${escapeHtml(item.id)}">${item.id === activeId ? '当前使用' : '设为当前'}</button><button class="danger-outline" type="button" data-delete-relay="${escapeHtml(item.id)}">删除</button></div>
+        </div>
+        <div class="relay-station-form-grid">
+          <label>管理员看到的名称<input data-relay-field="name" value="${escapeHtml(item.name || '')}"></label>
+          <label>管理员看到的介绍<input data-relay-field="description" value="${escapeHtml(item.description || '')}"></label>
+          <label>OpenAI Base URL<input data-relay-field="baseUrl" type="url" value="${escapeHtml(item.baseUrl || '')}" placeholder="https://example.com/v1" spellcheck="false"></label>
+          <label>图片 API Key<input data-relay-field="imageKey" type="password" placeholder="${item.imageKeyConfigured ? `已保存：${escapeHtml(item.imageKeyMasked || '')}` : '输入图片 API Key'}" autocomplete="new-password"></label>
+          <label>图片模型（读取后选择）<input data-relay-field="imageModel" value="${escapeHtml(item.imageModel || '')}" readonly placeholder="请点击读取图片模型"></label>
+          <label>健康检测接口<input data-relay-field="healthPath" value="${escapeHtml(item.healthPath || '/models')}" placeholder="/models" spellcheck="false"></label>
+          <label>模型列表接口<input data-relay-field="modelsPath" value="${escapeHtml(item.modelsPath || '/models')}" placeholder="/models" spellcheck="false"></label>
+          <label>每张最低扣费<div class="money-input"><span>$</span><input data-relay-field="imagePriceMinMinor" type="number" min="0" max="1000000" step="0.000001" inputmode="decimal" placeholder="0.000000" value="${moneyMinorToSixDecimalInput(item.imagePriceMinMinor ?? 0)}"></div></label>
+          <label>每张最高扣费<div class="money-input"><span>$</span><input data-relay-field="imagePriceMaxMinor" type="number" min="0" max="1000000" step="0.000001" inputmode="decimal" placeholder="0.000000" value="${moneyMinorToSixDecimalInput(item.imagePriceMaxMinor ?? item.imagePriceMinMinor ?? 0)}"></div></label>
+        </div>
+        <div class="relay-station-actions">
+          <button class="secondary" type="button" data-relay-health>健康检测</button>
+          <button class="secondary" type="button" data-relay-models>读取图片模型</button>
+          <label><input data-relay-field="enabled" type="checkbox"${item.enabled !== false ? ' checked' : ''}> 启用</label>
+        </div>
+        <div class="relay-station-status" data-relay-status>请使用健康检测和模型读取验证本站配置。</div>
+      </article>`;
+  }).join('');
+}
+
+function addRelay() {
+  if (!isSuperAdmin()) return;
+  state.apiSettings = { ...(state.apiSettings || {}), relays: [...collectRelaysFromForm(), newRelayDraft()] };
+  renderRelayStations();
+}
+
+async function deleteRelay(button) {
+  if (!isSuperAdmin()) return;
+  if (!window.confirm('确定删除这个中转站吗？删除后立即生效。')) return;
+  const relays = collectRelaysFromForm().filter(item => item.id !== button.dataset.deleteRelay);
+  const activeRelayId = state.apiSettings?.activeRelayId === button.dataset.deleteRelay
+    ? relays.find(item => item.enabled !== false)?.id || ''
+    : state.apiSettings?.activeRelayId;
+  button.disabled = true;
+  try {
+    state.apiSettings = await window.caishen.saveApiSettings({ ...apiSettingsPayload(), relays, activeRelayId });
+    state.relayChoices = await window.caishen.getRelayChoices().catch(() => state.relayChoices);
+    state.selectedRelayId = state.apiSettings.activeRelayId || '';
+    renderApiSettings();
+    await loadBillingSummary();
+    toast('中转站已删除');
+  } catch (error) {
+    button.disabled = false;
+    toast(`删除失败：${errorText(error)}`, true);
+  }
+}
+
+async function loadRelayChoices() {
+  if (!isTeamAdmin()) return;
+  try {
+    state.relayChoices = await window.caishen.getRelayChoices();
+    state.selectedRelayId = state.relayChoices?.activeRelayId || '';
+    state.allowAdminPromptView = state.relayChoices?.allowAdminPromptView === true;
+    $('#promptSettingsNav').hidden = !canViewPrompts();
+    if (!isSuperAdmin()) renderApiSettings();
+  } catch (error) {
+    toast(`读取中转站失败：${errorText(error)}`, true);
+  }
+}
+
+async function selectRelay(relayId) {
+  if (!isTeamAdmin() || !relayId) return;
+  if (isSuperAdmin()) {
+    state.apiSettings = { ...(state.apiSettings || {}), relays: collectRelaysFromForm(), activeRelayId: relayId };
+    renderApiSettings();
+    toast('已设为当前中转站，保存设置后生效');
+    return;
+  }
+  try {
+    state.relayChoices = await window.caishen.saveActiveRelay(relayId);
+    state.selectedRelayId = state.relayChoices.activeRelayId;
+    renderApiSettings();
+    await loadBillingSummary();
+    toast('中转站已切换');
+  } catch (error) {
+    toast(errorText(error), true);
   }
 }
 
@@ -5352,48 +5358,42 @@ function renderApiSettings() {
   const superAdmin = isSuperAdmin();
   const heading = $('.api-panel-head h2');
   const description = $('.api-panel-head p');
+  const relayHeading = $('#relayStationCard .settings-card-head h3');
+  const relayDescription = $('#relayStationCard .settings-card-head p');
   const footnote = $('#apiSettingsFootnote span');
   const footnoteRow = $('#apiSettingsFootnote');
   if (!superAdmin) {
-    if (heading) heading.textContent = '模型选择';
+    if (heading) heading.textContent = '中转站选择';
     if (description) {
-      description.textContent = '';
-      description.hidden = true;
+      description.textContent = '管理员只能查看名称和介绍，并切换当前中转站。';
+      description.hidden = false;
     }
     if (footnoteRow) footnoteRow.hidden = true;
+    if (relayHeading) relayHeading.textContent = '可用中转站';
+    if (relayDescription) relayDescription.textContent = '选择后，后续任务将使用这个中转站。';
     $('.api-layout-grid').hidden = true;
     $('.api-advanced-settings').hidden = true;
-    $('#modelPackageCard').hidden = false;
-    renderModelPackages();
+    $('#addRelayButton').hidden = true;
+    renderRelayStations();
+    const active = state.relayChoices?.relays?.find(item => item.id === state.relayChoices?.activeRelayId);
+    $('#apiStatusBadge').textContent = active ? `当前：${active.name}` : '未选择';
+    $('#apiStatusBadge').classList.toggle('ready', Boolean(active));
+    $('#apiTabStatus').textContent = active?.name || '未选择';
+    $('#apiTabStatus').classList.toggle('ready', Boolean(active));
     return;
   }
   if (heading) heading.textContent = 'API 设置';
   if (description) {
     description.hidden = false;
-    description.textContent = '配置连接、分配模型和图片输出规则。';
+    description.textContent = '配置中转站、接口健康、模型、余额和独立计费规则。';
   }
   if (footnoteRow) footnoteRow.hidden = false;
-  if (footnote) footnote.textContent = 'API 地址、模型和密钥修改后，后续新任务立即使用新配置。';
+  if (relayHeading) relayHeading.textContent = '中转站';
+  if (relayDescription) relayDescription.textContent = '每个中转站独立保存地址、密钥、模型和本站扣费标准；不依赖上游余额接口。';
+  if (footnote) footnote.textContent = '保存后，当前中转站的新配置会立即用于后续任务。';
   $('.api-layout-grid').hidden = false;
   $('.api-advanced-settings').hidden = false;
-  $('#modelPackageCard').hidden = false;
-  $('#apiBaseUrl').value = settings.baseUrl || '';
-  for (const channel of ['analysis', 'image']) {
-    const input = $(`#${channel}ApiKey`);
-    const configured = settings[`${channel}KeyConfigured`];
-    input.value = '';
-    input.type = 'password';
-    input.placeholder = configured
-      ? '留空则继续使用已保存密钥'
-      : channel === 'analysis' ? '输入文字模型分组密钥' : '输入 Image2 分组密钥';
-    $(`#${channel}ApiKeyHint`).textContent = configured
-      ? `已安全保存：${settings[`${channel}KeyMasked`] || '已配置'}`
-      : channel === 'analysis' ? '尚未保存文字密钥' : '尚未保存图片密钥';
-  }
-  $$('[data-toggle-secret]').forEach(button => { button.textContent = '显示'; });
-  $('#imageModel').value = settings.imageModel || 'gpt-image-2';
-  $('#analysisModel').value = getConfiguredAnalysisModel(settings.analysisModel);
-  $('#analysisWireApi').value = settings.analysisWireApi || 'chat_completions';
+  $('#addRelayButton').hidden = false;
   $('#apiResponseFormat').value = settings.responseFormat || 'url';
   $('#apiRequestTimeout').value = String(settings.requestTimeoutSeconds || 300);
   $('#imageInitialConcurrency').value = String(settings.imageInitialConcurrency || 8);
@@ -5403,20 +5403,14 @@ function renderApiSettings() {
   $('#imageSize').value = state.config?.imageSize || '1024x1024';
   $('#imageQuality').value = state.config?.imageQuality || 'auto';
 
-  const statusText = settings.imageConfigured && settings.analysisConfigured
-    ? '全部已配置'
-    : settings.imageConfigured
-      ? '仅 Image2 已配置'
-      : settings.analysisConfigured
-        ? '仅文字分析已配置'
-        : '未配置';
+  const statusText = settings.configured ? `当前：${settings.activeRelayName || '已配置'}` : settings.activeRelayName ? `${settings.activeRelayName} 待完善` : '未配置';
   const statusBadge = $('#apiStatusBadge');
   statusBadge.textContent = statusText;
-  statusBadge.classList.toggle('ready', Boolean(settings.imageConfigured || settings.analysisConfigured));
+  statusBadge.classList.toggle('ready', Boolean(settings.imageConfigured));
   const tabStatus = $('#apiTabStatus');
   tabStatus.textContent = statusText;
-  tabStatus.classList.toggle('ready', Boolean(settings.imageConfigured || settings.analysisConfigured));
-  renderModelPackages();
+  tabStatus.classList.toggle('ready', Boolean(settings.imageConfigured));
+  renderRelayStations();
   renderApiModelList();
 }
 
@@ -5432,17 +5426,14 @@ function apiModelMeta(model) {
 }
 
 function renderApiModelList() {
-  const channel = state.apiModelChannel === 'analysis' ? 'analysis' : 'image';
-  const models = channel === 'analysis' ? state.analysisApiModels : state.imageApiModels;
+  const models = state.imageApiModels;
   const browser = $('#apiModelBrowser');
   browser.hidden = models.length === 0;
-  $('#openAnalysisModelsButton').hidden = state.analysisApiModels.length === 0;
-  $('#openImageModelsButton').hidden = state.imageApiModels.length === 0;
-  $('#analysisModelOptions').innerHTML = state.analysisApiModels.map(model => `<option value="${escapeHtml(model.id)}"></option>`).join('');
   $('#imageModelOptions').innerHTML = state.imageApiModels.map(model => `<option value="${escapeHtml(model.id)}"></option>`).join('');
   if (!models.length) return;
   if (!models.some(model => model.id === state.selectedApiModelId)) {
-    const configuredModel = channel === 'analysis' ? state.apiSettings?.analysisModel : state.apiSettings?.imageModel;
+    const row = $(`.relay-station-editor[data-relay-id="${CSS.escape(state.apiModelRelayId || '')}"]`);
+    const configuredModel = row?.querySelector('[data-relay-field="imageModel"]')?.value || '';
     const configured = models.find(model => model.id === configuredModel);
     state.selectedApiModelId = configured?.id || models[0].id;
   }
@@ -5459,15 +5450,13 @@ function renderApiModelList() {
   $('#applyApiModelButton').disabled = !state.selectedApiModelId;
 }
 
-function openApiModelModal(channel = 'image') {
-  state.apiModelChannel = channel === 'analysis' ? 'analysis' : 'image';
-  const models = state.apiModelChannel === 'analysis' ? state.analysisApiModels : state.imageApiModels;
-  if (!models.length) return toast(`请先读取${state.apiModelChannel === 'analysis' ? '文字' : '图片'}模型列表`, true);
+function openApiModelModal(relayId = state.apiModelRelayId) {
+  state.apiModelRelayId = relayId || '';
+  const models = state.imageApiModels;
+  if (!models.length) return toast('请先读取图片模型列表', true);
   state.selectedApiModelId = '';
-  $('#apiModelModalTitle').textContent = state.apiModelChannel === 'analysis' ? '选择文字分析模型' : '选择 Image2 模型';
-  $('#apiModelModalDescription').textContent = state.apiModelChannel === 'analysis'
-    ? '只显示文字分析密钥所属分组返回的模型。'
-    : '只显示 Image2 密钥所属分组返回的模型。';
+  $('#apiModelModalTitle').textContent = '选择图片模型';
+  $('#apiModelModalDescription').textContent = '显示当前中转站图片密钥返回的全部模型。';
   $('#apiModelModal').hidden = false;
   $('#apiModelSearch').focus();
   renderApiModelList();
@@ -5479,26 +5468,25 @@ function closeApiModelModal() {
 
 function applySelectedApiModel() {
   if (!state.selectedApiModelId) return toast('请先选择一个模型', true);
-  const target = state.apiModelChannel === 'analysis' ? 'analysis' : 'image';
-  const label = target === 'image' ? '图片模型' : '分析模型';
-  $(target === 'image' ? '#imageModel' : '#analysisModel').value = state.selectedApiModelId;
-  if (target === 'analysis') syncPackageAnalysisModelsFromInput();
+  const row = $(`.relay-station-editor[data-relay-id="${CSS.escape(state.apiModelRelayId || '')}"]`);
+  const input = row?.querySelector('[data-relay-field="imageModel"]');
+  if (!input) return toast('中转站配置已变化，请重新读取模型', true);
+  input.value = state.selectedApiModelId;
   closeApiModelModal();
-  toast(`已设为${label}，保存设置后生效`);
+  toast('图片模型已选择，保存设置后生效');
 }
 
 async function loadApiSettings() {
   if (!isSuperAdmin()) return;
   try {
-    const [apiSettings, modelPackageSettings] = await Promise.all([
+    const [apiSettings, relayChoices] = await Promise.all([
       window.caishen.getApiSettings(),
-      window.caishen.getModelPackages().catch(() => null)
+      window.caishen.getRelayChoices().catch(() => null)
     ]);
     state.apiSettings = apiSettings;
     state.allowAdminPromptView = apiSettings.allowAdminPromptView === true;
-    state.modelPackageSettings = modelPackageSettings || state.modelPackageSettings;
-    if (modelPackageSettings) state.allowAdminPromptView = modelPackageSettings.allowAdminPromptView === true;
-    state.selectedModelPackageId = state.modelPackageSettings?.selectedModelPackageId || '';
+    state.relayChoices = relayChoices || state.relayChoices;
+    state.selectedRelayId = apiSettings.activeRelayId || '';
     $('#promptSettingsNav').hidden = !canViewPrompts();
     renderApiSettings();
   } catch (error) {
@@ -5508,111 +5496,55 @@ async function loadApiSettings() {
 
 function apiSettingsPayload() {
   return {
-    baseUrl: $('#apiBaseUrl').value.trim(),
-    analysisApiKey: $('#analysisApiKey').value.trim(),
-    imageApiKey: $('#imageApiKey').value.trim(),
-    imageModel: $('#imageModel').value.trim(),
-    analysisModel: $('#analysisModel').value.trim(),
-    analysisWireApi: $('#analysisWireApi').value,
+    activeRelayId: state.apiSettings?.activeRelayId || '',
+    relays: collectRelaysFromForm(),
     responseFormat: $('#apiResponseFormat').value,
     requestTimeoutSeconds: Number($('#apiRequestTimeout').value),
     imageInitialConcurrency: Number($('#imageInitialConcurrency').value),
     imageMaxConcurrency: Number($('#imageMaxConcurrency').value),
     imageStartIntervalMs: Number($('#imageStartIntervalMs').value),
-    allowAdminPromptView: $('#allowAdminPromptView')?.checked === true,
-    modelPackages: collectModelPackagesFromForm()
+    allowAdminPromptView: $('#allowAdminPromptView')?.checked === true
   };
 }
 
-async function testApiConnection() {
-  const button = $('#testApiButton');
-  const row = button.closest('.api-test-row');
-  row.classList.remove('success', 'error');
-  $('#apiConnectionTitle').textContent = '模型接口检测中…';
-  $('#apiConnectionStatus').textContent = '正在请求 GET /v1/models。';
+function setRelayStatus(row, message, error = false) {
+  const status = row?.querySelector('[data-relay-status]');
+  if (!status) return;
+  status.textContent = message;
+  status.classList.toggle('error', error);
+  status.classList.toggle('success', !error);
+}
+
+async function testRelayHealth(row, button) {
+  setRelayStatus(row, '正在检测健康接口…');
   button.disabled = true;
-  button.textContent = '测试中…';
   try {
-    const result = await window.caishen.testApiSettings({ ...apiSettingsPayload(), channel: 'image' });
+    const result = await window.caishen.testRelayHealth({ relay: relayRowPayload(row), requestTimeoutSeconds: Number($('#apiRequestTimeout').value) });
+    setRelayStatus(row, `健康正常 · ${result.checkedPath} · ${result.latencyMs ?? 0} ms`);
+    toast('中转站健康检测通过');
+  } catch (error) {
+    setRelayStatus(row, `健康检测失败：${apiTestErrorText(error)}`, true);
+    toast(errorText(error), true);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function readRelayModels(row, button) {
+  setRelayStatus(row, '正在读取图片模型…');
+  button.disabled = true;
+  try {
+    const result = await window.caishen.testApiSettings({ relay: relayRowPayload(row), requestTimeoutSeconds: Number($('#apiRequestTimeout').value) });
     state.imageApiModels = result.models || [];
-    state.apiModelChannel = 'image';
-    renderApiModelList();
-    row.classList.add('success');
-    $('#apiConnectionTitle').textContent = '模型接口正常';
-    $('#apiConnectionStatus').textContent = `响应 ${result.latencyMs ?? 0} ms · 已读取 ${result.modelCount || 0} 个模型`;
-    toast(result.modelCount ? `已获取 ${result.modelCount} 个模型` : '连接正常，但接口没有返回模型');
-    if (result.modelCount) openApiModelModal('image');
+    state.apiModelRelayId = row.dataset.relayId;
+    setRelayStatus(row, `图片模型读取成功 · ${result.modelCount || 0} 个 · ${result.latencyMs ?? 0} ms`);
+    if (result.modelCount) openApiModelModal(row.dataset.relayId);
+    else toast('接口正常，但没有返回可用模型', true);
   } catch (error) {
-    row.classList.add('error');
-    $('#apiConnectionTitle').textContent = '模型接口失败';
-    $('#apiConnectionStatus').textContent = errorText(error);
+    setRelayStatus(row, `图片模型读取失败：${apiTestErrorText(error)}`, true);
     toast(errorText(error), true);
   } finally {
     button.disabled = false;
-    button.textContent = '重新测试';
-  }
-}
-
-async function testAnalysisModelsConnection() {
-  const button = $('#testAnalysisModelsButton');
-  const row = button.closest('.api-test-row');
-  row.classList.remove('success', 'error');
-  $('#analysisModelsTitle').textContent = '文字模型读取中…';
-  $('#analysisModelsStatus').textContent = '正在使用文字分析密钥请求 GET /v1/models。';
-  button.disabled = true;
-  button.textContent = '读取中…';
-  try {
-    const result = await window.caishen.testApiSettings({ ...apiSettingsPayload(), channel: 'analysis' });
-    state.analysisApiModels = result.models || [];
-    state.apiModelChannel = 'analysis';
-    renderApiModelList();
-    row.classList.add('success');
-    $('#analysisModelsTitle').textContent = '文字模型列表正常';
-    $('#analysisModelsStatus').textContent = `响应 ${result.latencyMs ?? 0} ms · 已读取 ${result.modelCount || 0} 个模型`;
-    toast(result.modelCount ? `已获取 ${result.modelCount} 个文字模型` : '连接正常，但接口没有返回文字模型');
-    if (result.modelCount) openApiModelModal('analysis');
-  } catch (error) {
-    row.classList.add('error');
-    $('#analysisModelsTitle').textContent = '文字模型读取失败';
-    $('#analysisModelsStatus').textContent = errorText(error);
-    toast(errorText(error), true);
-  } finally {
-    button.disabled = false;
-    button.textContent = '重新读取';
-  }
-}
-
-async function testAnalysisConnection() {
-  const button = $('#testAnalysisApiButton');
-  const row = button.closest('.api-test-row');
-  row.classList.remove('success', 'error');
-  $('#analysisConnectionTitle').textContent = '分析接口检测中…';
-  $('#analysisConnectionStatus').textContent = $('#analysisWireApi').value === 'responses'
-    ? '正在发送最小 Responses API 请求，不会生成图片。'
-    : '正在发送最小 Chat Completions 请求，不会生成图片。';
-  button.disabled = true;
-  button.textContent = '测试中…';
-  try {
-    const payload = apiSettingsPayload();
-    const models = await window.caishen.testApiSettings({ ...payload, channel: 'analysis' });
-    state.analysisApiModels = models.models || [];
-    state.apiModelChannel = 'analysis';
-    renderApiModelList();
-    const result = await window.caishen.testAnalysisApi(payload);
-    row.classList.add('success');
-    $('#analysisConnectionTitle').textContent = '分析接口正常';
-    const protocol = result.wireApi === 'responses' ? 'Responses API' : 'Chat Completions';
-    $('#analysisConnectionStatus').textContent = `${protocol} · ${result.model} · 响应 ${result.latencyMs ?? 0} ms${result.responsePreview ? ` · 返回 ${result.responsePreview}` : ''}`;
-    toast('分析接口测试成功');
-  } catch (error) {
-    const message = apiTestErrorText(error);
-    row.classList.add('error');
-    $('#analysisConnectionTitle').textContent = '分析接口失败';
-    $('#analysisConnectionStatus').textContent = message;
-    toast(message, true);
-  } finally {
-    button.disabled = false;
-    button.textContent = '重新测试';
   }
 }
 
@@ -5625,12 +5557,12 @@ async function saveSettings() {
       if (isSuperAdmin()) {
         state.apiSettings = await window.caishen.saveApiSettings(apiSettingsPayload());
         state.allowAdminPromptView = state.apiSettings.allowAdminPromptView === true;
-        state.modelPackageSettings = await window.caishen.getModelPackages().catch(() => state.modelPackageSettings);
-        if (state.modelPackageSettings) state.allowAdminPromptView = state.modelPackageSettings.allowAdminPromptView === true;
-        state.selectedModelPackageId = state.modelPackageSettings?.selectedModelPackageId || '';
+        state.relayChoices = await window.caishen.getRelayChoices().catch(() => state.relayChoices);
+        state.selectedRelayId = state.apiSettings.activeRelayId || '';
         $('#promptSettingsNav').hidden = !canViewPrompts();
         renderApiSettings();
-        toast('API 和模型套餐已保存');
+        await loadBillingSummary();
+        toast('中转站与 API 设置已保存');
       }
       return;
     }
@@ -5643,12 +5575,8 @@ async function saveSettings() {
     }
     const apiPayload = canSaveSystemSettings ? apiSettingsPayload() : {};
     const shouldSaveApi = canSaveSystemSettings && Boolean(
-      apiPayload.baseUrl
-      || apiPayload.imageApiKey
-      || apiPayload.analysisApiKey
-      || apiPayload.modelPackages?.length
-      || state.apiSettings?.imageKeyConfigured
-      || state.apiSettings?.analysisKeyConfigured
+      apiPayload.relays?.length
+      || state.apiSettings?.relays?.length
     );
     if (shouldSaveApi) {
       state.apiSettings = await window.caishen.saveApiSettings(apiPayload);
@@ -5706,9 +5634,8 @@ function bindEvents() {
     if (editButton) return editTeamUser(editButton.dataset.teamUserEdit);
     const deleteButton = event.target.closest('[data-team-user-delete]');
     if (deleteButton) return deleteTeamUser(deleteButton.dataset.teamUserDelete);
-    const transferButton = event.target.closest('[data-transfer-billing]');
-    if (transferButton) return transferTeamBalance(transferButton);
   };
+  $('#teamTransferButton').onclick = transferTeamBalance;
   $$('.nav-item').forEach(button => button.onclick = () => setPage(button.dataset.page));
   $$('[data-page-link]').forEach(button => button.onclick = () => setPage(button.dataset.pageLink));
   $$('.template-source-tabs [data-template-source-tab]').forEach(button => button.onclick = () => setTaskSourceTab(button.dataset.templateSourceTab));
@@ -6022,6 +5949,10 @@ function bindEvents() {
     state.billingAdminFilter = String(event.target.value || '');
     renderBillingAdmin();
   };
+  $('#billingRelayFilter').onchange = event => {
+    state.billingAdminRelayId = String(event.target.value || '');
+    renderBillingAdmin();
+  };
   $('#billingAccountList').onclick = event => {
     const button = event.target.closest('[data-adjust-billing]');
     if (button) adjustBillingBalance(button);
@@ -6030,20 +5961,19 @@ function bindEvents() {
     $('#settingOutputPathInput').value = state.config.defaultOutputPath || state.config.outputPath || '';
   };
   $$('[data-settings-tab]').forEach(button => button.onclick = () => renderSettingsTabs(button.dataset.settingsTab));
-  $('#testApiButton').onclick = testApiConnection;
-  $('#testAnalysisModelsButton').onclick = testAnalysisModelsConnection;
-  $('#testAnalysisApiButton').onclick = testAnalysisConnection;
   $('#apiSettingsForm').onsubmit = event => { event.preventDefault(); saveSettings(); };
-  if ($('#addModelPackageButton')) $('#addModelPackageButton').onclick = () => {};
-  $('#saveModelPackagesButton').onclick = saveModelPackages;
-  $('#modelPackageList').onclick = event => {
-    const choice = event.target.closest('[data-select-model-package]');
-    if (choice) {
-      state.selectedModelPackageId = choice.dataset.selectModelPackage;
-      renderModelPackages();
-      saveSelectedModelPackage();
-      return;
-    }
+  $('#addRelayButton').onclick = addRelay;
+  $('#relayStationList').onclick = event => {
+    const row = event.target.closest('.relay-station-editor');
+    const choice = event.target.closest('[data-select-relay]');
+    if (choice) return selectRelay(choice.dataset.selectRelay);
+    const remove = event.target.closest('[data-delete-relay]');
+    if (remove && isSuperAdmin()) return deleteRelay(remove);
+    if (!row) return;
+    const health = event.target.closest('[data-relay-health]');
+    if (health) return testRelayHealth(row, health);
+    const models = event.target.closest('[data-relay-models]');
+    if (models) return readRelayModels(row, models);
   };
   $('#apiModelList').onclick = event => {
     const button = event.target.closest('[data-api-model]');
@@ -6052,10 +5982,6 @@ function bindEvents() {
     renderApiModelList();
   };
   $('#apiModelSearch').oninput = renderApiModelList;
-  $('#openImageModelsButton').onclick = () => openApiModelModal('image');
-  $('#openAnalysisModelsButton').onclick = () => openApiModelModal('analysis');
-  $('#analysisModel').onchange = syncPackageAnalysisModelsFromInput;
-  $('#analysisModel').oninput = syncPackageAnalysisModelsFromInput;
   $('#closeApiModelModalButton').onclick = closeApiModelModal;
   $('#apiModelModal').onclick = event => { if (event.target === $('#apiModelModal')) closeApiModelModal(); };
   $('#applyApiModelButton').onclick = applySelectedApiModel;
@@ -6282,7 +6208,7 @@ async function start() {
   await loadTemplateFolders();
   const adminLoads = [
     ...(canViewPrompts() ? [loadPromptSettings()] : []),
-    ...(isTeamAdmin() ? [loadModelPackageSettings()] : []),
+    ...(isTeamAdmin() ? [loadRelayChoices()] : []),
     ...(isSuperAdmin() ? [loadApiSettings()] : [])
   ];
   await Promise.all([loadTitleLibrary(), loadTemplatePreparation(), loadBillingSummary(), ...adminLoads]);
@@ -6295,4 +6221,3 @@ start().catch(error => {
   $('#authHint').textContent = `无法连接服务器：${errorText(error)}`;
   $('#authHint').classList.add('error');
 });
-

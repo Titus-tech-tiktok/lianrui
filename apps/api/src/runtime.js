@@ -153,10 +153,6 @@ function currentWorkspaceId() {
   return normalizeWorkspaceId(workspaceContext.getStore()?.workspaceId || DEFAULT_WORKSPACE_ID);
 }
 
-function currentModelPackageWorkspaceId() {
-  return normalizeWorkspaceId(workspaceContext.getStore()?.modelPackageWorkspaceId || currentWorkspaceId());
-}
-
 function currentWorkspaceRoot() {
   return path.join(DATA_ROOT, 'workspaces', currentWorkspaceId());
 }
@@ -174,10 +170,6 @@ function currentUserDataRoot() {
   return path.join(currentWorkspaceRoot(), 'state');
 }
 
-function workspaceUserDataRoot(workspaceId) {
-  return path.join(workspaceRoot(workspaceId), 'state');
-}
-
 function currentDefaultOutputRoot() {
   return path.join(currentWorkspaceRoot(), 'outputs');
 }
@@ -185,8 +177,7 @@ function currentDefaultOutputRoot() {
 function runWithWorkspace(workspaceId, worker, context = {}) {
   return workspaceContext.run({
     ...context,
-    workspaceId: normalizeWorkspaceId(workspaceId),
-    modelPackageWorkspaceId: normalizeWorkspaceId(context.modelPackageWorkspaceId || workspaceId)
+    workspaceId: normalizeWorkspaceId(workspaceId)
   }, worker);
 }
 const app = {
@@ -203,25 +194,21 @@ const ENV_API = Object.freeze({
   baseUrl: String(process.env.CAISHEN_API_BASE_URL || '').trim(),
   key: String(process.env.CAISHEN_API_KEY || '').trim(),
   imageKey: String(process.env.CAISHEN_IMAGE_API_KEY || process.env.CAISHEN_API_KEY || '').trim(),
-  analysisKey: String(process.env.CAISHEN_ANALYSIS_API_KEY || '').trim(),
   imageModel: String(process.env.CAISHEN_IMAGE_MODEL || 'gpt-image-2').trim(),
-  analysisModel: String(process.env.CAISHEN_REVERSE_PROMPT_MODEL || '').trim(),
-  analysisWireApi: String(process.env.CAISHEN_ANALYSIS_WIRE_API || 'chat_completions').trim(),
   responseFormat: String(process.env.CAISHEN_IMAGE_RESPONSE_FORMAT || 'url').trim(),
   requestTimeoutSeconds: Number(process.env.CAISHEN_API_TIMEOUT_SECONDS || 300)
 });
-let runtimeApiSettings = { version: 2, ...ENV_API };
+let runtimeApiSettings = { version: 4, ...ENV_API, activeRelayId: '', relays: [] };
 const FILE_TOKEN_SECRET = String(process.env.CAISHEN_FILE_TOKEN_SECRET || ENV_API.imageKey || 'local-development-only');
 
 function currentApiSettings() {
   return runtimeApiSettings;
 }
 
-function requireApiConfig(channel = 'image') {
+function requireApiConfig() {
   const settings = currentApiSettings();
   if (!settings.baseUrl) throw new Error('请先在系统设置中配置 API 地址');
-  if (channel === 'analysis' && !settings.analysisKey) throw new Error('请先配置文字分析 API 密钥');
-  if (channel === 'image' && !settings.imageKey) throw new Error('请先配置 Image2 生图 API 密钥');
+  if (!settings.imageKey) throw new Error('请先配置 Image2 生图 API 密钥');
   return settings;
 }
 
@@ -247,23 +234,6 @@ const IMAGE_API_BACKOFF_MAX_MS = Math.max(IMAGE_API_BACKOFF_BASE_MS, Number(
 ));
 const IMAGE_API_TIMEOUT_MS = Math.max(1000, Number(process.env.CAISHEN_IMAGE_API_TIMEOUT_MS || 300000));
 const IMAGE_URL_TIMEOUT_MS = Math.max(1000, Number(process.env.CAISHEN_IMAGE_URL_TIMEOUT_MS || 300000));
-const ANALYSIS_RETRY_BASE_MS = Math.max(1, Number(process.env.CAISHEN_ANALYSIS_RETRY_BASE_MS || 600));
-const DEFAULT_ANALYSIS_API_CONCURRENCY = Math.min(12, Math.max(1, Number(
-  process.env.CAISHEN_ANALYSIS_API_MAX_CONCURRENCY || 4
-)));
-const DEFAULT_ANALYSIS_API_INITIAL_CONCURRENCY = Math.min(DEFAULT_ANALYSIS_API_CONCURRENCY, Math.max(1, Number(
-  process.env.CAISHEN_ANALYSIS_API_INITIAL_CONCURRENCY || 2
-)));
-const DEFAULT_ANALYSIS_API_START_INTERVAL_MS = Math.max(0, Number(
-  process.env.CAISHEN_ANALYSIS_API_START_INTERVAL_MS || 500
-));
-const ANALYSIS_API_MAX_ATTEMPTS = Math.max(1, Number(process.env.CAISHEN_ANALYSIS_API_MAX_ATTEMPTS || 5));
-const ANALYSIS_API_BACKOFF_BASE_MS = Math.max(250, Number(
-  process.env.CAISHEN_ANALYSIS_API_BACKOFF_BASE_MS || 1500
-));
-const ANALYSIS_API_BACKOFF_MAX_MS = Math.max(ANALYSIS_API_BACKOFF_BASE_MS, Number(
-  process.env.CAISHEN_ANALYSIS_API_BACKOFF_MAX_MS || 60000
-));
 const imageApiScheduler = new AdaptiveImageScheduler({
   initialConcurrency: DEFAULT_IMAGE_API_INITIAL_CONCURRENCY,
   maxConcurrency: DEFAULT_IMAGE_API_CONCURRENCY,
@@ -273,17 +243,6 @@ const imageApiScheduler = new AdaptiveImageScheduler({
   maxAttempts: IMAGE_API_MAX_ATTEMPTS,
   baseBackoffMs: IMAGE_API_BACKOFF_BASE_MS,
   maxBackoffMs: IMAGE_API_BACKOFF_MAX_MS
-});
-// Text analysis has a lower, independent ceiling: image-package concurrency can be far too high for vision LLM requests.
-const analysisApiScheduler = new AdaptiveImageScheduler({
-  initialConcurrency: DEFAULT_ANALYSIS_API_INITIAL_CONCURRENCY,
-  maxConcurrency: DEFAULT_ANALYSIS_API_CONCURRENCY,
-  minStartIntervalMs: DEFAULT_ANALYSIS_API_START_INTERVAL_MS,
-  healthyWindowSize: 8,
-  healthySuccessRatio: 0.9,
-  maxAttempts: ANALYSIS_API_MAX_ATTEMPTS,
-  baseBackoffMs: ANALYSIS_API_BACKOFF_BASE_MS,
-  maxBackoffMs: ANALYSIS_API_BACKOFF_MAX_MS
 });
 const imageReferenceCache = createImageReferenceCache({
   cacheRoot: path.join(SYSTEM_STATE_ROOT, 'image-reference-cache'),
@@ -332,10 +291,6 @@ function promptSettingsFile() {
 
 function apiSettingsFile() {
   return path.join(SYSTEM_STATE_ROOT, 'api-settings.json');
-}
-
-function modelPackageSelectionFile() {
-  return path.join(workspaceUserDataRoot(currentModelPackageWorkspaceId()), 'model-package-selection.json');
 }
 
 function legacyAdminSettingFile(name) {
@@ -417,32 +372,17 @@ function apiConcurrencyLimit(total = Infinity) {
 }
 
 
-function imageSchedulerSettingsForRequest(pack, options = {}, settings = currentApiSettings()) {
-  if (options.bulkGeneration === true) {
-    const bulk = normalizeImageConcurrencySettings(settings);
-    return {
-      initialConcurrency: bulk.imageMaxConcurrency,
-      maxConcurrency: bulk.imageMaxConcurrency,
-      minStartIntervalMs: bulk.imageStartIntervalMs
-    };
-  }
-  const maxConcurrency = Math.max(1, Number(pack?.maxConcurrency) || DEFAULT_IMAGE_API_CONCURRENCY);
+function imageSchedulerSettingsForRequest(_relay = null, _options = {}, settings = currentApiSettings()) {
+  const normalized = normalizeImageConcurrencySettings(settings);
   return {
-    initialConcurrency: maxConcurrency,
-    maxConcurrency,
-    minStartIntervalMs: Math.max(0, Number(pack?.startIntervalMs) || 0)
+    initialConcurrency: normalized.imageMaxConcurrency,
+    maxConcurrency: normalized.imageMaxConcurrency,
+    minStartIntervalMs: normalized.imageStartIntervalMs
   };
 }
 
 function publicApiConcurrencySettings(value = currentApiSettings()) {
   return normalizeImageConcurrencySettings(value);
-}
-
-function normalizeAnalysisWireApi(value, fallback = 'chat_completions') {
-  const text = String(value || fallback || 'chat_completions').trim().toLowerCase().replaceAll('-', '_');
-  if (text === 'responses') return 'responses';
-  if (text === 'chat' || text === 'chat_completions') return 'chat_completions';
-  throw new Error('文字接口协议只支持 Responses API 或 Chat Completions');
 }
 
 function apiBaseRoot(baseUrl) {
@@ -454,7 +394,7 @@ function apiEndpoint(baseUrl, pathName) {
   const pathText = String(pathName || '').startsWith('/') ? String(pathName || '') : `/${pathName || ''}`;
   if (/change2pro\.com/i.test(base)) {
     const root = apiBaseRoot(base);
-    if (pathText === '/models' || pathText === '/chat/completions' || pathText === '/usage') return `${root}/v1${pathText}`;
+    if (pathText === '/models' || pathText === '/usage') return `${root}/v1${pathText}`;
     return `${root}${pathText}`;
   }
   return `${base}${pathText}`;
@@ -467,344 +407,180 @@ function maskedApiKey(value) {
   return `${key.slice(0, 4)}••••••${key.slice(-4)}`;
 }
 
-function normalizeModelPackageId(value, fallback) {
+function normalizeRelayId(value, fallback) {
   const text = String(value || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
   return (text || fallback).slice(0, 80);
 }
 
-function normalizeModelPackageText(value, fallback = '', maxLength = 500) {
+function normalizeRelayText(value, fallback = '', maxLength = 500) {
   return String(value || fallback || '').normalize('NFKC').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, maxLength);
 }
 
-function normalizeModelPackagePrompt(value, currentValue, fallback = '', maxLength = 10000) {
-  if (value !== undefined) return String(value || '').normalize('NFKC').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, maxLength);
-  if (currentValue !== undefined) return String(currentValue || '').normalize('NFKC').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, maxLength);
-  return String(fallback || '').normalize('NFKC').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, maxLength);
+function normalizeRelayPath(value, fallback) {
+  const text = String(value || fallback || '').trim();
+  if (!text) return '';
+  if (text.length > 200 || /[\r\n?#]/.test(text)) throw new Error('中转站接口路径格式不正确');
+  return text.startsWith('/') ? text : `/${text}`;
 }
 
-function normalizeModelPackageInteger(value, fallback, min, max) {
-  const number = Number(value ?? fallback);
-  const safe = Number.isFinite(number) ? number : fallback;
-  return Math.min(max, Math.max(min, Math.trunc(safe)));
-}
-
-function normalizeModelPackageMinor(value, fallback = 0) {
+function normalizeRelayMinor(value, fallback = 0) {
   const number = Number(value ?? fallback);
   if (!Number.isFinite(number)) return 0;
   return Math.min(1_000_000_000_000, Math.max(0, Math.round(number)));
 }
 
-function normalizeModelPackageChoice(value, choices, fallback) {
-  const text = String(value || fallback || '').trim();
-  return choices.includes(text) ? text : fallback;
-}
-
-const DEFAULT_PACKAGE_PROMPTS = Object.freeze({
-  basicAnalysis: [
-    '套餐策略：低价基础能力。只做必要判断，不做复杂商业增强。',
-    '分析时只保留能决定是否生成、是否复制、是否人工确认的关键信息。',
-    '遇到可执行任务时保持保守，不扩展高级场景、不补充复杂卖点。'
-  ].join('\n'),
-  basicImage: [
-    '套餐策略：低价基础出图，效果目标约为旗舰版的 30%。',
-    '只完成核心换图/迁移任务，不做高级商业质感、复杂光影、材质强化、精修氛围和额外细节补全。',
-    '画面保持可用、干净、结构正确；不要追求旗舰版级别的高级棚拍、电商大片、精细反光和复杂后期。',
-    '优先快速稳定完成，不进行额外创意发挥。'
-  ].join('\n'),
-  standardAnalysis: [
-    '套餐策略：标准低价能力。只做基础理解，不做旗舰版深度优化。',
-    '分析时输出必要 JSON 字段，少做延展判断和商业包装。'
-  ].join('\n'),
-  standardImage: [
-    '套餐策略：标准版，效果目标约为旗舰版的 30%。',
-    '只做基础画面整理和必要生成，不做高级商业海报质感、复杂光影、材质精修、精细构图增强和额外卖点补全。',
-    '保持主体结构、印花关系和页面可用性，整体按普通电商可用图处理。'
-  ].join('\n'),
-  flagshipAnalysis: '',
-  flagshipImage: ''
-});
-
-function defaultPackagePrompt(kind, quality) {
-  const tier = ['basic', 'standard', 'flagship'].includes(String(quality)) ? String(quality) : 'standard';
-  if (kind === 'analysis') return DEFAULT_PACKAGE_PROMPTS[`${tier}Analysis`] || '';
-  return DEFAULT_PACKAGE_PROMPTS[`${tier}Image`] || '';
-}
-
-function normalizeModelPackagesLegacy(value, currentSettings = {}) {
-  const source = Array.isArray(value) ? value : Array.isArray(currentSettings.modelPackages) ? currentSettings.modelPackages : [];
-  if (!source.length && currentSettings.baseUrl && currentSettings.imageModel) {
-    return [{
-      id: 'flagship',
-      name: '默认模型',
-      description: '沿用系统原本的生图模型',
-      enabled: true,
-      default: true,
-      recommended: true,
-      apiBaseUrl: normalizeApiBaseUrl(currentSettings.baseUrl),
-      apiKey: String(currentSettings.imageKey || '').trim(),
-      modelId: normalizeModelName(currentSettings.imageModel, ENV_API.imageModel),
-      analysisApiBaseUrl: normalizeApiBaseUrl(currentSettings.baseUrl),
-      analysisApiKey: String(currentSettings.analysisKey || currentSettings.imageKey || '').trim(),
-      analysisModel: normalizeOptionalModelName(currentSettings.analysisModel || ENV_API.analysisModel),
-      analysisWireApi: normalizeAnalysisWireApi(currentSettings.analysisWireApi, ENV_API.analysisWireApi),
-      maxConcurrency: normalizeModelPackageInteger(currentSettings.imageMaxConcurrency, DEFAULT_IMAGE_API_CONCURRENCY, 1, 50),
-      startIntervalMs: normalizeModelPackageInteger(currentSettings.imageStartIntervalMs, DEFAULT_IMAGE_API_START_INTERVAL_MS, 0, 60000),
-      promptQuality: 'flagship',
-      promptMode: 'full',
-      userPromptPolicy: 'full',
-      hiddenPrompt: '',
-      analysisPrompt: '',
-      imagePrompt: '',
-      imagePriceMinor: 300000,
-      analysisPriceMinor: 0,
-      enableMasterReference: false,
-      queuePriority: 10
-    }];
-  }
-  const currentById = new Map((Array.isArray(currentSettings.modelPackages) ? currentSettings.modelPackages : []).map(item => [String(item.id), item]));
-  const packages = source.slice(0, 20).map((item, index) => {
-    const fallbackId = `model-${index + 1}`;
-    const id = normalizeModelPackageId(item?.id, fallbackId);
-    const current = currentById.get(id) || {};
-    const apiBaseUrl = normalizeApiBaseUrl(item?.apiBaseUrl || current.apiBaseUrl || currentSettings.baseUrl || '');
-    const apiKey = String(item?.apiKey || item?.packageApiKey || '').trim() || current.apiKey || '';
-    const promptQuality = normalizeModelPackageChoice(item?.promptQuality, ['basic', 'standard', 'flagship', 'custom'], current.promptQuality || 'standard');
-    const analysisApiBaseUrl = normalizeApiBaseUrl(item?.analysisApiBaseUrl || current.analysisApiBaseUrl || currentSettings.baseUrl || apiBaseUrl || '');
-    const analysisApiKey = String(item?.analysisApiKey || item?.packageAnalysisApiKey || '').trim() || current.analysisApiKey || '';
-    return {
-      id,
-      name: normalizeModelPackageText(item?.name, `模型套餐 ${index + 1}`, 48),
-      description: normalizeModelPackageText(item?.description, '', 160),
-      enabled: item?.enabled !== false,
-      default: item?.default === true,
-      recommended: item?.recommended === true,
-      apiBaseUrl,
-      apiKey,
-      modelId: normalizeModelName(item?.modelId || item?.imageModel || current.modelId || currentSettings.imageModel, currentSettings.imageModel || ENV_API.imageModel),
-      analysisApiBaseUrl,
-      analysisApiKey,
-      analysisModel: normalizeOptionalModelName(item?.analysisModel || current.analysisModel || currentSettings.analysisModel || ENV_API.analysisModel),
-      analysisWireApi: normalizeAnalysisWireApi(item?.analysisWireApi || current.analysisWireApi || currentSettings.analysisWireApi, currentSettings.analysisWireApi || ENV_API.analysisWireApi),
-      maxConcurrency: normalizeModelPackageInteger(item?.maxConcurrency, current.maxConcurrency || 1, 1, 50),
-      startIntervalMs: normalizeModelPackageInteger(item?.startIntervalMs, current.startIntervalMs || 500, 0, 60000),
-      promptQuality,
-      promptMode: normalizeModelPackageChoice(item?.promptMode, ['internal', 'hybrid', 'full'], current.promptMode || 'hybrid'),
-      userPromptPolicy: normalizeModelPackageChoice(item?.userPromptPolicy, ['ignore', 'partial', 'full'], current.userPromptPolicy || 'partial'),
-      hiddenPrompt: normalizeModelPackageText(item?.hiddenPrompt, current.hiddenPrompt || '', 10000),
-      analysisPrompt: normalizeModelPackagePrompt(item?.analysisPrompt, current.analysisPrompt, defaultPackagePrompt('analysis', promptQuality), 10000),
-      imagePrompt: normalizeModelPackagePrompt(item?.imagePrompt ?? item?.hiddenPrompt, current.imagePrompt, defaultPackagePrompt('image', promptQuality), 10000),
-      imagePriceMinor: normalizeModelPackageMinor(item?.imagePriceMinor, current.imagePriceMinor || 0),
-      analysisPriceMinor: normalizeModelPackageMinor(item?.analysisPriceMinor, current.analysisPriceMinor || 0),
-      enableMasterReference: item?.enableMasterReference !== undefined
-        ? item.enableMasterReference === true
-        : current.enableMasterReference === true,
-      queuePriority: normalizeModelPackageInteger(item?.queuePriority, current.queuePriority || 5, 0, 100)
-    };
-  });
-  const seen = new Set();
-  const unique = packages.filter(item => {
-    if (seen.has(item.id)) return false;
-    seen.add(item.id);
-    return true;
-  });
-  const fallbackDefaultIndex = unique.findIndex(item => item.enabled);
-  const explicitDefaultIndex = unique.findIndex(item => item.enabled && item.default);
-  const defaultIndex = explicitDefaultIndex >= 0 ? explicitDefaultIndex : fallbackDefaultIndex;
-  unique.forEach((item, index) => { item.default = index === defaultIndex; });
-  return unique;
-}
-
-const FIXED_MODEL_PACKAGE_PRESETS = Object.freeze([
-  {
-    id: 'flagship',
-    name: '旗舰版',
-    description: '主推套餐，使用全局旗舰配置',
-    enabled: true,
-    default: true,
-    recommended: true,
-    maxConcurrency: 30,
-    startIntervalMs: 200,
-    promptQuality: 'flagship',
-    promptMode: 'full',
-    userPromptPolicy: 'full',
-    imagePriceMinMinor: 300000,
-    imagePriceMaxMinor: 300000,
-    analysisPriceMinMinor: 0,
-    analysisPriceMaxMinor: 0,
-    enableMasterReference: false,
-    queuePriority: 10
-  },
-  {
-    id: 'fast',
-    name: '快速版',
-    description: '低价留客，效果质量与标准版一致',
-    enabled: true,
-    default: false,
-    recommended: false,
-    maxConcurrency: 2,
-    startIntervalMs: 1200,
-    promptQuality: 'basic',
-    promptMode: 'internal',
-    userPromptPolicy: 'ignore',
-    imagePriceMinMinor: 50000,
-    imagePriceMaxMinor: 50000,
-    analysisPriceMinMinor: 50000,
-    analysisPriceMaxMinor: 50000,
-    queuePriority: 2
-  },
-  {
-    id: 'standard',
-    name: '标准版',
-    description: '效果质量约为旗舰版30%',
-    enabled: true,
-    default: false,
-    recommended: false,
-    maxConcurrency: 3,
-    startIntervalMs: 1000,
-    promptQuality: 'standard',
-    promptMode: 'hybrid',
-    userPromptPolicy: 'partial',
-    imagePriceMinMinor: 70000,
-    imagePriceMaxMinor: 70000,
-    analysisPriceMinMinor: 70000,
-    analysisPriceMaxMinor: 70000,
-    queuePriority: 5
-  }
-]);
-
-function packageMinorRange(item, current, preset, prefix) {
+function relayMinorRange(item, current, prefix) {
   const fixedKey = `${prefix}PriceMinor`;
   const minKey = `${prefix}PriceMinMinor`;
   const maxKey = `${prefix}PriceMaxMinor`;
-  const min = normalizeModelPackageMinor(item?.[minKey] ?? item?.[fixedKey] ?? current?.[minKey] ?? current?.[fixedKey] ?? preset[minKey] ?? 0);
-  const max = normalizeModelPackageMinor(item?.[maxKey] ?? item?.[fixedKey] ?? current?.[maxKey] ?? current?.[fixedKey] ?? preset[maxKey] ?? min);
-  return { min, max: Math.max(min, max) };
+  const candidates = [item?.[minKey], item?.[maxKey], item?.[fixedKey], current?.[minKey], current?.[maxKey], current?.[fixedKey]];
+  if (!candidates.some(value => value !== undefined && value !== null && value !== '')) {
+    return { min: null, max: null };
+  }
+  const min = normalizeRelayMinor(item?.[minKey] ?? item?.[fixedKey] ?? current?.[minKey] ?? current?.[fixedKey] ?? 0);
+  const max = normalizeRelayMinor(item?.[maxKey] ?? item?.[fixedKey] ?? current?.[maxKey] ?? current?.[fixedKey] ?? min);
+  if (max < min) throw new Error('中转站每张最高扣费不能低于最低扣费');
+  return { min, max };
 }
 
-function normalizeModelPackages(value, currentSettings = {}) {
-  const payloadById = new Map((Array.isArray(value) ? value : []).map(item => [normalizeModelPackageId(item?.id, ''), item]).filter(([id]) => id));
-  const currentById = new Map((Array.isArray(currentSettings.modelPackages) ? currentSettings.modelPackages : []).map(item => [normalizeModelPackageId(item?.id, ''), item]).filter(([id]) => id));
-  return FIXED_MODEL_PACKAGE_PRESETS.map(preset => {
-    const item = payloadById.get(preset.id) || {};
-    const current = currentById.get(preset.id) || {};
-    const promptQuality = normalizeModelPackageChoice(item?.promptQuality, ['basic', 'standard', 'flagship', 'custom'], current.promptQuality || preset.promptQuality);
-    const apiBaseUrl = normalizeApiBaseUrl(item?.apiBaseUrl || current.apiBaseUrl || currentSettings.baseUrl || '');
-    const analysisApiBaseUrl = normalizeApiBaseUrl(item?.analysisApiBaseUrl || current.analysisApiBaseUrl || currentSettings.baseUrl || apiBaseUrl || '');
-    const imageRange = packageMinorRange(item, current, preset, 'image');
-    const analysisRange = packageMinorRange(item, current, preset, 'analysis');
-    return {
-      id: preset.id,
-      name: normalizeModelPackageText(item?.name, current.name || preset.name, 48),
-      description: normalizeModelPackageText(item?.description, current.description || preset.description, 160),
-      enabled: item?.enabled !== undefined ? item.enabled !== false : current.enabled !== undefined ? current.enabled !== false : preset.enabled,
-      default: preset.default,
-      recommended: item?.recommended !== undefined ? item.recommended === true : current.recommended !== undefined ? current.recommended === true : preset.recommended,
-      apiBaseUrl,
-      apiKey: String(item?.apiKey || item?.packageApiKey || '').trim() || current.apiKey || '',
-      modelId: normalizeModelName(item?.modelId || item?.imageModel || current.modelId || currentSettings.imageModel, currentSettings.imageModel || ENV_API.imageModel),
-      analysisApiBaseUrl,
-      analysisApiKey: String(item?.analysisApiKey || item?.packageAnalysisApiKey || '').trim() || current.analysisApiKey || '',
-      analysisModel: normalizeOptionalModelName(item?.analysisModel || current.analysisModel || currentSettings.analysisModel || ENV_API.analysisModel),
-      analysisWireApi: normalizeAnalysisWireApi(item?.analysisWireApi || current.analysisWireApi || currentSettings.analysisWireApi, currentSettings.analysisWireApi || ENV_API.analysisWireApi),
-      maxConcurrency: normalizeModelPackageInteger(item?.maxConcurrency, current.maxConcurrency || preset.maxConcurrency, 1, 50),
-      startIntervalMs: normalizeModelPackageInteger(item?.startIntervalMs, current.startIntervalMs || preset.startIntervalMs, 0, 60000),
-      promptQuality,
-      promptMode: normalizeModelPackageChoice(item?.promptMode, ['internal', 'hybrid', 'full'], current.promptMode || preset.promptMode),
-      userPromptPolicy: normalizeModelPackageChoice(item?.userPromptPolicy, ['ignore', 'partial', 'full'], current.userPromptPolicy || preset.userPromptPolicy),
-      hiddenPrompt: normalizeModelPackageText(item?.hiddenPrompt, current.hiddenPrompt || '', 10000),
-      analysisPrompt: normalizeModelPackagePrompt(item?.analysisPrompt, current.analysisPrompt, defaultPackagePrompt('analysis', promptQuality), 10000),
-      imagePrompt: normalizeModelPackagePrompt(item?.imagePrompt ?? item?.hiddenPrompt, current.imagePrompt, defaultPackagePrompt('image', promptQuality), 10000),
-      imagePriceMinMinor: imageRange.min,
-      imagePriceMaxMinor: imageRange.max,
-      imagePriceMinor: imageRange.max,
-      analysisPriceMinMinor: analysisRange.min,
-      analysisPriceMaxMinor: analysisRange.max,
-      analysisPriceMinor: analysisRange.max,
-      enableMasterReference: preset.id === 'flagship'
-        ? item?.enableMasterReference !== undefined
-          ? item.enableMasterReference === true
-          : current.enableMasterReference !== undefined
-            ? current.enableMasterReference === true
-            : preset.enableMasterReference === true
-        : true,
-      queuePriority: normalizeModelPackageInteger(item?.queuePriority, current.queuePriority || preset.queuePriority, 0, 100)
-    };
-  });
-}
-
-function publicModelPackageForSuperAdmin(item) {
-  const { apiKey, analysisApiKey, ...rest } = item;
+function legacyRelayFromSettings(saved = {}) {
+  const packages = Array.isArray(saved.modelPackages) ? saved.modelPackages : [];
+  const legacyPackage = packages.find(item => item?.id === 'flagship') || packages.find(item => item?.enabled !== false) || packages[0] || {};
+  const baseUrl = saved.baseUrl || legacyPackage.apiBaseUrl || ENV_API.baseUrl || '';
+  const imageKey = saved.imageKey || saved.key || legacyPackage.apiKey || ENV_API.imageKey || ENV_API.key || '';
+  if (!baseUrl && !imageKey) return null;
   return {
-    ...rest,
-    apiKeyConfigured: Boolean(apiKey),
-    apiKeyMasked: maskedApiKey(apiKey),
-    analysisApiKeyConfigured: Boolean(analysisApiKey),
-    analysisApiKeyMasked: maskedApiKey(analysisApiKey)
+    id: 'default-relay',
+    name: '默认中转站',
+    baseUrl,
+    imageKey,
+    imageModel: saved.imageModel || legacyPackage.modelId || ENV_API.imageModel,
+    imagePriceMinMinor: legacyPackage.imagePriceMinMinor ?? legacyPackage.imagePriceMinor,
+    imagePriceMaxMinor: legacyPackage.imagePriceMaxMinor ?? legacyPackage.imagePriceMinor
   };
 }
 
-function publicModelPackageForUser(item) {
+function normalizeRelays(value, currentSettings = {}) {
+  const source = Array.isArray(value) ? value : [];
+  const currentById = new Map((Array.isArray(currentSettings.relays) ? currentSettings.relays : [])
+    .map(item => [normalizeRelayId(item?.id, ''), item]).filter(([id]) => id));
+  const seen = new Set();
+  return source.slice(0, 20).flatMap((item, index) => {
+    const id = normalizeRelayId(item?.id, `relay-${index + 1}`);
+    if (seen.has(id)) throw new Error(`中转站编号重复：${id}`);
+    seen.add(id);
+    const current = currentById.get(id) || {};
+    const imageKeyInput = String(item?.imageApiKey ?? item?.imageKey ?? item?.apiKey ?? '').trim();
+    const baseUrl = normalizeApiBaseUrl(item?.baseUrl || current.baseUrl || '');
+    const imageRange = relayMinorRange(item, current, 'image');
+    return [{
+      id,
+      name: normalizeRelayText(item?.name, current.name || `中转站 ${index + 1}`, 48),
+      description: normalizeRelayText(item?.description, current.description || '', 160),
+      enabled: item?.enabled !== undefined ? item.enabled !== false : current.enabled !== false,
+      baseUrl,
+      imageKey: item?.clearImageKey === true ? '' : imageKeyInput || current.imageKey || '',
+      imageModel: normalizeOptionalModelName(item?.imageModel ?? current.imageModel ?? ''),
+      healthPath: normalizeRelayPath(item?.healthPath || current.healthPath, '/models'),
+      modelsPath: normalizeRelayPath(item?.modelsPath || current.modelsPath, '/models'),
+      imagePriceMinMinor: imageRange.min,
+      imagePriceMaxMinor: imageRange.max
+    }];
+  });
+}
+
+function publicRelay(item) {
+  const { imageKey, ...rest } = item;
+  return {
+    ...rest,
+    imageKeyConfigured: Boolean(imageKey),
+    imageKeyMasked: maskedApiKey(imageKey)
+  };
+}
+
+function publicRelayChoice(item) {
   return {
     id: item.id,
     name: item.name,
     description: item.description,
-    enabled: item.enabled,
-    default: item.default,
-    recommended: item.recommended
+    enabled: item.enabled !== false,
+    imagePriceMinMinor: item.imagePriceMinMinor,
+    imagePriceMaxMinor: item.imagePriceMaxMinor
+  };
+}
+
+function activeRelayFromSettings(settings = {}) {
+  const relays = Array.isArray(settings.relays) ? settings.relays : [];
+  return relays.find(item => item.enabled !== false && item.id === settings.activeRelayId)
+    || relays.find(item => item.enabled !== false)
+    || null;
+}
+
+function withActiveRelay(settings = {}) {
+  const activeRelay = activeRelayFromSettings(settings);
+  return {
+    ...settings,
+    activeRelayId: activeRelay?.id || '',
+    activeRelay,
+    baseUrl: activeRelay?.baseUrl || '',
+    imageKey: activeRelay?.imageKey || '',
+    imageModel: activeRelay?.imageModel || ''
+  };
+}
+
+function storedApiSettings(value = {}) {
+  return {
+    version: 4,
+    serviceUrl: String(value.serviceUrl || ''),
+    activeRelayId: String(value.activeRelayId || ''),
+    relays: Array.isArray(value.relays) ? value.relays : [],
+    responseFormat: normalizeResponseFormat(value.responseFormat, ENV_API.responseFormat),
+    requestTimeoutSeconds: normalizeRequestTimeoutSeconds(value.requestTimeoutSeconds, ENV_API.requestTimeoutSeconds),
+    allowAdminPromptView: value.allowAdminPromptView === true,
+    ...normalizeImageConcurrencySettings(value)
   };
 }
 
 async function readPrivateApiSettings() {
   const saved = await readGlobalSettingWithLegacy(apiSettingsFile(), 'api-settings.json');
-  const legacyImageKey = String(saved.key || ENV_API.imageKey || ENV_API.key || '').trim();
   const concurrency = normalizeImageConcurrencySettings(saved);
-  const modelPackageBase = {
-    baseUrl: normalizeApiBaseUrl(saved.baseUrl || ENV_API.baseUrl || ''),
-    imageModel: normalizeModelName(saved.imageModel, ENV_API.imageModel),
-    modelPackages: Array.isArray(saved.modelPackages) ? saved.modelPackages : []
-  };
-  const configuredAnalysisModel = String(saved.analysisModel || '').trim();
-  const next = {
-    version: 2,
+  // An explicitly saved empty relay list is meaningful: it means the
+  // superadministrator removed every relay. Only migrate the legacy
+  // single-gateway fields when the saved document has no relay list at all.
+  const relaySource = Array.isArray(saved.relays)
+    ? saved.relays
+    : [legacyRelayFromSettings(saved)].filter(Boolean);
+  const relays = normalizeRelays(relaySource, { relays: relaySource });
+  const requestedActiveRelayId = normalizeRelayId(saved.activeRelayId, '');
+  const next = withActiveRelay({
+    version: 4,
     serviceUrl: String(saved.serviceUrl || ENV_API.serviceUrl || '').trim(),
-    baseUrl: modelPackageBase.baseUrl,
-    imageKey: String(saved.imageKey || legacyImageKey).trim(),
-    analysisKey: String(saved.analysisKey || ENV_API.analysisKey || '').trim(),
-    imageModel: modelPackageBase.imageModel,
-    analysisModel: configuredAnalysisModel ? normalizeModelName(configuredAnalysisModel, '') : '',
-    analysisWireApi: normalizeAnalysisWireApi(saved.analysisWireApi, ENV_API.analysisWireApi),
+    activeRelayId: relays.some(item => item.id === requestedActiveRelayId) ? requestedActiveRelayId : relays[0]?.id || '',
+    relays,
     responseFormat: normalizeResponseFormat(saved.responseFormat, ENV_API.responseFormat),
     requestTimeoutSeconds: normalizeRequestTimeoutSeconds(saved.requestTimeoutSeconds, ENV_API.requestTimeoutSeconds),
     allowAdminPromptView: saved.allowAdminPromptView === true,
-    ...concurrency,
-    modelPackages: normalizeModelPackages(saved.modelPackages, modelPackageBase)
-  };
+    ...concurrency
+  });
   runtimeApiSettings = next;
   applyImageSchedulerSettings(next);
   return next;
 }
 
 function publicApiSettings(value = currentApiSettings()) {
-  const imageConfigured = Boolean(value.baseUrl && value.imageKey);
-  const analysisConfigured = Boolean(value.baseUrl && value.analysisKey);
+  const activeRelay = activeRelayFromSettings(value);
+  const imageConfigured = Boolean(activeRelay?.baseUrl && activeRelay?.imageKey && activeRelay?.imageModel);
   return {
-    version: 2,
-    baseUrl: String(value.baseUrl || ''),
-    imageModel: String(value.imageModel || ENV_API.imageModel),
-    analysisModel: String(value.analysisModel || ENV_API.analysisModel),
-    analysisWireApi: normalizeAnalysisWireApi(value.analysisWireApi, ENV_API.analysisWireApi),
+    version: 4,
+    activeRelayId: activeRelay?.id || '',
+    activeRelayName: activeRelay?.name || '',
+    relays: (value.relays || []).map(publicRelay),
     responseFormat: normalizeResponseFormat(value.responseFormat, ENV_API.responseFormat),
     requestTimeoutSeconds: normalizeRequestTimeoutSeconds(value.requestTimeoutSeconds, ENV_API.requestTimeoutSeconds),
     allowAdminPromptView: value.allowAdminPromptView === true,
     ...normalizeImageConcurrencySettings(value),
-    imageKeyConfigured: Boolean(value.imageKey),
-    imageKeyMasked: maskedApiKey(value.imageKey),
-    analysisKeyConfigured: Boolean(value.analysisKey),
-    analysisKeyMasked: maskedApiKey(value.analysisKey),
     imageConfigured,
-    analysisConfigured,
-    configured: imageConfigured && analysisConfigured,
-    modelPackages: normalizeModelPackages(value.modelPackages, value).map(publicModelPackageForSuperAdmin)
+    configured: imageConfigured
   };
 }
 
@@ -816,32 +592,43 @@ async function saveApiSettings(payload = {}) {
   const operation = apiSettingsWriteChain.then(async () => {
     const current = await readPrivateApiSettings();
     const concurrency = normalizeImageConcurrencySettings(payload, current);
-    const nextAnalysisModel = normalizeModelName(payload.analysisModel, current.analysisModel);
-    const nextImageModel = normalizeModelName(payload.imageModel, current.imageModel);
-    const next = {
-      version: 2,
+    // Accept the previous single-gateway payload during rolling upgrades, but
+    // always persist it as the new relay-based format.
+    const relayPayload = Array.isArray(payload.relays)
+      ? payload.relays
+      : [{
+          ...(activeRelayFromSettings(current) || {}),
+          id: current.activeRelayId || 'default-relay',
+          name: activeRelayFromSettings(current)?.name || '默认中转站',
+          baseUrl: payload.baseUrl ?? current.baseUrl,
+          imageApiKey: payload.imageApiKey ?? payload.apiKey ?? '',
+          imageModel: payload.imageModel ?? current.imageModel
+        }];
+    const relays = normalizeRelays(relayPayload, current);
+    const nextRelayIds = new Set(relays.map(item => item.id));
+    for (const removed of current.relays.filter(item => !nextRelayIds.has(item.id))) {
+      const usage = await billing.getRelayUsageState(removed.id);
+      if (usage.inUse) throw new Error(`中转站“${removed.name}”已有独立余额或流水，不能删除；请改为停用`);
+    }
+    const requestedActiveRelayId = normalizeRelayId(payload.activeRelayId, current.activeRelayId);
+    const activeRelayId = relays.some(item => item.enabled !== false && item.id === requestedActiveRelayId)
+      ? requestedActiveRelayId
+      : relays.find(item => item.enabled !== false)?.id || '';
+    const stored = {
+      version: 4,
       serviceUrl: current.serviceUrl,
-      baseUrl: normalizeApiBaseUrl(payload.baseUrl),
-      imageKey: String(payload.imageApiKey || payload.apiKey || '').trim() || current.imageKey,
-      analysisKey: String(payload.analysisApiKey || '').trim() || current.analysisKey,
-      imageModel: nextImageModel,
-      analysisModel: nextAnalysisModel,
-      analysisWireApi: normalizeAnalysisWireApi(payload.analysisWireApi, current.analysisWireApi),
+      activeRelayId,
+      relays,
       responseFormat: normalizeResponseFormat(payload.responseFormat, current.responseFormat),
       requestTimeoutSeconds: normalizeRequestTimeoutSeconds(payload.requestTimeoutSeconds, current.requestTimeoutSeconds),
       allowAdminPromptView: payload.allowAdminPromptView === true,
-      ...concurrency,
-      modelPackages: normalizeModelPackages(payload.modelPackages, {
-        ...current,
-        baseUrl: normalizeApiBaseUrl(payload.baseUrl),
-        imageModel: nextImageModel,
-        analysisModel: nextAnalysisModel
-      })
+      ...concurrency
     };
-    if (!next.baseUrl) throw new Error('请填写 API 地址');
-    if (!next.imageKey && !next.analysisKey) throw new Error('请至少填写一个 API 密钥');
+    const next = withActiveRelay(stored);
+    if (activeRelayId && !next.baseUrl) throw new Error('请填写当前中转站的 API 地址');
+    if (activeRelayId && !next.imageKey) throw new Error('请填写当前中转站的图片 API 密钥');
     await fsp.mkdir(path.dirname(apiSettingsFile()), { recursive: true });
-    await fsp.writeFile(apiSettingsFile(), JSON.stringify(next, null, 2), { encoding: 'utf8', mode: 0o600 });
+    await fsp.writeFile(apiSettingsFile(), JSON.stringify(stored, null, 2), { encoding: 'utf8', mode: 0o600 });
     runtimeApiSettings = next;
     applyImageSchedulerSettings(next);
     return publicApiSettings(next);
@@ -850,105 +637,59 @@ async function saveApiSettings(payload = {}) {
   return operation;
 }
 
-function defaultModelPackageId(packages) {
-  return packages.find(item => item.enabled && item.default)?.id || packages.find(item => item.enabled)?.id || '';
-}
-
-async function readSelectedModelPackageId(packages) {
-  const fallback = defaultModelPackageId(packages);
-  try {
-    const saved = JSON.parse(await fsp.readFile(modelPackageSelectionFile(), 'utf8'));
-    const selected = String(saved?.selectedModelPackageId || '').trim();
-    if (packages.some(item => item.enabled && item.id === selected)) return selected;
-  } catch {}
-  return fallback;
-}
-
-async function loadModelPackageSettings(actor = {}) {
+async function loadRelayChoices(includeDisabled = false) {
   const settings = await readPrivateApiSettings();
-  const packages = normalizeModelPackages(settings.modelPackages, settings);
-  const selectedModelPackageId = await readSelectedModelPackageId(packages);
-  const isSuperAdminActor = actor?.role === 'superadmin';
   return {
-    selectedModelPackageId,
+    activeRelayId: settings.activeRelayId,
     allowAdminPromptView: settings.allowAdminPromptView === true,
-    modelPackages: packages
-      .filter(item => isSuperAdminActor || item.enabled)
-      .map(isSuperAdminActor ? publicModelPackageForSuperAdmin : publicModelPackageForUser)
+    relays: (settings.relays || []).filter(item => includeDisabled || item.enabled !== false).map(publicRelayChoice)
   };
 }
 
-async function saveSelectedModelPackage(selectedModelPackageId) {
-  const settings = await readPrivateApiSettings();
-  const packages = normalizeModelPackages(settings.modelPackages, settings);
-  const selected = String(selectedModelPackageId || '').trim();
-  if (!packages.some(item => item.enabled && item.id === selected)) throw new Error('模型套餐不存在或未启用');
-  const next = { selectedModelPackageId: selected, updatedAt: new Date().toISOString() };
-  await fsp.mkdir(path.dirname(modelPackageSelectionFile()), { recursive: true });
-  await fsp.writeFile(modelPackageSelectionFile(), JSON.stringify(next, null, 2), { encoding: 'utf8', mode: 0o600 });
-  return loadModelPackageSettings({ role: 'member' });
+async function saveActiveRelay(activeRelayId) {
+  const operation = apiSettingsWriteChain.then(async () => {
+    const current = await readPrivateApiSettings();
+    const selected = normalizeRelayId(activeRelayId, '');
+    if (!current.relays.some(item => item.enabled !== false && item.id === selected)) {
+      throw new Error('中转站不存在或未启用');
+    }
+    const next = withActiveRelay({ ...current, activeRelayId: selected });
+    await fsp.mkdir(path.dirname(apiSettingsFile()), { recursive: true });
+    await fsp.writeFile(apiSettingsFile(), JSON.stringify(storedApiSettings(next), null, 2), { encoding: 'utf8', mode: 0o600 });
+    runtimeApiSettings = next;
+    return loadRelayChoices();
+  });
+  apiSettingsWriteChain = operation.catch(() => {});
+  return operation;
 }
 
-async function activeModelPackage() {
+async function activeApiConfig() {
   const settings = await readPrivateApiSettings();
-  const packages = normalizeModelPackages(settings.modelPackages, settings).filter(item => item.enabled);
-  const selectedId = await readSelectedModelPackageId(packages);
-  return packages.find(item => item.id === selectedId) || packages.find(item => item.default) || packages[0] || null;
-}
-
-async function activeApiConfig(channel = 'image') {
-  const settings = await readPrivateApiSettings();
-  const pack = await activeModelPackage();
-  if (!pack) return requireApiConfig(channel);
-  if (channel === 'analysis') {
-    const api = {
-      ...settings,
-      baseUrl: normalizeApiBaseUrl(pack.analysisApiBaseUrl || pack.apiBaseUrl || settings.baseUrl),
-      analysisKey: String(pack.analysisApiKey || settings.analysisKey || settings.imageKey || '').trim(),
-      // Never fall back to the image model. A chat request sent to gpt-image-* only creates opaque analysis failures.
-      analysisModel: String(pack.analysisModel || settings.analysisModel || '').trim(),
-      analysisWireApi: pack.analysisWireApi || settings.analysisWireApi,
-      activeModelPackage: pack
-    };
-    if (!api.baseUrl) throw new Error('请先配置文字分析 API 地址');
-    if (!api.analysisKey) throw new Error('请先配置文字分析 API 密钥');
-    return api;
-  }
+  const relay = activeRelayFromSettings(settings);
+  if (!relay) return requireApiConfig();
   const api = {
     ...settings,
-    baseUrl: pack.apiBaseUrl || settings.baseUrl,
-    imageKey: pack.apiKey || settings.imageKey,
-    imageModel: pack.modelId || settings.imageModel,
-    activeModelPackage: pack
+    baseUrl: relay.baseUrl,
+    imageKey: relay.imageKey,
+    imageModel: relay.imageModel,
+    activeRelay: relay
   };
   if (!api.baseUrl) throw new Error('请先配置生图 API 地址');
   if (!api.imageKey) throw new Error('请先配置生图 API 密钥');
   return api;
 }
 
-function appendPackagePrompt(prompt, packagePrompt) {
-  const extra = String(packagePrompt || '').trim();
-  if (!extra) return String(prompt || '');
-  return `${String(prompt || '').trim()}\n\n${extra}`.trim();
+function applyRelayPrompt(prompt) {
+  return String(prompt || '');
 }
 
-function packagePromptFor(api, kind) {
-  void api;
-  void kind;
-  return '';
-}
-
-function packageIsFlagship(pack) {
-  return String(pack?.promptQuality || '').trim() === 'flagship' || String(pack?.id || '').trim() === 'flagship';
-}
-
-function packageUsesMasterReference(pack) {
-  if (!packageIsFlagship(pack)) return true;
-  return pack?.enableMasterReference === true;
-}
-
-function resolveAnalysisModel(api = {}) {
-  return String(api.analysisModel || api.imageModel || '').trim();
+function relayBillingRange(relay) {
+  if (!relay) return {};
+  const prefix = 'image';
+  if (relay[`${prefix}PriceMinMinor`] == null && relay[`${prefix}PriceMaxMinor`] == null) return {};
+  const min = normalizeRelayMinor(relay[`${prefix}PriceMinMinor`], 0);
+  const max = normalizeRelayMinor(relay[`${prefix}PriceMaxMinor`], min);
+  return { amountMinMinor: min, amountMaxMinor: Math.max(min, max) };
 }
 
 function isComplexTemplatePrintAnalysis(analysis, job = {}) {
@@ -1224,43 +965,26 @@ function isDetailSliceTemplate(job = {}, analysis = '') {
   return signals.some(signal => text.includes(signal));
 }
 
-function applyPackagePrompt(prompt, api, kind) {
-  const pack = api?.activeModelPackage;
-  const packagePrompt = packagePromptFor(api, kind);
-  if (pack && !packageIsFlagship(pack) && packagePrompt) return packagePrompt;
-  return appendPackagePrompt(prompt, packagePrompt);
-}
-
-function packageBillingRange(pack, kind) {
-  if (!pack) return {};
-  const prefix = kind === 'analysis' || kind === 'llm' ? 'analysis' : 'image';
-  const fixed = normalizeModelPackageMinor(pack[`${prefix}PriceMinor`], 0);
-  const min = normalizeModelPackageMinor(pack[`${prefix}PriceMinMinor`], fixed);
-  const max = normalizeModelPackageMinor(pack[`${prefix}PriceMaxMinor`], fixed);
-  return { amountMinMinor: min, amountMaxMinor: Math.max(min, max) };
-}
-
-async function activeApiConcurrencyLimit(total = Infinity) {
-  const max = DEFAULT_ANALYSIS_API_CONCURRENCY;
-  const count = Number(total);
-  if (!Number.isFinite(count)) return max;
-  return Math.min(max, Math.max(1, Math.trunc(count)));
+function relayForRequestPayload(payload = {}, current = currentApiSettings()) {
+  const relayPayload = payload.relay && typeof payload.relay === 'object' ? payload.relay : payload;
+  const relayId = normalizeRelayId(relayPayload.id || payload.relayId, current.activeRelayId || 'relay-test');
+  const currentRelay = (current.relays || []).find(item => item.id === relayId) || {};
+  return normalizeRelays([{ ...currentRelay, ...relayPayload, id: relayId }], { relays: [currentRelay] })[0];
 }
 
 async function testApiSettings(payload = {}) {
   const current = await readPrivateApiSettings();
-  const channel = payload.channel === 'analysis' ? 'analysis' : 'image';
+  const relay = relayForRequestPayload(payload, current);
   const draft = {
-    baseUrl: normalizeApiBaseUrl(payload.baseUrl || current.baseUrl),
-    key: channel === 'analysis'
-      ? String(payload.analysisApiKey || '').trim() || current.analysisKey
-      : String(payload.imageApiKey || payload.apiKey || '').trim() || current.imageKey,
+    baseUrl: relay.baseUrl,
+    key: relay.imageKey,
+    modelsPath: relay.modelsPath || '/models',
     requestTimeoutSeconds: normalizeRequestTimeoutSeconds(payload.requestTimeoutSeconds, current.requestTimeoutSeconds)
   };
   if (!draft.baseUrl) throw new Error('请先填写 API 地址');
-  if (!draft.key) throw new Error(channel === 'analysis' ? '请先配置文字分析 API 密钥' : '请先配置 Image2 生图 API 密钥');
+  if (!draft.key) throw new Error('请先配置 Image2 生图 API 密钥');
   const startedAt = Date.now();
-  const body = await apiJson(apiEndpoint(draft.baseUrl, '/models'), {
+  const body = await apiJson(apiEndpoint(draft.baseUrl, draft.modelsPath), {
     method: 'GET',
     headers: { Authorization: `Bearer ${draft.key}`, Accept: 'application/json' }
   }, Math.min(draft.requestTimeoutSeconds * 1000, 60000));
@@ -1273,55 +997,21 @@ async function testApiSettings(payload = {}) {
     created: Number.isFinite(Number(item?.created)) ? Number(item.created) : 0,
     ownedBy: String(item?.owned_by || '').trim().slice(0, 120)
   })).filter(item => item.id);
-  return { ok: true, channel, latencyMs: Date.now() - startedAt, modelCount: models.length, models };
+  return { ok: true, channel: 'image', latencyMs: Date.now() - startedAt, modelCount: models.length, models };
 }
 
-async function testAnalysisApi(payload = {}) {
+async function testRelayHealth(payload = {}) {
   const current = await readPrivateApiSettings();
-  const activePack = await activeModelPackage();
-  const fallbackBaseUrl = normalizeApiBaseUrl(
-    (activePack?.analysisApiBaseUrl || activePack?.apiBaseUrl || current.analysisApiBaseUrl || current.baseUrl)
-  );
-  const draft = {
-    baseUrl: normalizeApiBaseUrl(payload.baseUrl || fallbackBaseUrl),
-    key: String(payload.analysisApiKey || '').trim() || String(activePack?.analysisApiKey || current.analysisKey || current.imageKey || '').trim(),
-    analysisModel: normalizeModelName(payload.analysisModel || activePack?.analysisModel || activePack?.modelId || current.analysisModel, current.analysisModel),
-    analysisWireApi: normalizeAnalysisWireApi(payload.analysisWireApi, current.analysisWireApi),
-    requestTimeoutSeconds: normalizeRequestTimeoutSeconds(payload.requestTimeoutSeconds, current.requestTimeoutSeconds)
-  };
-  if (!draft.baseUrl) throw new Error('请先填写 API 地址');
-  if (!draft.key) throw new Error('请先配置文字分析 API 密钥');
-  const modelResult = await testApiSettings({
-    ...payload,
-    channel: 'analysis',
-    baseUrl: draft.baseUrl,
-    analysisApiKey: draft.key,
-    requestTimeoutSeconds: draft.requestTimeoutSeconds
-  });
-  if (!modelResult.models.some(model => model.id === draft.analysisModel)) {
-    const available = modelResult.models.map(model => model.id).join('、') || '无';
-    draft.analysisModel = modelResult.models.length ? modelResult.models[0].id : '';
-    if (!draft.analysisModel) throw new Error(`文字分析密钥不支持模型 ${normalizeModelName(payload.analysisModel || current.analysisModel, '')}；可用模型：${available}`);
-  }
+  const relay = relayForRequestPayload(payload, current);
+  if (!relay.baseUrl) throw new Error('请先填写中转站 API 地址');
+  const key = relay.imageKey;
+  if (!key) throw new Error('请先填写中转站 API 密钥');
   const startedAt = Date.now();
-  const body = await analysisApiJson({
-    ...draft,
-    analysisKey: draft.key
-  }, {
-    model: draft.analysisModel,
-    messages: [{ role: 'user', content: '仅回复 OK' }],
-    stream: false,
-    max_tokens: 8
-  }, Math.min(draft.requestTimeoutSeconds * 1000, 60000));
-  if (!Array.isArray(body?.choices) || !body.choices.length) throw new Error('分析接口响应格式不正确：缺少 choices');
-  const content = body.choices[0]?.message?.content;
-  return {
-    ok: true,
-    latencyMs: Date.now() - startedAt,
-    model: draft.analysisModel,
-    wireApi: draft.analysisWireApi,
-    responsePreview: typeof content === 'string' ? content.trim().slice(0, 80) : ''
-  };
+  await apiJson(apiEndpoint(relay.baseUrl, relay.healthPath || relay.modelsPath || '/models'), {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${key}`, Accept: 'application/json' }
+  }, Math.min(normalizeRequestTimeoutSeconds(payload.requestTimeoutSeconds, current.requestTimeoutSeconds) * 1000, 60000));
+  return { ok: true, relayId: relay.id, latencyMs: Date.now() - startedAt, checkedPath: relay.healthPath || relay.modelsPath || '/models' };
 }
 
 function apiSettingsStatus() {
@@ -1835,241 +1525,6 @@ async function apiJson(url, options = {}, timeoutMs = 120000) {
   }
 }
 
-let gatewayUsageCache = { value: null, expiresAt: 0, pending: null };
-
-function gatewayMoneyValue(value) {
-  if (value === null || value === undefined || value === '') return null;
-  if (typeof value === 'string') value = value.replaceAll(',', '').replace(/^\s*\$/, '').trim();
-  if (value === '') return null;
-  const number = Number(value);
-  return Number.isFinite(number) ? number : null;
-}
-
-function gatewayBalanceFromUsage(body = {}) {
-  const roots = [body, body?.data, body?.quota, body?.data?.quota].filter(Boolean);
-  for (const root of roots) {
-    for (const key of ['remaining', 'balance', 'available', 'available_balance']) {
-      const value = gatewayMoneyValue(root?.[key]);
-      if (value !== null) return value;
-    }
-  }
-  for (const root of [body?.quota, body?.data?.quota].filter(Boolean)) {
-    const limit = gatewayMoneyValue(root.limit);
-    const used = gatewayMoneyValue(root.used);
-    if (limit !== null && used !== null) return Math.max(0, limit - used);
-  }
-  return null;
-}
-
-function gatewayUsageMetric(value = {}) {
-  return {
-    requests: Math.max(0, Math.trunc(Number(value?.requests) || 0)),
-    cost: Math.max(0, Number(value?.cost) || 0),
-    actualCost: Math.max(0, Number(value?.actual_cost ?? value?.actualCost) || 0)
-  };
-}
-
-function gatewayDailyUsageFromBody(body = {}) {
-  const candidates = [
-    body?.daily_usage,
-    body?.data?.daily_usage,
-    body?.usage?.daily,
-    body?.data?.usage?.daily
-  ];
-  const source = candidates.find(Array.isArray);
-  const items = source || [];
-  return {
-    available: Boolean(source),
-    items: items.flatMap(item => {
-    const date = String(item?.date || item?.day || '').trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return [];
-    return [{ date, ...gatewayUsageMetric(item) }];
-    })
-  };
-}
-
-async function getGatewayUsage(options = {}) {
-  const now = Date.now();
-  if (options.forceRefresh !== true && gatewayUsageCache.value && gatewayUsageCache.expiresAt > now) {
-    return gatewayUsageCache.value;
-  }
-  if (gatewayUsageCache.pending) return gatewayUsageCache.pending;
-  const pending = (async () => {
-    const api = await activeApiConfig('image');
-    const body = await apiJson(apiEndpoint(api.baseUrl, '/usage'), {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${api.imageKey}`,
-        Accept: 'application/json'
-      }
-    }, 15000);
-    const balance = gatewayBalanceFromUsage(body);
-    const usageRoot = body?.usage || body?.data?.usage || {};
-    const dailyUsage = gatewayDailyUsageFromBody(body);
-    const value = {
-      available: balance !== null,
-      balance,
-      currency: String(body?.currency || body?.data?.currency || body?.quota?.currency || 'USD').toUpperCase(),
-      today: gatewayUsageMetric(usageRoot?.today),
-      total: gatewayUsageMetric(usageRoot?.total),
-      dailyUsageAvailable: dailyUsage.available,
-      dailyUsage: dailyUsage.items,
-      fetchedAt: new Date().toISOString()
-    };
-    gatewayUsageCache = { value, expiresAt: Date.now() + 30000, pending: null };
-    return value;
-  })();
-  gatewayUsageCache.pending = pending;
-  try {
-    return await pending;
-  } finally {
-    if (gatewayUsageCache.pending === pending) gatewayUsageCache.pending = null;
-  }
-}
-
-async function billableLlmJson(url, options = {}, timeoutMs = 120000, metadata = {}) {
-  const reservation = await billing.reserve(currentWorkspaceId(), 'llm', {
-    ...metadata,
-    onceKey: metadata.onceKey || metadata.billingOnceKey || ''
-  });
-  try {
-    const body = await apiJson(url, options, timeoutMs);
-    await billing.commit(reservation);
-    return body;
-  } catch (error) {
-    await billing.release(reservation).catch(() => {});
-    throw error;
-  }
-}
-
-function chatContentToResponses(content, role = 'user') {
-  const items = Array.isArray(content) ? content : [{ type: 'text', text: String(content || '') }];
-  return items.map(item => {
-    if (item?.type === 'image_url') {
-      const imageUrl = typeof item.image_url === 'string' ? item.image_url : item.image_url?.url;
-      return { type: 'input_image', image_url: String(imageUrl || '') };
-    }
-    const text = item?.text ?? item?.content ?? '';
-    return { type: role === 'assistant' ? 'output_text' : 'input_text', text: String(text) };
-  });
-}
-
-function chatPayloadToResponses(payload = {}) {
-  const next = {
-    model: String(payload.model || ''),
-    input: (payload.messages || []).map(message => ({
-      role: String(message?.role || 'user'),
-      content: chatContentToResponses(message?.content, message?.role)
-    })),
-    store: false,
-    stream: false
-  };
-  const maximumTokens = Number(payload.max_output_tokens ?? payload.max_completion_tokens ?? payload.max_tokens);
-  if (Number.isFinite(maximumTokens) && maximumTokens > 0) next.max_output_tokens = Math.round(maximumTokens);
-  if (Number.isFinite(Number(payload.temperature))) next.temperature = Number(payload.temperature);
-  return next;
-}
-
-function responsesOutputText(body = {}) {
-  if (typeof body.output_text === 'string') return body.output_text.trim();
-  const values = [];
-  for (const output of Array.isArray(body.output) ? body.output : []) {
-    for (const content of Array.isArray(output?.content) ? output.content : []) {
-      const text = typeof content?.text === 'string' ? content.text : content?.text?.value;
-      if (typeof text === 'string' && text.trim()) values.push(text.trim());
-    }
-  }
-  return values.join('\n').trim();
-}
-
-function normalizeAnalysisResponse(body, wireApi) {
-  if (wireApi !== 'responses') return body;
-  return {
-    ...body,
-    choices: [{ message: { content: responsesOutputText(body) } }]
-  };
-}
-
-function isRetryableAnalysisApiFailure(error) {
-  const status = Number(error?.status) || 0;
-  if ([408, 409, 425, 429].includes(status) || status >= 500) return true;
-  const description = `${error?.name || ''} ${error?.code || ''} ${error?.message || error || ''}`;
-  return /AbortError|fetch failed|network|socket|ECONN|ENOTFOUND|EAI_AGAIN|temporar(?:y|ily) unavailable|upstream service|server is busy|service unavailable|rate limit|too many requests|timeout/i.test(description);
-}
-
-async function adaptiveAnalysisApiJson(url, options = {}, timeoutMs = 120000) {
-  return analysisApiScheduler.schedule(async () => {
-    try {
-      return await apiJson(url, options, timeoutMs);
-    } catch (error) {
-      if (isRetryableAnalysisApiFailure(error)) {
-        const retryable = new RetryableRequestError(error?.message || String(error), {
-          status: error?.status,
-          retryAfterMs: error?.retryAfterMs,
-          code: error?.code
-        });
-        retryable.retryable = true;
-        throw retryable;
-      }
-      throw error;
-    }
-  });
-}
-
-async function analysisApiJson(api, chatPayload, timeoutMs, metadata = null) {
-  const wireApi = normalizeAnalysisWireApi(api.analysisWireApi, 'chat_completions');
-  const pathName = wireApi === 'responses' ? '/responses' : '/chat/completions';
-  const shouldApplyPackagePrompt = false;
-  const sourcePayload = shouldApplyPackagePrompt
-    ? {
-      ...chatPayload,
-      messages: (chatPayload.messages || []).map((message, index) => {
-        if (index !== 0) return message;
-        if (Array.isArray(message.content)) {
-          return {
-            ...message,
-            content: message.content.map((item, itemIndex) => itemIndex === 0 && item?.type === 'text'
-              ? { ...item, text: applyPackagePrompt(item.text, api, 'analysis') }
-              : item)
-          };
-        }
-        return { ...message, content: applyPackagePrompt(message.content, api, 'analysis') };
-      })
-    }
-    : chatPayload;
-  const payload = wireApi === 'responses' ? chatPayloadToResponses(sourcePayload) : sourcePayload;
-  const resolvedModel = String(payload?.model || '').trim();
-  if (!resolvedModel) {
-    throw new Error('分析模型未配置，请在模型套餐或模型设置里填写 analysisModel');
-  }
-  const billingMetadata = metadata && api.activeModelPackage
-    ? { ...packageBillingRange(api.activeModelPackage, 'analysis'), ...metadata }
-    : metadata;
-  const options = {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${api.analysisKey}`,
-      Accept: 'application/json',
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(payload)
-  };
-  const reservation = billingMetadata
-    ? await billing.reserve(currentWorkspaceId(), 'llm', {
-      ...billingMetadata,
-      onceKey: billingMetadata.onceKey || billingMetadata.billingOnceKey || ''
-    })
-    : null;
-  try {
-    const body = await adaptiveAnalysisApiJson(apiEndpoint(api.baseUrl, pathName), options, timeoutMs);
-    if (reservation) await billing.commit(reservation);
-    return normalizeAnalysisResponse(body, wireApi);
-  } catch (error) {
-    if (reservation) await billing.release(reservation).catch(() => {});
-    throw error;
-  }
-}
-
 function randomDelay(minimumMs, maximumMs, signal = null) {
   const minimum = Math.max(0, Math.trunc(minimumMs));
   const maximum = Math.max(minimum, Math.trunc(maximumMs));
@@ -2191,11 +1646,8 @@ async function downloadGeneratedImage(url, signal) {
 }
 
 async function generateImage(prompt, imagePaths, options = {}) {
-  const api = await activeApiConfig('image');
-  const pack = api.activeModelPackage;
-  if (pack) {
-    imageApiScheduler.configure(imageSchedulerSettingsForRequest(pack, options));
-  }
+  const api = await activeApiConfig();
+  imageApiScheduler.configure(imageSchedulerSettingsForRequest(api.activeRelay, options, api));
   const preparedImages = await Promise.all(imagePaths.map(file => {
     if (!isImagePath(file)) throw new Error(`Unsupported image format: ${path.basename(file)}`);
     return imageReferenceCache.prepare(file);
@@ -2217,7 +1669,7 @@ async function generateImage(prompt, imagePaths, options = {}) {
       if (signal?.aborted) throw new Error('Task stopped');
       const fields = [
         { name: 'model', value: api.imageModel },
-        { name: 'prompt', value: applyPackagePrompt(prompt, api, 'image') },
+        { name: 'prompt', value: applyRelayPrompt(prompt) },
         { name: 'n', value: '1' },
         { name: 'size', value: options.size || '1024x1024' },
         { name: 'quality', value: options.quality || 'high' },
@@ -2253,7 +1705,10 @@ async function generateImage(prompt, imagePaths, options = {}) {
         _powershellMultipart: { fields, files }
       };
       const reservation = billingExempt ? null : await billing.reserve(currentWorkspaceId(), 'image', {
-        ...packageBillingRange(pack, 'image'),
+        relayId: api.activeRelay?.id,
+        relayName: api.activeRelay?.name,
+        modelId: api.imageModel,
+        ...relayBillingRange(api.activeRelay),
         description: options.billingDescription || 'Image generation',
         reference: options.billingReference || '',
         onceKey: `${attemptBillingKey}:attempt:${attempt}`
@@ -4209,7 +3664,8 @@ async function initializeRuntime() {
     fsp.mkdir(currentDefaultOutputRoot(), { recursive: true }),
     fsp.mkdir(path.join(currentWorkspaceRoot(), 'exports'), { recursive: true })
   ]);
-  await Promise.all([loadConfig(), loadApiSettings()]);
+  const [, apiSettings] = await Promise.all([loadConfig(), loadApiSettings()]);
+  await billing.migrateLegacyBalances(apiSettings.activeRelayId || 'default-relay');
 }
 
 const runtimeExports = {
@@ -4236,7 +3692,6 @@ const runtimeExports = {
   generateTemplateSetForFolder,
   generateTitleForTask,
   generateTitles,
-  getGatewayUsage,
   getTaobaoPublishPackage,
   getImageSchedulerSnapshot,
   getTaobaoPublishSettings,
@@ -4248,13 +3703,13 @@ const runtimeExports = {
   isWorkspacePath,
   listReadyTitleTasks,
   listTaobaoPublishTasks,
-  loadModelPackageSettings,
   normalizeTaobaoPublishSettings,
   listTemplateFolders,
   listTemplates,
   loadApiSettings,
   loadConfig,
   loadPromptSettings,
+  loadRelayChoices,
   loadTitleLibrary,
   planTemplateOutputJobs,
   publicTitleLibrary,
@@ -4267,7 +3722,7 @@ const runtimeExports = {
   reviewFolders,
   saveConfig,
   saveApiSettings,
-  saveSelectedModelPackage,
+  saveActiveRelay,
   publicApiConcurrencySettings,
   queueTaobaoPublishTask,
   claimTaobaoPublishTask,
@@ -4280,8 +3735,8 @@ const runtimeExports = {
   scanImages,
   setTemplateManualStatus,
   updateTaobaoPublishStatus,
-  testAnalysisApi,
   testApiSettings,
+  testRelayHealth,
   validateTemplateOutputLayout,
   prepareTemplateGenerationCanvas,
   restoreTemplateGenerationCanvas,

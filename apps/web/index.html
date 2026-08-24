@@ -219,49 +219,30 @@
             <div class="settings-panel-head api-panel-head"><div><h2>API 设置</h2><p>配置连接、分配模型和图片输出规则。</p></div><span class="api-status-badge" id="apiStatusBadge">未配置</span></div>
             <form id="apiSettingsForm">
               <input type="text" name="username" value="API" autocomplete="username" hidden aria-hidden="true" tabindex="-1">
+              <section class="settings-card relay-station-card" id="relayStationCard">
+                <div class="settings-card-head">
+                  <div><h3>中转站</h3><p>每个中转站独立保存地址、密钥、模型和本站扣费标准；不依赖上游余额接口。</p></div>
+                  <div class="inline-actions"><button class="secondary" id="addRelayButton" type="button">添加中转站</button></div>
+                </div>
+                <div class="relay-station-list" id="relayStationList"><div class="empty-inline">正在读取中转站...</div></div>
+              </section>
               <div class="api-layout-grid">
                 <section class="settings-card api-connection-card api-common-card">
-                  <div class="settings-card-head"><div><h3>Change2Pro 网关</h3><p>文字分析和 Image2 共用网关地址，密钥分别保存于服务端。</p></div></div>
-                  <label>API 地址<input id="apiBaseUrl" type="url" placeholder="https://api.change2pro.com" spellcheck="false"></label>
+                  <div class="settings-card-head"><div><h3>网站权限</h3><p>密钥只保存在服务器，不会发送给普通账号。</p></div></div>
                   <label class="settings-check-row"><input id="allowAdminPromptView" type="checkbox">允许管理员查看网站提示词</label>
                 </section>
-                <section class="settings-card api-connection-card">
-                  <div class="settings-card-head"><div><h3>文字分析 API</h3><p>用于商品识别、标题生成和可选的生成后 AI 质检；人工框选套图不依赖此密钥。</p></div><button class="text-button" id="openAnalysisModelsButton" type="button" hidden>查看模型</button></div>
-                  <label>文字分析密钥<div class="password-input"><input id="analysisApiKey" type="password" placeholder="输入文字模型分组密钥" autocomplete="new-password" spellcheck="false"><button class="text-button" data-toggle-secret="analysisApiKey" type="button">显示</button></div><small id="analysisApiKeyHint">尚未保存文字密钥</small></label>
-                  <label>分析模型<input id="analysisModel" list="analysisModelOptions" placeholder="请先读取文字模型" spellcheck="false"></label>
-                  <div class="api-test-stack">
-                    <div class="api-test-row"><div><b id="analysisModelsTitle">文字模型列表</b><span id="analysisModelsStatus">使用文字密钥读取 GET /v1/models。</span></div><button class="secondary" id="testAnalysisModelsButton" type="button">读取模型</button></div>
-                    <div class="api-test-row"><div><b id="analysisConnectionTitle">分析接口</b><span id="analysisConnectionStatus">检测 Change2Pro Responses API 和上游登录状态。</span></div><button class="secondary" id="testAnalysisApiButton" type="button">测试分析</button></div>
-                  </div>
-                </section>
                 <section class="settings-card api-connection-card api-model-card">
-                  <div class="settings-card-head"><div><h3>Image2 生图 API</h3><p>用于套图加印花、自由生图、补生成和重新生成。</p></div><button class="text-button" id="openImageModelsButton" type="button" hidden>查看模型</button></div>
-                  <label>Image2 密钥<div class="password-input"><input id="imageApiKey" type="password" placeholder="输入 Image2 分组密钥" autocomplete="new-password" spellcheck="false"><button class="text-button" data-toggle-secret="imageApiKey" type="button">显示</button></div><small id="imageApiKeyHint">尚未保存图片密钥</small></label>
+                  <div class="settings-card-head"><div><h3>图片输出</h3><p>所有中转站共用以下生成参数。</p></div></div>
                   <div class="api-model-fields">
-                    <label>图片模型<input id="imageModel" list="imageModelOptions" placeholder="gpt-image-2" spellcheck="false"></label>
                     <label>默认图片尺寸<select id="imageSize"><option value="1024x1024">1024 × 1024</option><option value="1024x1536">1024 × 1536</option><option value="1536x1024">1536 × 1024</option></select></label>
                     <label>图片质量<select id="imageQuality"><option value="auto">自动</option><option value="high">高</option><option value="medium">中</option><option value="low">低</option></select></label>
                   </div>
-                  <div class="api-test-stack"><div class="api-test-row"><div><b id="apiConnectionTitle">Image2 模型列表</b><span id="apiConnectionStatus">使用图片密钥读取 GET /v1/models。</span></div><button class="secondary" id="testApiButton" type="button">读取模型</button></div></div>
                 </section>
               </div>
-              <section class="settings-card model-package-card" id="modelPackageCard">
-                <div class="settings-card-head">
-                  <div><h3>模型套餐</h3><p id="modelPackageDescription">超级管理员维护真实接口配置；管理员只选择可用模型。</p></div>
-                  <div class="inline-actions"><button class="primary" id="saveModelPackagesButton" type="button">保存模型套餐</button></div>
-                </div>
-                <div class="model-package-list" id="modelPackageList"><div class="empty-inline">正在读取模型套餐...</div></div>
-                <div class="model-package-actions" id="modelPackageUserActions" hidden>
-                  <span id="selectedModelPackageHint">尚未选择模型</span>
-                  <button class="primary" id="saveSelectedModelPackageButton" type="button">保存模型选择</button>
-                </div>
-              </section>
-              <datalist id="analysisModelOptions"></datalist>
               <datalist id="imageModelOptions"></datalist>
               <details class="api-advanced-settings">
                 <summary>其他参数 <span>保持默认即可</span></summary>
                 <div class="api-advanced-grid">
-                  <label>文字接口协议<select id="analysisWireApi"><option value="chat_completions">Chat Completions（推荐）</option><option value="responses">Responses API</option></select></label>
                   <label>图片响应格式<select id="apiResponseFormat"><option value="url">图片链接（推荐）</option><option value="b64_json">Base64</option></select></label>
                   <label>请求超时<select id="apiRequestTimeout"><option value="60">60 秒</option><option value="120">120 秒</option><option value="180">180 秒</option><option value="300">300 秒</option></select></label>
                   <label>API 初始并发<input id="imageInitialConcurrency" type="number" min="1" max="50" step="1" value="8"></label>
@@ -284,6 +265,17 @@
                 <div class="settings-card-head"><div><h3>账号列表</h3><p>停用后该成员会立即无法再次登录，素材不会删除。</p></div><span id="teamUserCount">0 人</span></div>
                 <div class="team-user-list" id="teamUserList"><div class="empty-inline">正在读取团队账号…</div></div>
               </section>
+              <section class="settings-card team-balance-transfer-card" id="teamBalanceTransferCard" hidden>
+                <div class="settings-card-head"><div><h3>算力余额划拨</h3><p>可从管理员或任何员工账号转出，划给自己或其他员工；转出和转入同时入账。</p></div></div>
+                <div class="team-balance-transfer-form">
+                  <label>中转站<select id="teamTransferRelay"></select></label>
+                  <label>转出账号<select id="teamTransferFrom"></select></label>
+                  <label>转入账号<select id="teamTransferTo"></select></label>
+                  <label>划拨金额<div class="money-input"><span>$</span><input id="teamTransferAmount" type="number" min="0.000001" step="0.000001" placeholder="0.000000"></div></label>
+                  <button class="primary" id="teamTransferButton" type="button">确认划拨</button>
+                </div>
+                <div class="empty-inline" id="teamBalanceTransferEmpty" hidden>请先创建至少一个员工账号，再进行算力余额划拨。</div>
+              </section>
             </div>
             <div class="settings-foot"><span>浏览器只负责上传本机文件；服务器不会读取成员电脑上的原始路径。</span></div>
           </section>
@@ -291,25 +283,18 @@
             <div class="settings-panel-head"><div><h2>计费管理</h2><p>按成功结果扣费；失败、超时和自动重试不重复收费。</p></div><span class="api-status-badge" id="billingStatusBadge">未启用</span></div>
             <div class="billing-settings-grid">
               <section class="settings-card billing-rule-card">
-                <div class="settings-card-head"><div><h3>计费规则</h3><p>金额以美元计算，支持 6 位小数，保存后只影响后续调用。</p></div></div>
+                <div class="settings-card-head"><div><h3>计费开关</h3><p>每张图片的价格在对应中转站中独立设置；这里不再提供全局价格。</p></div></div>
                 <label class="billing-toggle"><span><b>启用算力余额计费</b><small>关闭时保留算力余额和流水，但不检查或扣除费用。</small></span><input id="billingEnabled" type="checkbox"></label>
-                <div class="billing-price-grid">
-                  <label>成功生图最低 / 张<div class="money-input"><span>$</span><input id="billingImageFeeMin" type="number" min="0" max="1000000" step="0.000001" value="0.000000"></div></label>
-                  <label>成功生图最高 / 张<div class="money-input"><span>$</span><input id="billingImageFeeMax" type="number" min="0" max="1000000" step="0.000001" value="0.000000"></div></label>
-                  <label>语言模型最低 / 次<div class="money-input"><span>$</span><input id="billingLlmFeeMin" type="number" min="0" max="1000000" step="0.000001" value="0.000000"></div></label>
-                  <label>语言模型最高 / 次<div class="money-input"><span>$</span><input id="billingLlmFeeMax" type="number" min="0" max="1000000" step="0.000001" value="0.000000"></div></label>
-                  <label>新账号初始算力余额<div class="money-input"><span>$</span><input id="billingDefaultBalance" type="number" min="0" max="1000000" step="0.000001" value="0.000000"></div></label>
-                </div>
-                <button class="primary" id="saveBillingRulesButton" type="button">保存计费规则</button>
+                <button class="primary" id="saveBillingRulesButton" type="button">保存计费开关</button>
               </section>
               <section class="settings-card billing-account-card">
                 <div class="settings-card-head"><div><h3>团队算力余额</h3><p>按人员筛选查看算力余额；超级管理员可充值或扣减，管理员只能给成员划拨。</p></div><span id="billingAccountCount">0 个账号</span></div>
-                <label class="billing-user-filter">查看人员<select id="billingUserFilter"><option value="">全部人员</option></select></label>
+                <div class="billing-filter-grid"><label class="billing-user-filter">中转站<select id="billingRelayFilter"></select></label><label class="billing-user-filter">查看人员<select id="billingUserFilter"><option value="">全部人员</option></select></label></div>
                 <div class="billing-account-list" id="billingAccountList"><div class="empty-inline">正在读取算力余额…</div></div>
               </section>
             </div>
             <section class="settings-card billing-ledger-card">
-              <div class="settings-card-head"><div><h3>最近费用流水</h3><p>记录成功生图、成功模型调用和管理员调账。</p></div><div class="inline-actions"><button class="text-button danger-text" id="clearBillingLedgerButton" type="button">清空流水</button><button class="text-button" id="refreshBillingButton" type="button">刷新</button></div></div>
+              <div class="settings-card-head"><div><h3>最近费用流水</h3><p>记录成功生图和管理员调账；旧版模型调用记录仍会保留。</p></div><div class="inline-actions"><button class="text-button danger-text" id="clearBillingLedgerButton" type="button">清空流水</button><button class="text-button" id="refreshBillingButton" type="button">刷新</button></div></div>
               <div class="billing-ledger-list" id="billingLedgerList"><div class="empty-inline">暂无费用流水</div></div>
             </section>
             <div class="settings-foot"><span>算力余额不足时不会调用上游模型；并发任务会先占用预计费用，完成后才正式扣款。</span></div>

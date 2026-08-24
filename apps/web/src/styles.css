@@ -276,9 +276,14 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .team-transfer-controls { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; }
 .team-transfer-controls input { min-height: 36px; }
 .team-transfer-controls button { min-height: 36px; }
+.team-balance-transfer-card { grid-column: 1 / -1; }
+.team-balance-transfer-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(180px, .7fr) auto; gap: 10px; align-items: end; }
+.team-balance-transfer-form label { display: grid; gap: 6px; }
+.team-balance-transfer-form select, .team-balance-transfer-form input, .team-balance-transfer-form button { min-height: 40px; }
 
 @media (max-width: 760px) {
   .team-settings-grid { grid-template-columns: 1fr; }
+  .team-balance-transfer-form { grid-template-columns: 1fr; }
 }
 
 .billing-settings-grid { display: grid; grid-template-columns: minmax(320px, .82fr) minmax(0, 1.18fr); gap: 14px; padding: 16px 0 14px; }
@@ -299,7 +304,11 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .billing-account-copy b { font-size: 12px; }
 .billing-account-copy span { margin-top: 3px; color: var(--subtle); font-size: 9px; }
 .billing-account-balance { color: var(--teal); font-size: 15px; font-weight: 800; text-align: right; }
+.billing-account-balance small { display: block; margin-bottom: 3px; color: var(--subtle); font-size: 9px; font-weight: 500; }
 .billing-user-filter { margin: -3px 0 12px; display: grid; gap: 6px; color: var(--subtle); font-size: 10px; }
+.billing-filter-grid { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: end; }
+.billing-filter-grid .billing-user-filter { flex: 1 1 240px; min-width: 220px; }
+.billing-filter-grid .billing-user-filter:first-child { flex-basis: 300px; }
 .billing-user-filter select { min-height: 38px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: var(--ink); padding: 0 10px; font-weight: 700; }
 .billing-adjust-note { grid-column: 1 / -1; color: var(--subtle); font-size: 10px; text-align: right; }
 .billing-adjust-controls { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; }
@@ -326,6 +335,7 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 #changePasswordStatus.error { color: var(--red); }
 .billing-detail-rates { padding: 15px 20px; border-bottom: 1px solid var(--line); background: var(--panel); display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .billing-rate-item { padding: 10px 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); }
+.billing-rate-item.active { border-color: var(--teal); background: var(--teal-soft); }
 .billing-rate-item span, .billing-rate-item b { display: block; }
 .billing-rate-item span { color: var(--subtle); font-size: 9px; }
 .billing-rate-item b { margin-top: 4px; font-size: 15px; }
@@ -7808,16 +7818,16 @@ label input, label textarea {
   }
 }
 
-.model-package-card {
+.relay-station-card {
   margin: 14px 0;
 }
 
-.model-package-list {
+.relay-station-list {
   display: grid;
   gap: 12px;
 }
 
-.model-package-choice {
+.relay-station-choice {
   width: 100%;
   min-height: 72px;
   padding: 13px 14px;
@@ -7832,30 +7842,30 @@ label input, label textarea {
   gap: 14px;
 }
 
-.model-package-choice:hover {
+.relay-station-choice:hover {
   border-color: #9eb7b1;
   background: #fafcfb;
 }
 
-.model-package-choice.active {
+.relay-station-choice.active {
   border-color: var(--teal);
   background: var(--teal-soft);
   box-shadow: inset 4px 0 0 var(--teal);
 }
 
-.model-package-choice b,
-.model-package-choice small {
+.relay-station-choice b,
+.relay-station-choice small {
   display: block;
 }
 
-.model-package-choice small {
+.relay-station-choice small {
   margin-top: 4px;
   color: var(--subtle);
   font-size: 11px;
   line-height: 1.45;
 }
 
-.model-package-choice em {
+.relay-station-choice em {
   flex: 0 0 auto;
   color: var(--teal);
   font-size: 11px;
@@ -7863,29 +7873,19 @@ label input, label textarea {
   font-weight: 800;
 }
 
-.model-package-actions {
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid var(--line);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.model-package-actions span {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.model-package-editor {
+.relay-station-editor {
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fff;
 }
 
-.model-package-editor-head {
+.relay-station-editor.active {
+  border-color: var(--teal);
+  box-shadow: inset 4px 0 0 var(--teal);
+}
+
+.relay-station-editor-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -7893,52 +7893,54 @@ label input, label textarea {
   margin-bottom: 12px;
 }
 
-.model-package-editor-head b,
-.model-package-editor-head span {
+.relay-station-editor-head b,
+.relay-station-editor-head span {
   display: block;
 }
 
-.model-package-editor-head span {
+.relay-station-editor-head span {
   margin-top: 3px;
   color: var(--subtle);
   font-size: 10px;
 }
 
-.model-package-form-grid {
+.relay-station-form-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 11px;
 }
 
-.model-package-form-grid label,
-.model-package-prompt {
+.relay-station-form-grid label {
   min-width: 0;
 }
 
-.model-package-prompt {
-  display: grid;
-  gap: 7px;
-  margin-top: 12px;
-}
-
-.model-package-prompt textarea {
-  resize: vertical;
-}
-
-.model-package-switches {
+.relay-station-actions {
   margin-top: 12px;
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 14px;
   color: var(--muted);
   font-size: 12px;
 }
 
-.model-package-switches label {
+.relay-station-actions label {
   display: inline-flex;
   align-items: center;
   gap: 6px;
 }
+
+.relay-station-status {
+  margin-top: 12px;
+  padding: 9px 11px;
+  border-radius: 7px;
+  background: #f4f7f6;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.relay-station-status.success { color: #236b5c; background: #edf8f4; }
+.relay-station-status.error { color: #873930; background: #fff1ef; }
 
 .global-stats-page {
   display: grid;
@@ -8558,7 +8560,7 @@ label input, label textarea {
 }
 
 @media (max-width: 1100px) {
-  .model-package-form-grid {
+  .relay-station-form-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -8573,13 +8575,12 @@ label input, label textarea {
 }
 
 @media (max-width: 720px) {
-  .model-package-form-grid,
-  .model-package-actions {
+  .relay-station-form-grid {
     grid-template-columns: 1fr;
   }
 
-  .model-package-actions,
-  .model-package-choice {
+  .relay-station-actions,
+  .relay-station-choice {
     align-items: stretch;
     flex-direction: column;
   }

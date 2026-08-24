@@ -21,7 +21,6 @@ test('不同团队账号使用独立配置、素材目录和文件令牌边界',
       baseUrl: 'https://api.example.com/v1',
       apiKey: 'server-api-key',
       imageModel: 'gpt-image-2',
-      analysisModel: 'gpt-5-3',
       responseFormat: 'b64_json',
       requestTimeoutSeconds: 120
     });
@@ -38,7 +37,8 @@ test('不同团队账号使用独立配置、素材目录和文件令牌边界',
     assert.match(runtime.WORKSPACE_ROOT, /user-artist$/);
     assert.throws(() => runtime.fileToken(adminFile), /不属于/);
     assert.equal((await runtime.loadPromptSettings()).prompts.find(item => item.id === 'freeImageDefault').value, '管理员统一提示词');
-    assert.equal((await runtime.loadApiSettings()).baseUrl, 'https://api.example.com/v1');
+    const apiSettings = await runtime.loadApiSettings();
+    assert.equal(apiSettings.relays.find(item => item.id === apiSettings.activeRelayId)?.baseUrl, 'https://api.example.com/v1');
   });
 
   await runtime.runWithWorkspace('local', async () => {

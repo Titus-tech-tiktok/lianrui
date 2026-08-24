@@ -80,26 +80,17 @@ async function createFixture(t, workspaceId) {
   t.after(() => delete require.cache[runtimePath]);
   await runtime.initializeRuntime();
   await runtime.saveConfig({ outputPath: path.join(temp, 'output'), imageQuality: 'high' });
-  await runtime.billing.saveRules({
-    enabled: true,
-    imageFeeMinMinor: 1,
-    imageFeeMaxMinor: 1,
-    llmFeeMinMinor: 0,
-    llmFeeMaxMinor: 0,
-    defaultBalanceMinor: 100000000
-  });
+  await runtime.billing.saveRules({ enabled: true });
   await runtime.saveApiSettings({
-    baseUrl: `http://127.0.0.1:${server.address().port}/v1`,
-    imageApiKey: 'image-key',
-    analysisApiKey: 'image-key',
-    imageModel: 'gpt-image-2',
-    analysisModel: 'gpt-5-3',
-    modelPackages: [
-      { id: 'flagship', name: 'Flagship', enabled: true, default: true, promptQuality: 'flagship', modelId: 'gpt-image-2', maxConcurrency: 14, startIntervalMs: 200, imagePriceMinMinor: 300000, imagePriceMaxMinor: 300000 },
-      { id: 'fast', name: 'Fast', enabled: true, default: false, promptQuality: 'basic', imagePrompt: 'FAST ONLY PROMPT', modelId: 'gpt-image-2', maxConcurrency: 6, startIntervalMs: 1000, imagePriceMinMinor: 50000, imagePriceMaxMinor: 50000 },
-      { id: 'standard', name: 'Standard', enabled: true, default: false, promptQuality: 'standard', imagePrompt: 'STANDARD ONLY PROMPT', modelId: 'gpt-image-2', imagePriceMinMinor: 70000, imagePriceMaxMinor: 70000 }
-    ]
+    activeRelayId: 'primary',
+    relays: [{
+      id: 'primary', name: 'Primary relay', description: 'Test relay', enabled: true,
+      baseUrl: `http://127.0.0.1:${server.address().port}/v1`,
+      imageApiKey: 'image-key', imageModel: 'gpt-image-2',
+      imagePriceMinMinor: 300000, imagePriceMaxMinor: 300000
+    }]
   });
+  await runtime.billing.adjustBalance(workspaceId, 'primary', 100000000);
 
   const templateRoot = path.join(runtime.WORKSPACE_ROOT, 'assets', 'template', 'set');
   const templatePath = path.join(templateRoot, '01-complex.png');
@@ -125,9 +116,20 @@ async function createFixture(t, workspaceId) {
   return { runtime, captured, templateRoot, printPath, masterImagePath, baseUrl: `http://127.0.0.1:${server.address().port}/v1` };
 }
 
-test('flagship template-print uses the shared fixed four-image contract', { concurrency: false }, async (t) => {
-  const { runtime, captured, templateRoot, printPath, masterImagePath } = await createFixture(t, 'flagship');
-  await runtime.saveSelectedModelPackage('flagship');
+async function setRelayImagePrice(runtime, priceMinor) {
+  const settings = await runtime.loadApiSettings();
+  await runtime.saveApiSettings({
+    ...settings,
+    relays: settings.relays.map(relay => ({
+      ...relay,
+      imagePriceMinMinor: priceMinor,
+      imagePriceMaxMinor: priceMinor
+    }))
+  });
+}
+
+test('relay template-print uses the shared fixed four-image contract', { concurrency: false }, async (t) => {
+  const { runtime, captured, templateRoot, printPath, masterImagePath } = await createFixture(t, 'relay');
 
   const result = await runtime.generateTask({
     taskNumber: 1,
@@ -152,9 +154,8 @@ test('flagship template-print uses the shared fixed four-image contract', { conc
   assert.match(captured.imageBodies[0], /\.regions\.png/);
 });
 
-test('standard template-print uses the shared four-image prompt without package override', { concurrency: false }, async (t) => {
-  const { runtime, captured, templateRoot, printPath, masterImagePath } = await createFixture(t, 'standard');
-  await runtime.saveSelectedModelPackage('standard');
+test('relay template-print uses the shared prompt without an old package override', { concurrency: false }, async (t) => {
+  const { runtime, captured, templateRoot, printPath, masterImagePath } = await createFixture(t, 'shared-prompt');
 
   await runtime.generateTask({
     taskNumber: 1,
@@ -170,9 +171,9 @@ test('standard template-print uses the shared four-image prompt without package 
   assert.doesNotMatch(captured.imageBodies[0], /FLAGSHIP_COMPLEX_TEMPLATE_PRINT_MODE/);
 });
 
-test('fast template-print bills package image price and uses package concurrency', { concurrency: false }, async (t) => {
-  const { runtime, captured, templateRoot, printPath, masterImagePath } = await createFixture(t, 'fast-billing-concurrency');
-  await runtime.saveSelectedModelPackage('fast');
+test('relay template-print bills its image price and uses global concurrency', { concurrency: false }, async (t) => {
+  const { runtime, captured, templateRoot, printPath, masterImagePath } = await createFixture(t, 'relay-billing-concurrency');
+  await setRelayImagePrice(runtime, 50000);
 
   const result = await runtime.generateTask({
     taskNumber: 1,
@@ -191,9 +192,8 @@ test('fast template-print bills package image price and uses package concurrency
   assert.match(events, /"maxConcurrency":30/);
 });
 
-test('fast review regeneration paths charge package image price', { concurrency: false }, async (t) => {
-  const { runtime, templateRoot, printPath, masterImagePath } = await createFixture(t, 'fast-review-billing');
-  await runtime.saveSelectedModelPackage('flagship');
+test('review regeneration paths charge the current relay image price', { concurrency: false }, async (t) => {
+  const { runtime, templateRoot, printPath, masterImagePath } = await createFixture(t, 'relay-review-billing');
 
   const initial = await runtime.generateTask({
     taskNumber: 1,
@@ -206,10 +206,10 @@ test('fast review regeneration paths charge package image price', { concurrency:
   const outputFile = path.join(initial.folder, '01-complex.png');
   await fs.rm(outputFile, { force: true });
 
-  await runtime.saveSelectedModelPackage('fast');
-  const before = await runtime.billing.getSummary('fast-review-billing');
+  await setRelayImagePrice(runtime, 50000);
+  const before = await runtime.billing.getSummary('relay-review-billing', 'primary');
   const regeneratedSet = await runtime.generateTemplateSetForFolder(initial.folder, true);
-  const afterMissing = await runtime.billing.getSummary('fast-review-billing');
+  const afterMissing = await runtime.billing.getSummary('relay-review-billing', 'primary');
   assert.equal(regeneratedSet.summary.billingCostMinor, 50000);
   assert.equal(before.account.balanceMinor - afterMissing.account.balanceMinor, 50000);
 
@@ -218,13 +218,12 @@ test('fast review regeneration paths charge package image price', { concurrency:
     relativePath: '01-complex.png',
     extraInstruction: 'keep cabinet labels unchanged'
   });
-  const afterSingle = await runtime.billing.getSummary('fast-review-billing');
+  const afterSingle = await runtime.billing.getSummary('relay-review-billing', 'primary');
   assert.equal(afterMissing.account.balanceMinor - afterSingle.account.balanceMinor, 50000);
 });
 
-test('standard review regeneration paths charge package image price', { concurrency: false }, async (t) => {
-  const { runtime, templateRoot, printPath, masterImagePath } = await createFixture(t, 'standard-review-billing');
-  await runtime.saveSelectedModelPackage('flagship');
+test('changing a relay price applies to every later regeneration', { concurrency: false }, async (t) => {
+  const { runtime, templateRoot, printPath, masterImagePath } = await createFixture(t, 'changed-relay-review-billing');
 
   const initial = await runtime.generateTask({
     taskNumber: 1,
@@ -237,10 +236,10 @@ test('standard review regeneration paths charge package image price', { concurre
   const outputFile = path.join(initial.folder, '01-complex.png');
   await fs.rm(outputFile, { force: true });
 
-  await runtime.saveSelectedModelPackage('standard');
-  const before = await runtime.billing.getSummary('standard-review-billing');
+  await setRelayImagePrice(runtime, 70000);
+  const before = await runtime.billing.getSummary('changed-relay-review-billing', 'primary');
   const regeneratedSet = await runtime.generateTemplateSetForFolder(initial.folder, true);
-  const afterMissing = await runtime.billing.getSummary('standard-review-billing');
+  const afterMissing = await runtime.billing.getSummary('changed-relay-review-billing', 'primary');
   assert.equal(regeneratedSet.summary.billingCostMinor, 70000);
   assert.equal(before.account.balanceMinor - afterMissing.account.balanceMinor, 70000);
 
@@ -249,13 +248,12 @@ test('standard review regeneration paths charge package image price', { concurre
     relativePath: '01-complex.png',
     extraInstruction: 'keep cabinet labels unchanged'
   });
-  const afterSingle = await runtime.billing.getSummary('standard-review-billing');
+  const afterSingle = await runtime.billing.getSummary('changed-relay-review-billing', 'primary');
   assert.equal(afterMissing.account.balanceMinor - afterSingle.account.balanceMinor, 70000);
 });
 
-test('flagship review regeneration charges every image API request', { concurrency: false }, async (t) => {
-  const { runtime, templateRoot, printPath, masterImagePath } = await createFixture(t, 'flagship-review-billing');
-  await runtime.saveSelectedModelPackage('flagship');
+test('relay review regeneration charges every image API request', { concurrency: false }, async (t) => {
+  const { runtime, templateRoot, printPath, masterImagePath } = await createFixture(t, 'relay-every-request-billing');
 
   const initial = await runtime.generateTask({
     taskNumber: 1,
@@ -266,10 +264,10 @@ test('flagship review regeneration charges every image API request', { concurren
     templateRelativePaths: ['01-complex.png']
   });
   assert.equal(initial.summary.billingCostMinor, 300000);
-  const afterInitial = await runtime.billing.getSummary('flagship-review-billing');
+  const afterInitial = await runtime.billing.getSummary('relay-every-request-billing', 'primary');
 
   await runtime.generateTemplateSetForFolder(initial.folder, false);
-  const afterSetRegeneration = await runtime.billing.getSummary('flagship-review-billing');
+  const afterSetRegeneration = await runtime.billing.getSummary('relay-every-request-billing', 'primary');
   assert.equal(afterInitial.account.balanceMinor - afterSetRegeneration.account.balanceMinor, 300000);
 
   await runtime.regenerateSingleTemplate({
@@ -277,24 +275,12 @@ test('flagship review regeneration charges every image API request', { concurren
     relativePath: '01-complex.png',
     extraInstruction: 'keep cabinet labels unchanged'
   });
-  const afterSingle = await runtime.billing.getSummary('flagship-review-billing');
+  const afterSingle = await runtime.billing.getSummary('relay-every-request-billing', 'primary');
   assert.equal(afterSetRegeneration.account.balanceMinor - afterSingle.account.balanceMinor, 300000);
 });
 
-test('flagship template-print can include master reference when enabled', { concurrency: false }, async (t) => {
-  const { runtime, captured, templateRoot, printPath, masterImagePath, baseUrl } = await createFixture(t, 'flagship-master-reference');
-  await runtime.saveApiSettings({
-    baseUrl,
-    imageApiKey: 'image-key',
-    analysisApiKey: 'image-key',
-    imageModel: 'gpt-image-2',
-    analysisModel: 'gpt-5-3',
-    modelPackages: [
-      { id: 'flagship', name: 'Flagship', enabled: true, default: true, promptQuality: 'flagship', modelId: 'gpt-image-2', enableMasterReference: true },
-      { id: 'standard', name: 'Standard', enabled: true, default: false, promptQuality: 'standard', imagePrompt: 'STANDARD ONLY PROMPT', modelId: 'gpt-image-2' }
-    ]
-  });
-  await runtime.saveSelectedModelPackage('flagship');
+test('relay template-print includes the required master reference', { concurrency: false }, async (t) => {
+  const { runtime, captured, templateRoot, printPath, masterImagePath } = await createFixture(t, 'relay-master-reference');
 
   await runtime.generateTask({
     taskNumber: 1,

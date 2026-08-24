@@ -11,23 +11,17 @@ test('billing supports USD micro amounts with six decimal places', async t => {
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const billing = createBillingService(root);
 
-  await billing.saveRules({
-    enabled: true,
-    imageFeeMinMinor: 2362,
-    imageFeeMaxMinor: 2362,
-    llmFeeMinMinor: 15,
-    llmFeeMaxMinor: 15,
-    defaultBalanceMinor: 1_000_000
-  });
+  await billing.saveRules({ enabled: true });
+  await billing.adjustBalance('usd-user', 'relay-usd', 1_000_000);
 
-  const account = await billing.ensureAccount('usd-user');
+  const account = await billing.ensureAccount('usd-user', 'relay-usd');
   assert.equal(account.balanceMinor, 1_000_000);
 
-  const reservation = await billing.reserve('usd-user', 'image', { description: 'micro image' });
+  const reservation = await billing.reserve('usd-user', 'image', { relayId: 'relay-usd', amountMinor: 2362, description: 'micro image' });
   assert.equal(reservation.amountMinor, 2362);
   await billing.commit(reservation);
 
-  const summary = await billing.getSummary('usd-user');
+  const summary = await billing.getSummary('usd-user', 'relay-usd');
   assert.equal(summary.rules.currency, 'USD');
   assert.equal(summary.rules.amountScale, 1_000_000);
   assert.equal(summary.account.balanceMinor, 997_638);

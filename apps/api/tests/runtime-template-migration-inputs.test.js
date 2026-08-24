@@ -79,26 +79,17 @@ async function createFixture(t, workspaceId) {
   t.after(() => delete require.cache[runtimePath]);
   await runtime.initializeRuntime();
   await runtime.saveConfig({ outputPath: path.join(temp, 'output'), imageQuality: 'high', auditMode: 'economy' });
-  await runtime.billing.saveRules({
-    enabled: true,
-    imageFeeMinMinor: 1,
-    imageFeeMaxMinor: 1,
-    llmFeeMinMinor: 0,
-    llmFeeMaxMinor: 0,
-    defaultBalanceMinor: 100000000
-  });
+  await runtime.billing.saveRules({ enabled: true });
   await runtime.saveApiSettings({
-    baseUrl: `http://127.0.0.1:${server.address().port}/v1`,
-    imageApiKey: 'image-key',
-    analysisApiKey: 'image-key',
-    imageModel: 'gpt-image-2',
-    analysisModel: 'gpt-5-3',
-    modelPackages: [
-      { id: 'flagship', name: 'Flagship', enabled: true, default: true, promptQuality: 'flagship', modelId: 'gpt-image-2', maxConcurrency: 14, startIntervalMs: 200, imagePriceMinMinor: 300000, imagePriceMaxMinor: 300000 },
-      { id: 'fast', name: 'Fast', enabled: true, default: false, promptQuality: 'basic', imagePrompt: 'FAST PACKAGE PROMPT', modelId: 'gpt-image-2', maxConcurrency: 6, startIntervalMs: 1000, imagePriceMinMinor: 50000, imagePriceMaxMinor: 50000 },
-      { id: 'standard', name: 'Standard', enabled: true, default: false, promptQuality: 'standard', imagePrompt: 'STANDARD PACKAGE PROMPT', modelId: 'gpt-image-2', maxConcurrency: 4, startIntervalMs: 1000, imagePriceMinMinor: 70000, imagePriceMaxMinor: 70000 }
-    ]
+    activeRelayId: 'primary',
+    relays: [{
+      id: 'primary', name: 'Primary relay', description: 'Test relay', enabled: true,
+      baseUrl: `http://127.0.0.1:${server.address().port}/v1`,
+      imageApiKey: 'image-key', imageModel: 'gpt-image-2',
+      imagePriceMinMinor: 300000, imagePriceMaxMinor: 300000
+    }]
   });
+  await runtime.billing.adjustBalance(workspaceId, 'primary', 100000000);
 
   const templateRoot = path.join(runtime.WORKSPACE_ROOT, 'assets', 'template', 'set');
   const templatePath = path.join(templateRoot, 'sku', '1.png');
@@ -124,10 +115,8 @@ async function createFixture(t, workspaceId) {
   return { runtime, captured, templateRoot, printPath };
 }
 
-for (const packageId of ['flagship', 'standard', 'fast']) {
-  test(`${packageId} master migration sends exactly four semantic reference images`, { concurrency: false }, async (t) => {
-    const { runtime, captured, templateRoot, printPath } = await createFixture(t, packageId);
-    await runtime.saveSelectedModelPackage(packageId);
+test('relay-backed master migration sends exactly four semantic reference images', { concurrency: false }, async (t) => {
+    const { runtime, captured, templateRoot, printPath } = await createFixture(t, 'primary-relay');
 
     const master = await runtime.generateTemplateTaskMaster({
       taskNumber: 1,
@@ -182,12 +171,10 @@ for (const packageId of ['flagship', 'standard', 'fast']) {
     assert.match(templateBody, /OPEN_DRAWER_REGISTERED_PRINT_MAPPING/);
     assert.match(templateBody, /Apply the following rules only when image 1 contains one or more opened drawers/);
     assert.doesNotMatch(templateBody, /FLAGSHIP_COMPLEX_TEMPLATE_PRINT_MODE|DETAIL_SLICE_LAYOUT_PROTECTION_MODE/);
-  });
-}
+});
 
 test('single regeneration sends the same fixed four semantic reference images', { concurrency: false }, async (t) => {
   const { runtime, captured, templateRoot, printPath } = await createFixture(t, 'regeneration-four-images');
-  await runtime.saveSelectedModelPackage('flagship');
 
   const master = await runtime.generateTemplateTaskMaster({
     taskNumber: 1,
@@ -225,7 +212,6 @@ test('single regeneration sends the same fixed four semantic reference images', 
 
 test('single regeneration appends current and selected generated references after the fixed four images', { concurrency: false }, async (t) => {
   const { runtime, captured, templateRoot, printPath } = await createFixture(t, 'regeneration-result-reference');
-  await runtime.saveSelectedModelPackage('flagship');
 
   const master = await runtime.generateTemplateTaskMaster({
     taskNumber: 1,
