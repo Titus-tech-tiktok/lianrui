@@ -1394,6 +1394,17 @@ async function startServer() {
     }
   });
 
+  app.get('/api/billing/accounting', async (req, res) => {
+    if (!isSuperAdmin(req.user)) return res.status(403).json({ error: '只有超级管理员可以查看经营账目' });
+    try {
+      const [users, apiSettings] = await Promise.all([auth.listUsers(), runtime.loadApiSettings()]);
+      const userLookup = new Map(users.map(user => [user.workspaceId, user]));
+      return res.json({ data: await runtime.billing.getAccountingReport(apiSettings.relays || [], userLookup) });
+    } catch (error) {
+      return res.status(400).json({ error: error?.message || String(error) });
+    }
+  });
+
   app.get('/api/relays', async (req, res) => {
     if (!isTeamAdmin(req.user)) return res.status(403).json({ error: '只有管理员可以查看中转站' });
     try {

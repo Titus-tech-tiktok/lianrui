@@ -465,6 +465,82 @@ function createBillingService(dataRoot) {
     };
   }
 
+  async function getAccountingReport(relayValues = [], userLookup = new Map()) {
+    const relays = (Array.isArray(relayValues) ? relayValues : []).map(relay => ({
+      id: normalizeRelayId(relay?.id),
+      name: String(relay?.name || relay?.id || '未命名中转站').slice(0, 80),
+      enabled: relay?.enabled !== false,
+      customerCnyPerUsd: Math.max(0.000001, Number(relay?.customerCnyPerUsd) || 7),
+      upstreamImageCostCnyMicro: Math.max(0, Math.trunc(Number(relay?.upstreamImageCostCnyMicro) || 0))
+    }));
+    const byRelay = new Map(relays.map(relay => [relay.id, {
+      ...relay,
+      confirmedSpendUsdMinor: 0,
+      successfulImages: 0
+    }]));
+    let text = '';
+    try { text = await fs.readFile(ledgerFile, 'utf8'); } catch { text = ''; }
+    for (const line of text.trim().split('\n').filter(Boolean)) {
+      let entry;
+      try { entry = JSON.parse(line); } catch { continue; }
+      if (String(entry.kind || '') !== 'image') continue;
+      if (userLookup.get(entry.workspaceId)?.role === 'superadmin') continue;
+      const relayId = String(entry.relayId || legacyRelayId);
+      const report = byRelay.get(relayId);
+      if (!report) continue;
+      const sourceScale = entry?.amountScale === BILLING_SCALE ? BILLING_SCALE : 100;
+      const amountMinor = sourceScale === BILLING_SCALE
+        ? Math.trunc(Number(entry.amountMinor) || 0)
+        : migrateMoney(entry.amountMinor, sourceScale);
+      if (amountMinor >= 0) continue;
+      report.confirmedSpendUsdMinor += Math.abs(amountMinor);
+      report.successfulImages += 1;
+    }
+    const reports = [];
+    for (const relay of relays) {
+      const report = byRelay.get(relay.id);
+      const balanceSummary = await buildBalanceSummary(userLookup, relay.id);
+      const customerBalanceUsdMinor = balanceSummary.totals.balanceMinor;
+      const customerRechargeUsdMinor = customerBalanceUsdMinor + report.confirmedSpendUsdMinor;
+      const usdMicroToCnyMinor = amount => Math.round((Math.max(0, Number(amount) || 0) / BILLING_SCALE) * relay.customerCnyPerUsd * 100);
+      const customerRechargeCnyMinor = usdMicroToCnyMinor(customerRechargeUsdMinor);
+      const customerBalanceCnyMinor = usdMicroToCnyMinor(customerBalanceUsdMinor);
+      const confirmedRevenueCnyMinor = usdMicroToCnyMinor(report.confirmedSpendUsdMinor);
+      const upstreamCostCnyMinor = Math.round((report.successfulImages * relay.upstreamImageCostCnyMicro) / 10_000);
+      const costConfigured = relay.upstreamImageCostCnyMicro > 0 || report.successfulImages === 0;
+      reports.push({
+        relayId: relay.id,
+        relayName: relay.name,
+        enabled: relay.enabled,
+        customerCnyPerUsd: relay.customerCnyPerUsd,
+        upstreamImageCostCnyMicro: relay.upstreamImageCostCnyMicro,
+        costConfigured,
+        successfulImages: report.successfulImages,
+        customerRechargeUsdMinor,
+        customerBalanceUsdMinor,
+        confirmedSpendUsdMinor: report.confirmedSpendUsdMinor,
+        customerRechargeCnyMinor,
+        customerBalanceCnyMinor,
+        confirmedRevenueCnyMinor,
+        upstreamCostCnyMinor,
+        grossProfitCnyMinor: confirmedRevenueCnyMinor - upstreamCostCnyMinor
+      });
+    }
+    return {
+      currency: 'CNY',
+      relays: reports,
+      complete: reports.every(report => report.costConfigured),
+      totals: {
+        customerRechargeCnyMinor: reports.reduce((sum, report) => sum + report.customerRechargeCnyMinor, 0),
+        customerBalanceCnyMinor: reports.reduce((sum, report) => sum + report.customerBalanceCnyMinor, 0),
+        confirmedRevenueCnyMinor: reports.reduce((sum, report) => sum + report.confirmedRevenueCnyMinor, 0),
+        upstreamCostCnyMinor: reports.reduce((sum, report) => sum + report.upstreamCostCnyMinor, 0),
+        grossProfitCnyMinor: reports.reduce((sum, report) => sum + report.grossProfitCnyMinor, 0),
+        successfulImages: reports.reduce((sum, report) => sum + report.successfulImages, 0)
+      }
+    };
+  }
+
   async function saveRules(payload = {}) {
     return mutate(async () => {
       const rules = {
@@ -799,6 +875,7 @@ function createBillingService(dataRoot) {
     clearTransactions,
     commit,
     ensureAccount,
+    getAccountingReport,
     getGlobalStats,
     getRelayUsageState,
     getRules: readRules,

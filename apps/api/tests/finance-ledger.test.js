@@ -20,12 +20,14 @@ test('finance ledger separates profit expenses from gateway cash transfers', asy
   });
   assert.equal(income.amountCnyMinor, 70_000);
 
-  await ledger.create({
+  const topup = await ledger.create({
     date: '2026-08-10',
     category: 'gateway_topup',
+    relayId: 'relay-one',
     amount: '200.00',
     currency: 'CNY'
   });
+  assert.equal(topup.relayId, 'relay-one');
   const expense = await ledger.create({
     date: '2026-08-11',
     category: 'development',
@@ -46,6 +48,8 @@ test('finance ledger separates profit expenses from gateway cash transfers', asy
   assert.equal(august.summary.gatewayTopupsCnyMinor, 20_000);
   assert.equal(august.summary.manualCashFlowCnyMinor, 45_000);
   assert.equal(august.summary.totalRevenueCnyMinor, 71_000);
+  assert.equal(august.summary.byRelay[0].relayId, 'relay-one');
+  assert.equal(august.summary.byRelay[0].totalGatewayTopupsCnyMinor, 20_000);
 
   const updated = await ledger.update(expense.id, { amount: '75.50', note: '调整后' });
   assert.equal(updated.amountCnyMinor, 7_550);

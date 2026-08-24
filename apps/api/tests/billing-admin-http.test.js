@@ -58,9 +58,11 @@ test('admin billing endpoint hides platform ledger and backend actors', async ()
     const relaySave = await jsonFetch(`${base}/api/rpc`, {
       method: 'POST', headers: { Cookie: superCookie },
       body: JSON.stringify({ method: 'saveApiSettings', args: [{ activeRelayId: 'relay-one', relays: [{
-        id: 'relay-one', name: '一号站', enabled: true, baseUrl: 'https://one.example/v1', imageApiKey: 'secret', imageModel: 'gpt-image-2', imagePriceMinMinor: 300000, imagePriceMaxMinor: 300000
+        id: 'relay-one', name: '一号站', enabled: true, baseUrl: 'https://one.example/v1', imageApiKey: 'secret', imageModel: 'gpt-image-2', imagePriceMinMinor: 300000, imagePriceMaxMinor: 300000,
+        customerCnyPerUsd: 7, upstreamImageCostCnyMicro: 20000
       }, {
-        id: 'relay-two', name: '二号站', enabled: true, baseUrl: 'https://two.example/v1', imageApiKey: 'secret-two', imageModel: 'gpt-image-2', imagePriceMinMinor: 180000, imagePriceMaxMinor: 180000
+        id: 'relay-two', name: '二号站', enabled: true, baseUrl: 'https://two.example/v1', imageApiKey: 'secret-two', imageModel: 'gpt-image-2', imagePriceMinMinor: 180000, imagePriceMaxMinor: 180000,
+        customerCnyPerUsd: 7, upstreamImageCostCnyMicro: 15000
       }] }] })
     });
     assert.equal(relaySave.response.status, 200);
@@ -115,6 +117,11 @@ test('admin billing endpoint hides platform ledger and backend actors', async ()
     });
     assert.equal(login.response.status, 200);
     const adminCookie = login.response.headers.get('set-cookie')?.split(';')[0] || '';
+
+    const forbiddenAccounting = await jsonFetch(`${base}/api/billing/accounting`, {
+      headers: { Cookie: adminCookie }
+    });
+    assert.equal(forbiddenAccounting.response.status, 403);
 
     const billing = await jsonFetch(`${base}/api/billing/admin`, {
       headers: { Cookie: adminCookie }
@@ -219,6 +226,13 @@ test('admin billing endpoint hides platform ledger and backend actors', async ()
     assert.equal(adminSummaryAfterTransfer.response.status, 200);
     assert.equal(adminSummaryAfterTransfer.body.data.account.balanceMinor, 650);
     assert.equal(adminSummaryAfterTransfer.body.data.transactions[0].description, '收到 Designer 划拨');
+
+    const accounting = await jsonFetch(`${base}/api/billing/accounting`, {
+      headers: { Cookie: superCookie }
+    });
+    assert.equal(accounting.response.status, 200);
+    assert.deepEqual(accounting.body.data.relays.map(relay => relay.relayName), ['一号站', '二号站']);
+    assert.deepEqual(accounting.body.data.relays.map(relay => relay.upstreamImageCostCnyMicro), [20000, 15000]);
   } finally {
     await new Promise(resolve => server.close(resolve));
     await removeTempWithRetry(temp);

@@ -119,6 +119,7 @@ const state = {
   mobileStats: null,
   mobileStatsRange: 'today',
   mobileStatsRelayId: '',
+  mobileAccounting: null,
   mobileFinanceExpanded: false,
   mobileFinanceMonth: '',
   mobileFinanceFilter: 'all',
@@ -628,11 +629,15 @@ function formatFinanceCny(minor = 0) {
   return `${sign}¥${(Math.abs(amount) / 100).toFixed(2)}`;
 }
 
+function formatFinanceCnyMicro(micro = 0) {
+  return `¥${(Math.max(0, Number(micro) || 0) / BILLING_AMOUNT_SCALE).toFixed(6)}`;
+}
+
 function financeCategoryLabel(category) {
   return ({
     client_payment: '客户充值',
     other_income: '其他收入',
-    gateway_topup: '网关充值',
+    gateway_topup: '上游充值',
     development: '开发费用',
     membership: '会员费',
     server: '服务器费用',
@@ -658,20 +663,40 @@ function mobileFinancePanelHtml() {
     return `<section class="mobile-finance-panel"><div class="mobile-finance-loading error">${escapeHtml(state.mobileFinanceError)}</div></section>`;
   }
   const summary = data?.summary || {};
-  const revenue = Number(summary.monthlyRevenueCnyMinor) || 0;
   const operatingExpenses = Number(summary.operatingExpensesCnyMinor) || 0;
   const gatewayTopups = Number(summary.gatewayTopupsCnyMinor) || 0;
   const cashFlow = Number(summary.manualCashFlowCnyMinor) || 0;
-  const relayStats = state.mobileStats?.month || {};
-  const relayBalanceMinor = Number(relayStats.balanceSummary?.totals?.availableMinor) || 0;
-  const relayBilledMinor = Number(relayStats.totals?.totalCostMinor) || 0;
-  const relay = (relayStats.relays || []).find(item => item.id === state.mobileStatsRelayId);
+  const accounting = state.mobileAccounting || { relays: [], totals: {} };
+  const accountingTotals = accounting.totals || {};
+  const totalOperatingExpenses = Number(summary.totalOperatingExpensesCnyMinor) || 0;
+  const totalGrossProfit = Number(accountingTotals.grossProfitCnyMinor) || 0;
+  const totalNetProfit = totalGrossProfit - totalOperatingExpenses;
+  const totalGatewayTopups = Number(summary.totalGatewayTopupsCnyMinor) || 0;
+  const estimatedUpstreamPrepaid = totalGatewayTopups - (Number(accountingTotals.upstreamCostCnyMinor) || 0);
+  const relayFinanceById = new Map((summary.byRelay || []).map(item => [item.relayId, item]));
+  const relayNameById = new Map((accounting.relays || []).map(item => [item.relayId, item.relayName]));
+  const relayCards = (accounting.relays || []).map(relay => {
+    const relayFinance = relayFinanceById.get(relay.relayId) || {};
+    const upstreamTopup = Number(relayFinance.totalGatewayTopupsCnyMinor) || 0;
+    return `<article class="mobile-finance-relay-card${relay.relayId === state.mobileStatsRelayId ? ' active' : ''}">
+      <header><div><span>中转站</span><h3>${escapeHtml(relay.relayName)}</h3></div><b>${formatInteger(relay.successfulImages)} 张</b></header>
+      <dl>
+        <div><dt>客户累计充值</dt><dd>${formatFinanceCny(relay.customerRechargeCnyMinor)}</dd></div>
+        <div><dt>客户未消费余额</dt><dd>${formatFinanceCny(relay.customerBalanceCnyMinor)}</dd></div>
+        <div><dt>已确认消费收入</dt><dd>${formatFinanceCny(relay.confirmedRevenueCnyMinor)}</dd></div>
+        <div><dt>预计上游已消耗成本</dt><dd>${relay.costConfigured ? formatFinanceCny(relay.upstreamCostCnyMinor) : '待配置'}</dd></div>
+        <div><dt>上游累计充值</dt><dd>${formatFinanceCny(upstreamTopup)}</dd></div>
+        <div class="profit"><dt>单站预估毛利</dt><dd>${relay.costConfigured ? formatFinanceCny(relay.grossProfitCnyMinor) : '待配置成本'}</dd></div>
+      </dl>
+      <p>站内折算 ${escapeHtml(relay.customerCnyPerUsd)} 元/美元 · 上游 ${formatFinanceCnyMicro(relay.upstreamImageCostCnyMicro)}/张</p>
+    </article>`;
+  }).join('') || '<div class="mobile-finance-empty">暂无中转站经营数据</div>';
   const entries = Array.isArray(data?.entries) ? data.entries : [];
   const visibleEntries = entries.filter(entry => state.mobileFinanceFilter === 'all' || entry.direction === state.mobileFinanceFilter);
   const entryHtml = visibleEntries.length ? visibleEntries.map(entry => `
     <button class="mobile-finance-entry" type="button" data-finance-entry-id="${escapeHtml(entry.id)}">
       <span class="mobile-finance-entry-icon ${escapeHtml(entry.direction)}">${entry.direction === 'income' ? '+' : entry.direction === 'expense' ? '−' : '↔'}</span>
-      <span class="mobile-finance-entry-copy"><b>${escapeHtml(entry.counterparty || financeCategoryLabel(entry.category))}</b><small>${escapeHtml(entry.date)} · ${escapeHtml(financeCategoryLabel(entry.category))}${entry.note ? ` · ${escapeHtml(entry.note)}` : ''}</small></span>
+      <span class="mobile-finance-entry-copy"><b>${escapeHtml(entry.counterparty || financeCategoryLabel(entry.category))}</b><small>${escapeHtml(entry.date)} · ${escapeHtml(financeCategoryLabel(entry.category))}${entry.relayId ? ` · ${escapeHtml(relayNameById.get(entry.relayId) || entry.relayId)}` : ''}${entry.note ? ` · ${escapeHtml(entry.note)}` : ''}</small></span>
       <span class="mobile-finance-entry-money ${escapeHtml(entry.direction)}"><b>${entry.direction === 'income' ? '+' : entry.direction === 'expense' ? '-' : ''}${formatFinanceCny(entry.amountCnyMinor)}</b><small>${escapeHtml(financeEntryOriginalAmount(entry))}${entry.currency === 'USD' ? ` · 汇率 ${escapeHtml(entry.exchangeRate)}` : ''}</small></span>
     </button>`).join('') : '<div class="mobile-finance-empty">这个月份暂时没有符合条件的记录</div>';
   return `
@@ -681,15 +706,18 @@ function mobileFinancePanelHtml() {
         <label><span>统计月份</span><input id="mobileFinanceMonth" type="month" value="${escapeHtml(month)}"></label>
       </header>
       <div class="mobile-finance-kpis">
-        <article><span>本月收入</span><strong>${formatFinanceCny(revenue)}</strong><small>累计收入 ${formatFinanceCny(summary.totalRevenueCnyMinor)}</small></article>
-        <article><span>本月用户扣费</span><strong>${formatMobileStatsMoney(relayBilledMinor)}</strong><small>${escapeHtml(relay?.name || '当前中转站')} 本站计费流水</small></article>
-        <article><span>团队可用余额</span><strong>${formatMobileStatsMoney(relayBalanceMinor)}</strong><small>${escapeHtml(relay?.name || '当前中转站')} 独立账户</small></article>
-        <article><span>经营支出</span><strong>${formatFinanceCny(operatingExpenses)}</strong><small>不含网关充值</small></article>
+        <article><span>已确认消费收入</span><strong>${formatFinanceCny(accountingTotals.confirmedRevenueCnyMinor)}</strong><small>所有中转站合计</small></article>
+        <article><span>预计上游成本</span><strong>${accounting.complete ? formatFinanceCny(accountingTotals.upstreamCostCnyMinor) : '成本未配齐'}</strong><small>成功生图数 × 单张采购成本</small></article>
+        <article><span>中转站毛利合计</span><strong>${accounting.complete ? formatFinanceCny(totalGrossProfit) : '成本未配齐'}</strong><small>已确认收入 - 预计上游成本</small></article>
+        <article><span>累计杂费</span><strong>${formatFinanceCny(totalOperatingExpenses)}</strong><small>服务器、软件、人工及其他支出</small></article>
+        <article class="profit total-profit"><span>总预估净利润</span><strong>${accounting.complete ? formatFinanceCny(totalNetProfit) : '请先补全成本'}</strong><small>各中转站毛利之和 - 全部杂费</small></article>
       </div>
-      <p class="mobile-finance-cost-note">中转站不提供上游实际成本接口，因此不自动推算净利润，避免账目失真。</p>
+      <div class="mobile-finance-relay-list">${relayCards}</div>
+      <p class="mobile-finance-cost-note">利润按成功生图计算：客户实际扣费折算收入 - 成功张数 × 上游单张成本。客户未消费余额不算收入，内部划拨不重复计账。</p>
       <div class="mobile-finance-cashflow">
-        <div><span>本月现金流</span><strong>${formatFinanceCny(cashFlow)}</strong><small>收入 - 经营支出 - 网关充值</small></div>
-        <div><span>网关充值</span><strong>${formatFinanceCny(gatewayTopups)}</strong><small>只计现金流，不重复计入利润</small></div>
+        <div><span>本月现金流</span><strong>${formatFinanceCny(cashFlow)}</strong><small>收入 - 经营支出 - 上游充值</small></div>
+        <div><span>本月上游充值</span><strong>${formatFinanceCny(gatewayTopups)}</strong><small>累计 ${formatFinanceCny(totalGatewayTopups)} · 预付差额 ${formatFinanceCny(estimatedUpstreamPrepaid)}</small></div>
+        <div><span>本月杂费</span><strong>${formatFinanceCny(operatingExpenses)}</strong><small>在总净利润中只扣一次</small></div>
       </div>
       <div class="mobile-finance-toolbar">
         <div><button type="button" data-finance-filter="all" class="${state.mobileFinanceFilter === 'all' ? 'active' : ''}">全部</button><button type="button" data-finance-filter="income" class="${state.mobileFinanceFilter === 'income' ? 'active' : ''}">收入</button><button type="button" data-finance-filter="expense" class="${state.mobileFinanceFilter === 'expense' ? 'active' : ''}">支出</button><button type="button" data-finance-filter="transfer" class="${state.mobileFinanceFilter === 'transfer' ? 'active' : ''}">充值</button></div>
@@ -717,11 +745,13 @@ async function loadMobileFinanceLedger() {
 
 function exportMobileFinanceCsv() {
   const entries = Array.isArray(state.mobileFinanceData?.entries) ? state.mobileFinanceData.entries : [];
-  const rows = [['日期', '分类', '项目或客户', '原始金额', '币种', '汇率', '人民币金额', '备注']];
+  const relayNames = new Map((state.mobileAccounting?.relays || []).map(relay => [relay.relayId, relay.relayName]));
+  const rows = [['日期', '分类', '中转站', '项目或客户', '原始金额', '币种', '汇率', '人民币金额', '备注']];
   for (const entry of entries) {
     rows.push([
       entry.date,
       financeCategoryLabel(entry.category),
+      relayNames.get(entry.relayId) || entry.relayId || '公共账目',
       entry.counterparty || '',
       (Number(entry.originalAmountMinor || 0) / 100).toFixed(2),
       entry.currency,
@@ -742,7 +772,8 @@ function exportMobileFinanceCsv() {
 function openMobileFinanceDialog(entry = null) {
   const editing = Boolean(entry?.id);
   const category = entry?.category || 'client_payment';
-  const currency = entry?.currency || (category === 'client_payment' ? 'USD' : 'CNY');
+  const currency = entry?.currency || 'CNY';
+  const accountingRelays = state.mobileAccounting?.relays || [];
   const element = document.createElement('div');
   element.className = 'mobile-finance-modal-backdrop';
   element.innerHTML = `<section class="mobile-finance-modal" role="dialog" aria-modal="true" aria-labelledby="mobileFinanceDialogTitle">
@@ -750,11 +781,12 @@ function openMobileFinanceDialog(entry = null) {
     <div class="mobile-finance-form">
       <label><span>日期</span><input data-finance-date type="date" value="${escapeHtml(entry?.date || currentChinaDate())}"></label>
       <label><span>分类</span><select data-finance-category>
-        ${Object.entries({ client_payment: '客户充值', other_income: '其他收入', gateway_topup: '网关充值', development: '开发费用', membership: '会员费', server: '服务器费用', software: '软件费用', refund: '退款', other_expense: '其他支出' }).map(([value, label]) => `<option value="${value}" ${value === category ? 'selected' : ''}>${label}</option>`).join('')}
+        ${Object.entries({ client_payment: '客户充值', other_income: '其他收入', gateway_topup: '上游充值', development: '开发费用', membership: '会员费', server: '服务器费用', software: '软件费用', refund: '退款', other_expense: '其他支出' }).map(([value, label]) => `<option value="${value}" ${value === category ? 'selected' : ''}>${label}</option>`).join('')}
       </select></label>
       <label class="wide"><span>项目或客户</span><input data-finance-counterparty maxlength="100" value="${escapeHtml(entry?.counterparty || '')}" placeholder="例如：张先生充值、8 月服务器"></label>
       <label><span>金额</span><input data-finance-amount inputmode="decimal" value="${editing ? (Number(entry.originalAmountMinor || 0) / 100).toFixed(2) : ''}" placeholder="0.00"></label>
       <label><span>币种</span><select data-finance-currency><option value="CNY" ${currency === 'CNY' ? 'selected' : ''}>人民币 CNY</option><option value="USD" ${currency === 'USD' ? 'selected' : ''}>美元 USD</option></select></label>
+      <label><span>归属中转站</span><select data-finance-relay><option value="">公共账目 / 不分站</option>${accountingRelays.map(relay => `<option value="${escapeHtml(relay.relayId)}"${relay.relayId === entry?.relayId ? ' selected' : ''}>${escapeHtml(relay.relayName)}</option>`).join('')}</select></label>
       <label data-finance-rate-field><span>美元汇率</span><input data-finance-rate inputmode="decimal" value="${escapeHtml(entry?.exchangeRate || 7)}"></label>
       <label class="wide"><span>备注</span><textarea data-finance-note rows="3" maxlength="500" placeholder="可选">${escapeHtml(entry?.note || '')}</textarea></label>
     </div>
@@ -787,6 +819,7 @@ function openMobileFinanceDialog(entry = null) {
       counterparty: element.querySelector('[data-finance-counterparty]').value,
       amount: element.querySelector('[data-finance-amount]').value,
       currency: currencyInput.value,
+      relayId: element.querySelector('[data-finance-relay]').value,
       exchangeRate: element.querySelector('[data-finance-rate]').value,
       note: element.querySelector('[data-finance-note]').value
     };
@@ -960,13 +993,15 @@ async function loadMobileStats() {
     }
     if (!state.mobileStatsRelayId) throw new Error('暂无可用中转站，请先在 API 设置中启用中转站');
     const relayId = state.mobileStatsRelayId;
-    const [today, yesterday, d7, month] = await Promise.all([
+    const [today, yesterday, d7, month, accounting] = await Promise.all([
       window.caishen.getGlobalStats('today', relayId),
       window.caishen.getGlobalStats('yesterday', relayId),
       window.caishen.getGlobalStats('7d', relayId),
-      window.caishen.getGlobalStats('month', relayId)
+      window.caishen.getGlobalStats('month', relayId),
+      window.caishen.getBillingAccounting()
     ]);
     state.mobileStats = { today, yesterday, d7, month };
+    state.mobileAccounting = accounting;
     state.mobileStatsUpdatedAt = new Date().toISOString();
     renderMobileStats();
   } catch (error) {
@@ -5249,7 +5284,8 @@ function newRelayDraft() {
     id: `relay-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
     name: '新中转站', description: '', enabled: true, baseUrl: '', imageModel: '',
     healthPath: '/models', modelsPath: '/models',
-    imagePriceMinMinor: 0, imagePriceMaxMinor: 0
+    imagePriceMinMinor: 0, imagePriceMaxMinor: 0,
+    customerCnyPerUsd: 7, upstreamImageCostCnyMicro: 0
   };
 }
 
@@ -5258,6 +5294,9 @@ function relayRowPayload(row) {
   const imagePriceMinMinor = moneyInputToMinor(read('imagePriceMinMinor')?.value || '0', '最低扣费');
   const imagePriceMaxMinor = moneyInputToMinor(read('imagePriceMaxMinor')?.value || '0', '最高扣费');
   if (imagePriceMaxMinor < imagePriceMinMinor) throw new Error('最高扣费不能低于最低扣费');
+  const customerCnyPerUsd = Number(read('customerCnyPerUsd')?.value || 0);
+  if (!Number.isFinite(customerCnyPerUsd) || customerCnyPerUsd <= 0 || customerCnyPerUsd > 1000) throw new Error('请填写有效的站内余额人民币折算汇率');
+  const upstreamImageCostCnyMicro = moneyInputToMinor(read('upstreamImageCostCnyMicro')?.value || '0', '上游每张采购成本');
   return {
     id: row.dataset.relayId,
     name: read('name')?.value.trim() || '未命名中转站',
@@ -5269,7 +5308,9 @@ function relayRowPayload(row) {
     healthPath: read('healthPath')?.value.trim() || '/models',
     modelsPath: read('modelsPath')?.value.trim() || '/models',
     imagePriceMinMinor,
-    imagePriceMaxMinor
+    imagePriceMaxMinor,
+    customerCnyPerUsd: Number(customerCnyPerUsd.toFixed(6)),
+    upstreamImageCostCnyMicro
   };
 }
 
@@ -5321,6 +5362,8 @@ function renderRelayStations() {
           <label>模型列表接口<input data-relay-field="modelsPath" value="${escapeHtml(item.modelsPath || '/models')}" placeholder="/models" spellcheck="false"></label>
           <label>每张最低扣费<div class="money-input"><span>$</span><input data-relay-field="imagePriceMinMinor" type="number" min="0" max="1000000" step="0.000001" inputmode="decimal" placeholder="0.000000" value="${moneyMinorToSixDecimalInput(item.imagePriceMinMinor ?? 0)}"></div></label>
           <label>每张最高扣费<div class="money-input"><span>$</span><input data-relay-field="imagePriceMaxMinor" type="number" min="0" max="1000000" step="0.000001" inputmode="decimal" placeholder="0.000000" value="${moneyMinorToSixDecimalInput(item.imagePriceMaxMinor ?? item.imagePriceMinMinor ?? 0)}"></div></label>
+          <label>站内美元余额折算（人民币/美元）<input data-relay-field="customerCnyPerUsd" type="number" min="0.000001" max="1000" step="0.000001" inputmode="decimal" value="${escapeHtml(item.customerCnyPerUsd ?? 7)}" placeholder="7.000000"></label>
+          <label>上游每张采购成本<div class="money-input"><span>¥</span><input data-relay-field="upstreamImageCostCnyMicro" type="number" min="0" max="1000000" step="0.000001" inputmode="decimal" placeholder="0.020000" value="${moneyMinorToSixDecimalInput(item.upstreamImageCostCnyMicro ?? 0)}"></div></label>
         </div>
         <div class="relay-station-actions">
           <button class="secondary" type="button" data-relay-health>健康检测</button>

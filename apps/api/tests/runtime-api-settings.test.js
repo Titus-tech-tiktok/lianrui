@@ -10,6 +10,7 @@ function relay(overrides = {}) {
     baseUrl: 'https://api.change2pro.com',
     imageApiKey: 'image-private-key', imageModel: 'gpt-image-custom',
     imagePriceMinMinor: 300000, imagePriceMaxMinor: 300000,
+    customerCnyPerUsd: 7, upstreamImageCostCnyMicro: 20000,
     ...overrides
   };
 }
@@ -55,6 +56,8 @@ test('API settings migrate to image-only relays and keep credentials private', a
     assert.equal(saved.version, 4);
     assert.equal(saved.activeRelayId, 'primary');
     assert.equal(saved.relays[0].imageKeyConfigured, true);
+    assert.equal(saved.relays[0].customerCnyPerUsd, 7);
+    assert.equal(saved.relays[0].upstreamImageCostCnyMicro, 20000);
     assert.equal(saved.configured, true);
     assert.equal(saved.imageMaxConcurrency, 21);
 
@@ -113,7 +116,7 @@ test('relay choices expose only names and descriptions while superadmin settings
     assert.deepEqual(choices.relays.map(item => item.id), ['primary', 'backup']);
     assert.equal(choices.relays[0].name, '主中转站');
     assert.equal(choices.relays[0].imagePriceMinMinor, 300000);
-    for (const field of ['baseUrl', 'imageKey', 'imageKeyMasked', 'imageModel', 'usagePath']) {
+    for (const field of ['baseUrl', 'imageKey', 'imageKeyMasked', 'imageModel', 'usagePath', 'customerCnyPerUsd', 'upstreamImageCostCnyMicro']) {
       assert.equal(Object.hasOwn(choices.relays[0], field), false);
     }
 

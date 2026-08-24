@@ -5,7 +5,7 @@ const path = require('node:path');
 const FINANCE_CATEGORIES = Object.freeze({
   client_payment: { direction: 'income', label: '客户充值' },
   other_income: { direction: 'income', label: '其他收入' },
-  gateway_topup: { direction: 'transfer', label: '网关充值' },
+  gateway_topup: { direction: 'transfer', label: '上游充值' },
   development: { direction: 'expense', label: '开发费用' },
   membership: { direction: 'expense', label: '会员费' },
   server: { direction: 'expense', label: '服务器费用' },
@@ -93,6 +93,8 @@ function createFinanceLedgerService(dataRoot) {
     if (!Number.isFinite(exchangeRate) || exchangeRate <= 0 || exchangeRate > 1000) throw new Error('汇率无效');
     const amountCnyMinor = Math.round(originalAmountMinor * exchangeRate);
     if (!Number.isSafeInteger(amountCnyMinor) || amountCnyMinor <= 0) throw new Error('人民币换算金额超出有效范围');
+    const relayId = String(input.relayId ?? existing.relayId ?? '').trim().toLowerCase();
+    if (relayId && !/^[a-z0-9_-]{1,80}$/.test(relayId)) throw new Error('中转站编号无效');
     const now = new Date().toISOString();
     return {
       id: existing.id || `fin_${crypto.randomUUID()}`,
@@ -105,6 +107,7 @@ function createFinanceLedgerService(dataRoot) {
       originalAmountMinor,
       exchangeRate: Number(exchangeRate.toFixed(6)),
       amountCnyMinor,
+      relayId,
       note: String(input.note ?? existing.note ?? '').trim().slice(0, 500),
       createdAt: existing.createdAt || now,
       updatedAt: now
@@ -123,6 +126,14 @@ function createFinanceLedgerService(dataRoot) {
     const totalRevenueCnyMinor = sum(entries, entry => entry.direction === 'income');
     const totalOperatingExpensesCnyMinor = sum(entries, entry => entry.direction === 'expense');
     const totalGatewayTopupsCnyMinor = sum(entries, entry => entry.category === 'gateway_topup');
+    const relayIds = [...new Set(entries.map(entry => String(entry.relayId || '')).filter(Boolean))];
+    const byRelay = relayIds.map(relayId => ({
+      relayId,
+      monthlyGatewayTopupsCnyMinor: sum(monthly, entry => entry.relayId === relayId && entry.category === 'gateway_topup'),
+      totalGatewayTopupsCnyMinor: sum(entries, entry => entry.relayId === relayId && entry.category === 'gateway_topup'),
+      monthlyOperatingExpensesCnyMinor: sum(monthly, entry => entry.relayId === relayId && entry.direction === 'expense'),
+      totalOperatingExpensesCnyMinor: sum(entries, entry => entry.relayId === relayId && entry.direction === 'expense')
+    }));
     return {
       monthlyRevenueCnyMinor,
       operatingExpensesCnyMinor,
@@ -130,7 +141,8 @@ function createFinanceLedgerService(dataRoot) {
       manualCashFlowCnyMinor: monthlyRevenueCnyMinor - operatingExpensesCnyMinor - gatewayTopupsCnyMinor,
       totalRevenueCnyMinor,
       totalOperatingExpensesCnyMinor,
-      totalGatewayTopupsCnyMinor
+      totalGatewayTopupsCnyMinor,
+      byRelay
     };
   }
 

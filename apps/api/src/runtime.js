@@ -429,6 +429,12 @@ function normalizeRelayMinor(value, fallback = 0) {
   return Math.min(1_000_000_000_000, Math.max(0, Math.round(number)));
 }
 
+function normalizeRelayExchangeRate(value, fallback = 7) {
+  const number = Number(value ?? fallback);
+  if (!Number.isFinite(number) || number <= 0 || number > 1000) throw new Error('站内余额人民币折算汇率无效');
+  return Number(number.toFixed(6));
+}
+
 function relayMinorRange(item, current, prefix) {
   const fixedKey = `${prefix}PriceMinor`;
   const minKey = `${prefix}PriceMinMinor`;
@@ -484,7 +490,9 @@ function normalizeRelays(value, currentSettings = {}) {
       healthPath: normalizeRelayPath(item?.healthPath || current.healthPath, '/models'),
       modelsPath: normalizeRelayPath(item?.modelsPath || current.modelsPath, '/models'),
       imagePriceMinMinor: imageRange.min,
-      imagePriceMaxMinor: imageRange.max
+      imagePriceMaxMinor: imageRange.max,
+      customerCnyPerUsd: normalizeRelayExchangeRate(item?.customerCnyPerUsd, current.customerCnyPerUsd ?? 7),
+      upstreamImageCostCnyMicro: normalizeRelayMinor(item?.upstreamImageCostCnyMicro, current.upstreamImageCostCnyMicro ?? 0)
     }];
   });
 }

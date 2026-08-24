@@ -270,6 +270,44 @@ test('global stats keep relay balances and usage isolated', async t => {
   assert.equal(second.balanceSummary.totals.availableMinor, 1_820_000);
 });
 
+test('reseller accounting recognizes image revenue and relay-specific upstream cost', async t => {
+  const { root, billing } = await fixture();
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const users = new Map([
+    ['member-workspace', { role: 'member', username: 'seller' }],
+    ['super-workspace', { role: 'superadmin', username: 'root' }]
+  ]);
+  await billing.saveRules({ enabled: true });
+  await billing.adjustBalance('member-workspace', RELAY_ID, 14_286);
+  await billing.adjustBalance('super-workspace', RELAY_ID, 14_286);
+  await billing.commit(await billing.reserve('member-workspace', 'image', {
+    relayId: RELAY_ID,
+    amountMinor: 14_286,
+    description: '客户成功生图'
+  }));
+  await billing.commit(await billing.reserve('super-workspace', 'image', {
+    relayId: RELAY_ID,
+    amountMinor: 14_286,
+    description: '超级管理员测试图'
+  }));
+
+  const report = await billing.getAccountingReport([{
+    id: RELAY_ID,
+    name: '一号站',
+    customerCnyPerUsd: 7,
+    upstreamImageCostCnyMicro: 20_000
+  }], users);
+
+  assert.equal(report.complete, true);
+  assert.equal(report.relays[0].successfulImages, 1);
+  assert.equal(report.relays[0].customerRechargeCnyMinor, 10);
+  assert.equal(report.relays[0].customerBalanceCnyMinor, 0);
+  assert.equal(report.relays[0].confirmedRevenueCnyMinor, 10);
+  assert.equal(report.relays[0].upstreamCostCnyMinor, 2);
+  assert.equal(report.relays[0].grossProfitCnyMinor, 8);
+  assert.equal(report.totals.grossProfitCnyMinor, 8);
+});
+
 test('global stats current month excludes entries before Beijing month start', async t => {
   const { root, billing } = await fixture();
   t.after(() => fs.rm(root, { recursive: true, force: true }));
