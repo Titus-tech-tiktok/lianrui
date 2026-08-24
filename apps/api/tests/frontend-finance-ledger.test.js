@@ -16,12 +16,12 @@ test('mobile finance ledger uses Chinese labels and independent finance APIs', a
   const renderer = await fs.readFile(path.join(__dirname, '../../web/src/renderer.js'), 'utf8');
   const bridge = await fs.readFile(path.join(__dirname, '../../web/src/api-bridge.js'), 'utf8');
 
-  for (const label of ['财务账本', '本月收入', 'API 实际成本', '经营支出', '本月净利润', '累计总利润', '本月现金流', '新增记录', '导出 CSV']) {
+  for (const label of ['财务账本', '本月收入', '本月用户扣费', '团队可用余额', '经营支出', '本月现金流', '新增记录', '导出 CSV']) {
     assert.match(renderer, new RegExp(label));
   }
-  assert.match(renderer, /totalRevenue - totalOperatingExpenses - cumulativeGatewayCost\.minor/);
-  assert.match(renderer, /function financeGatewayCost\(month\)/);
-  assert.match(renderer, /return \{ available: false, minor: 0 \}/);
+  assert.match(renderer, /不自动推算净利润/);
+  assert.doesNotMatch(renderer, /待成本同步|网关成本可用后/);
+  assert.match(renderer, /state\.mobileStats\?\.month/);
   assert.match(renderer, /exchangeRate: element\.querySelector/);
   assert.match(renderer, /getFinanceLedger\(state\.mobileFinanceMonth\)/);
   assert.match(bridge, /\/api\/finance\/ledger/);

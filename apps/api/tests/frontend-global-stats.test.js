@@ -11,6 +11,8 @@ test('mobile global stats display USD values with exactly two decimal places', a
   assert.match(renderer, /formatMobileStatsMoney\(item\.totalCostMinor\)/);
   assert.match(renderer, /formatMobileStatsMoney\(selectedTotals\.totalCostMinor\)/);
   assert.match(renderer, /formatMobileStatsMoney\(selectedTotals\.averageCostMinor\)/);
+  assert.match(renderer, /团队可用余额/);
+  assert.match(renderer, /formatMobileStatsMoney\(selectedStats\.balanceSummary\?\.totals\?\.availableMinor\)/);
 });
 
 test('mobile global stats omit the generation trend panel', async () => {

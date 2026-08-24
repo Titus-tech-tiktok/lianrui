@@ -628,15 +628,6 @@ function formatFinanceCny(minor = 0) {
   return `${sign}¥${(Math.abs(amount) / 100).toFixed(2)}`;
 }
 
-function financeGatewayCost(month) {
-  void month;
-  return { available: false, minor: 0 };
-}
-
-function financeGatewayCumulativeCost() {
-  return { available: false, minor: 0 };
-}
-
 function financeCategoryLabel(category) {
   return ({
     client_payment: '客户充值',
@@ -670,16 +661,11 @@ function mobileFinancePanelHtml() {
   const revenue = Number(summary.monthlyRevenueCnyMinor) || 0;
   const operatingExpenses = Number(summary.operatingExpensesCnyMinor) || 0;
   const gatewayTopups = Number(summary.gatewayTopupsCnyMinor) || 0;
-  const gatewayCost = financeGatewayCost(month);
-  const cumulativeGatewayCost = financeGatewayCumulativeCost();
-  const netProfit = gatewayCost.available ? revenue - operatingExpenses - gatewayCost.minor : null;
-  const totalRevenue = Number(summary.totalRevenueCnyMinor) || 0;
-  const totalOperatingExpenses = Number(summary.totalOperatingExpensesCnyMinor) || 0;
-  const totalProfit = cumulativeGatewayCost.available
-    ? totalRevenue - totalOperatingExpenses - cumulativeGatewayCost.minor
-    : null;
   const cashFlow = Number(summary.manualCashFlowCnyMinor) || 0;
-  const margin = netProfit !== null && revenue > 0 ? (netProfit / revenue) * 100 : null;
+  const relayStats = state.mobileStats?.month || {};
+  const relayBalanceMinor = Number(relayStats.balanceSummary?.totals?.availableMinor) || 0;
+  const relayBilledMinor = Number(relayStats.totals?.totalCostMinor) || 0;
+  const relay = (relayStats.relays || []).find(item => item.id === state.mobileStatsRelayId);
   const entries = Array.isArray(data?.entries) ? data.entries : [];
   const visibleEntries = entries.filter(entry => state.mobileFinanceFilter === 'all' || entry.direction === state.mobileFinanceFilter);
   const entryHtml = visibleEntries.length ? visibleEntries.map(entry => `
@@ -696,11 +682,11 @@ function mobileFinancePanelHtml() {
       </header>
       <div class="mobile-finance-kpis">
         <article><span>本月收入</span><strong>${formatFinanceCny(revenue)}</strong><small>累计收入 ${formatFinanceCny(summary.totalRevenueCnyMinor)}</small></article>
-        <article><span>API 实际成本</span><strong>${gatewayCost.available ? formatFinanceCny(gatewayCost.minor) : '暂不可用'}</strong><small>按网关实时消耗统计</small></article>
+        <article><span>本月用户扣费</span><strong>${formatMobileStatsMoney(relayBilledMinor)}</strong><small>${escapeHtml(relay?.name || '当前中转站')} 本站计费流水</small></article>
+        <article><span>团队可用余额</span><strong>${formatMobileStatsMoney(relayBalanceMinor)}</strong><small>${escapeHtml(relay?.name || '当前中转站')} 独立账户</small></article>
         <article><span>经营支出</span><strong>${formatFinanceCny(operatingExpenses)}</strong><small>不含网关充值</small></article>
-        <article class="profit"><span>本月净利润</span><strong>${netProfit === null ? '待成本同步' : formatFinanceCny(netProfit)}</strong><small>${margin === null ? '网关成本可用后自动计算' : `利润率 ${margin.toFixed(1)}%`}</small></article>
-        <article class="profit total-profit"><span>累计总利润</span><strong>${totalProfit === null ? '待成本同步' : formatFinanceCny(totalProfit)}</strong><small>${cumulativeGatewayCost.available ? `累计 API 成本 ${formatFinanceCny(cumulativeGatewayCost.minor)}` : '累计网关成本可用后自动计算'}</small></article>
       </div>
+      <p class="mobile-finance-cost-note">中转站不提供上游实际成本接口，因此不自动推算净利润，避免账目失真。</p>
       <div class="mobile-finance-cashflow">
         <div><span>本月现金流</span><strong>${formatFinanceCny(cashFlow)}</strong><small>收入 - 经营支出 - 网关充值</small></div>
         <div><span>网关充值</span><strong>${formatFinanceCny(gatewayTopups)}</strong><small>只计现金流，不重复计入利润</small></div>
@@ -887,9 +873,9 @@ function renderMobileStats() {
     </nav>
     <section class="mobile-stats-hero-card">
       <div>
-        <span>${escapeHtml(selectedRange.label)} Spend</span>
-        <strong>${formatMobileStatsMoney(selectedTotals.totalCostMinor)}</strong>
-        <p>Initial ${formatInteger(selectedTotals.imageGenerated || 0)} · Regenerated ${formatInteger(selectedTotals.imageRegenerated || 0)}</p>
+        <span>${escapeHtml(selectedRelay?.name || '当前中转站')} · 团队可用余额</span>
+        <strong>${formatMobileStatsMoney(selectedStats.balanceSummary?.totals?.availableMinor)}</strong>
+        <p>${escapeHtml(selectedRange.label)} 已扣费 ${formatMobileStatsMoney(selectedTotals.totalCostMinor)} · 生成 ${formatInteger(totalImages)} 张</p>
       </div>
       <div class="mobile-stats-donut" style="--rate:${Math.round((Number(selectedTotals.successRate) || 0) * 360)}deg">
         <b>${formatPercent(selectedTotals.successRate)}</b>
@@ -902,7 +888,7 @@ function renderMobileStats() {
       <div class="mobile-stats-account-list">${accountHtml}</div>
     </section>
     <section class="mobile-stats-summary-strip">
-      <div><span>Relay Balance</span><b>${formatMobileStatsMoney(selectedStats.balanceSummary?.totals?.availableMinor)}</b></div>
+      <div><span>Period Spend</span><b>${formatMobileStatsMoney(selectedTotals.totalCostMinor)}</b></div>
       <div><span>Total Images</span><b>${formatInteger(totalImages)}</b></div>
       <div><span>Average Cost</span><b>${formatMobileStatsMoney(selectedTotals.averageCostMinor)}</b></div>
     </section>

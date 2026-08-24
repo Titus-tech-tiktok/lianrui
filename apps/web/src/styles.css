@@ -8943,6 +8943,16 @@ label input, label textarea {
   font-size: 18px;
 }
 
+.mobile-finance-cost-note {
+  margin: 0 14px 14px;
+  padding: 11px 13px;
+  border-radius: 12px;
+  background: rgba(183, 148, 83, .1);
+  color: #78633e;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
 .mobile-finance-toolbar,
 .mobile-finance-list-head {
   display: flex;
