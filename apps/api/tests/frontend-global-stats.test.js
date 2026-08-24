@@ -32,7 +32,7 @@ test('mobile global stats use English labels, select one range and include curre
   assert.match(renderer, /Global Analytics/);
   assert.doesNotMatch(renderer, /永沙全局统计/);
   assert.doesNotMatch(renderBlock, /mobile-stats-range-grid/);
-  assert.match(loadBlock, /getGlobalStats\('month'\)/);
+  assert.match(loadBlock, /getGlobalStats\('month', relayId\)/);
   assert.doesNotMatch(loadBlock, /getGlobalStats\('30d'\)/);
 });
 
@@ -46,17 +46,19 @@ test('mobile account ranking displays available balance', async () => {
   assert.match(block, /Balance/);
 });
 
-test('mobile global stats mask OpenAI service credits until the eye button is used', async () => {
+test('mobile accounting selects one relay and shows its independent ledger', async () => {
   const renderer = await fs.readFile(path.join(__dirname, '../../web/src/renderer.js'), 'utf8');
+  const bridge = await fs.readFile(path.join(__dirname, '../../web/src/api-bridge.js'), 'utf8');
   const block = renderer.match(/function renderMobileStats\(\)[\s\S]*?\n\}/)?.[0] || '';
+  const loadBlock = renderer.match(/async function loadMobileStats\(\)[\s\S]*?\n\}/)?.[0] || '';
 
-  assert.match(renderer, /function formatGatewayContractBalance\(value\)/);
-  assert.match(renderer, /amount\.toFixed\(2\)/);
-  assert.match(block, /OpenAI Service Credits/);
-  assert.match(block, /mobileGatewayBalanceToggle/);
-  assert.match(block, /mobileGatewayBalanceVisible/);
-  assert.match(renderer, /return '\$••••••'/);
-  assert.match(block, /mobileGatewayUsage\?\.balance/);
-  assert.doesNotMatch(block, /change2pro/i);
-  assert.match(renderer, /getGatewayUsage\(\)\.catch\(\(\) => null\)/);
+  assert.match(renderer, /mobileStatsRelayId: ''/);
+  assert.match(block, /id="mobileStatsRelay"/);
+  assert.match(block, /各中转站账户互不通用/);
+  assert.match(block, /费用流水/);
+  assert.match(block, /selectedStats\.transactions/);
+  assert.match(block, /balanceAccounts\.map/);
+  assert.match(loadBlock, /getRelayChoices\(\)/);
+  assert.match(loadBlock, /getGlobalStats\('today', relayId\)/);
+  assert.match(bridge, /relayId=.*encodeURIComponent\(relayId\)/);
 });

@@ -240,6 +240,36 @@ test('global stats include current non-superadmin balances by role', async t => 
   assert.deepEqual(stats.balanceSummary.byAccount.map(item => item.workspaceId), ['admin-workspace', 'member-workspace']);
 });
 
+test('global stats keep relay balances and usage isolated', async t => {
+  const { root, billing } = await fixture();
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const secondRelayId = 'relay-two';
+  const users = new Map([['member-workspace', { role: 'member', username: 'seller' }]]);
+  await billing.saveRules({ enabled: true });
+  await billing.adjustBalance('member-workspace', RELAY_ID, 1_000_000);
+  await billing.adjustBalance('member-workspace', secondRelayId, 2_000_000);
+  await billing.commit(await billing.reserve('member-workspace', 'image', {
+    relayId: RELAY_ID,
+    amountMinor: 150_000,
+    description: '一号站生图'
+  }));
+  await billing.commit(await billing.reserve('member-workspace', 'image', {
+    relayId: secondRelayId,
+    amountMinor: 180_000,
+    description: '二号站生图'
+  }));
+
+  const first = await billing.getGlobalStats('today', users, RELAY_ID);
+  const second = await billing.getGlobalStats('today', users, secondRelayId);
+
+  assert.equal(first.relayId, RELAY_ID);
+  assert.equal(first.totals.totalCostMinor, 150_000);
+  assert.equal(first.balanceSummary.totals.availableMinor, 850_000);
+  assert.equal(second.relayId, secondRelayId);
+  assert.equal(second.totals.totalCostMinor, 180_000);
+  assert.equal(second.balanceSummary.totals.availableMinor, 1_820_000);
+});
+
 test('global stats current month excludes entries before Beijing month start', async t => {
   const { root, billing } = await fixture();
   t.after(() => fs.rm(root, { recursive: true, force: true }));

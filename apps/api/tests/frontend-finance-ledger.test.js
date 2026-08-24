@@ -20,7 +20,8 @@ test('mobile finance ledger uses Chinese labels and independent finance APIs', a
     assert.match(renderer, new RegExp(label));
   }
   assert.match(renderer, /totalRevenue - totalOperatingExpenses - cumulativeGatewayCost\.minor/);
-  assert.match(renderer, /state\.mobileGatewayUsage\?\.total\?\.actualCost/);
+  assert.match(renderer, /function financeGatewayCost\(month\)/);
+  assert.match(renderer, /return \{ available: false, minor: 0 \}/);
   assert.match(renderer, /exchangeRate: element\.querySelector/);
   assert.match(renderer, /getFinanceLedger\(state\.mobileFinanceMonth\)/);
   assert.match(bridge, /\/api\/finance\/ledger/);

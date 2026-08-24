@@ -118,6 +118,7 @@ const state = {
   globalStatsRange: 'today',
   mobileStats: null,
   mobileStatsRange: 'today',
+  mobileStatsRelayId: '',
   mobileFinanceExpanded: false,
   mobileFinanceMonth: '',
   mobileFinanceFilter: 'all',
@@ -367,6 +368,12 @@ function formatMoney(minor = 0) {
 function formatMobileStatsMoney(minor = 0) {
   const amount = Math.max(0, Number(minor) || 0) / BILLING_AMOUNT_SCALE;
   return `$${amount.toFixed(2)}`;
+}
+
+function formatMobileStatsSignedMoney(minor = 0) {
+  const amount = Number(minor) || 0;
+  const sign = amount > 0 ? '+' : amount < 0 ? '-' : '';
+  return `${sign}$${(Math.abs(amount) / BILLING_AMOUNT_SCALE).toFixed(2)}`;
 }
 
 function formatDurationMs(ms = 0) {
@@ -828,27 +835,53 @@ function renderMobileStats() {
   const selectedRange = ranges.find(item => item.key === state.mobileStatsRange) || ranges[0];
   const selectedStats = stats[selectedRange.dataKey] || {};
   const selectedTotals = selectedStats.totals || {};
-  const balanceByWorkspace = new Map((selectedStats.balanceSummary?.byAccount || [])
-    .map(account => [String(account.workspaceId || ''), account]));
-  const accountRows = (selectedStats.byAccount || []).slice(0, 6);
+  const relays = Array.isArray(stats.today?.relays) ? stats.today.relays : (state.relayChoices?.relays || []);
+  const selectedRelay = relays.find(relay => relay.id === state.mobileStatsRelayId)
+    || relays.find(relay => relay.id === selectedStats.relayId)
+    || relays[0];
+  const balanceAccounts = selectedStats.balanceSummary?.byAccount || [];
+  const balanceByWorkspace = new Map(balanceAccounts.map(account => [String(account.workspaceId || ''), account]));
+  const usageByWorkspace = new Map((selectedStats.byAccount || []).map(account => [String(account.workspaceId || ''), account]));
+  const accountRows = balanceAccounts.map(balance => ({
+    ...(usageByWorkspace.get(String(balance.workspaceId || '')) || {}),
+    workspaceId: balance.workspaceId,
+    username: balance.username,
+    displayName: balance.displayName,
+    balance
+  }));
+  for (const usage of selectedStats.byAccount || []) {
+    if (!balanceByWorkspace.has(String(usage.workspaceId || ''))) accountRows.push({ ...usage, balance: null });
+  }
+  accountRows.sort((left, right) => (Number(right.totalCostMinor) || 0) - (Number(left.totalCostMinor) || 0)
+    || (Number(right.balance?.availableMinor) || 0) - (Number(left.balance?.availableMinor) || 0));
   const maxAccountCost = Math.max(1, ...accountRows.map(item => Number(item.totalCostMinor) || 0));
   const accountHtml = accountRows.length ? accountRows.map((item, index) => {
     const width = Math.max(6, Math.round(((Number(item.totalCostMinor) || 0) / maxAccountCost) * 100));
-    const balance = balanceByWorkspace.get(String(item.workspaceId || ''));
+    const balance = item.balance || balanceByWorkspace.get(String(item.workspaceId || ''));
     return `
       <div class="mobile-stats-account-row">
         <span class="mobile-stats-rank">${index + 1}</span>
         <div class="mobile-stats-account-name"><b>${escapeHtml(item.displayName || item.username || 'Unnamed account')}</b><i style="width:${width}%"></i></div>
         <strong>${formatMobileStatsMoney(item.totalCostMinor)}</strong>
         <strong class="mobile-stats-account-balance">${formatMobileStatsMoney(balance?.availableMinor)}</strong>
-        <em>${formatInteger(item.imageGenerated || 0)}</em>
+        <em>${formatPercent(item.successRate)}</em>
       </div>`;
-  }).join('') : `<div class="mobile-stats-empty">No account usage for ${escapeHtml(selectedRange.label.toLowerCase())}</div>`;
+  }).join('') : `<div class="mobile-stats-empty">No accounts are available for ${escapeHtml(selectedRelay?.name || 'this relay')}</div>`;
+  const transactionHtml = (selectedStats.transactions || []).length ? selectedStats.transactions.map(entry => `
+    <div class="mobile-stats-ledger-row">
+      <span class="mobile-stats-ledger-dot ${Number(entry.amountMinor) < 0 ? 'debit' : 'credit'}"></span>
+      <div><b>${escapeHtml(entry.displayName || entry.username || entry.workspaceId || 'Unknown account')}</b><small>${escapeHtml(entry.description || billingKindName(entry.kind))} · ${escapeHtml(formatLocalDateTime(entry.createdAt))}</small></div>
+      <strong class="${Number(entry.amountMinor) < 0 ? 'debit' : 'credit'}">${formatMobileStatsSignedMoney(entry.amountMinor)}</strong>
+    </div>`).join('') : `<div class="mobile-stats-empty">${escapeHtml(selectedRange.label)} 暂无费用流水</div>`;
   const totalImages = mobileStatsTotalImages(selectedTotals);
   const updated = state.mobileStatsUpdatedAt ? `Updated ${formatLocalDateTime(state.mobileStatsUpdatedAt)}` : 'Analytics are up to date';
   const updatedNode = $('#mobileStatsUpdatedAt');
   if (updatedNode) updatedNode.textContent = updated;
   container.innerHTML = `
+    <section class="mobile-stats-relay-picker">
+      <label for="mobileStatsRelay"><span>中转站账户</span><select id="mobileStatsRelay" ${relays.length < 2 ? 'disabled' : ''}>${relays.map(relay => `<option value="${escapeHtml(relay.id)}"${relay.id === selectedRelay?.id ? ' selected' : ''}>${escapeHtml(relay.name)}</option>`).join('')}</select></label>
+      <p>${escapeHtml(selectedRelay?.description || '余额、消费和流水按中转站独立计算')}<small>各中转站账户互不通用</small></p>
+    </section>
     <nav class="mobile-stats-range-switch" aria-label="Select analytics range">
       ${ranges.map(item => `<button type="button" data-mobile-stats-range="${item.key}" class="${item.key === selectedRange.key ? 'active' : ''}">${escapeHtml(item.label)}</button>`).join('')}
     </nav>
@@ -864,17 +897,28 @@ function renderMobileStats() {
       </div>
     </section>
     <section class="mobile-stats-panel">
-      <div class="mobile-stats-panel-head"><h2>Account Ranking</h2><span>${escapeHtml(selectedRange.label)} · ${formatInteger((selectedStats.byAccount || []).length)} accounts</span></div>
+      <div class="mobile-stats-panel-head"><h2>Account Ranking</h2><span>${escapeHtml(selectedRange.label)} · ${formatInteger(accountRows.length)} accounts</span></div>
       <div class="mobile-stats-account-head"><span>Account</span><span>Spend</span><span>Balance</span><span>Success</span></div>
       <div class="mobile-stats-account-list">${accountHtml}</div>
     </section>
     <section class="mobile-stats-summary-strip">
-      <div><span>Average Cost</span><b>${formatMobileStatsMoney(selectedTotals.averageCostMinor)}</b></div>
+      <div><span>Relay Balance</span><b>${formatMobileStatsMoney(selectedStats.balanceSummary?.totals?.availableMinor)}</b></div>
       <div><span>Total Images</span><b>${formatInteger(totalImages)}</b></div>
-      <div><span>Template Analyses</span><b>${formatInteger(selectedTotals.templateAnalysisFolders || 0)}</b></div>
+      <div><span>Average Cost</span><b>${formatMobileStatsMoney(selectedTotals.averageCostMinor)}</b></div>
+    </section>
+    <section class="mobile-stats-panel mobile-stats-ledger-panel">
+      <div class="mobile-stats-panel-head"><h2>费用流水</h2><span>${escapeHtml(selectedRelay?.name || '')} · ${escapeHtml(selectedRange.label)}</span></div>
+      <div class="mobile-stats-ledger-list">${transactionHtml}</div>
     </section>
     <button class="mobile-finance-more" id="mobileFinanceMore" type="button" aria-expanded="${state.mobileFinanceExpanded}">${state.mobileFinanceExpanded ? '收起财务账本' : 'More'}</button>
     ${mobileFinancePanelHtml()}`;
+  const relaySelect = $('#mobileStatsRelay');
+  if (relaySelect) {
+    relaySelect.onchange = () => {
+      state.mobileStatsRelayId = relaySelect.value;
+      void loadMobileStats();
+    };
+  }
   container.querySelectorAll('[data-mobile-stats-range]').forEach(button => {
     button.onclick = () => {
       state.mobileStatsRange = button.dataset.mobileStatsRange || 'today';
@@ -922,11 +966,19 @@ async function loadMobileStats() {
   const button = $('#refreshMobileStatsButton');
   if (button) button.disabled = true;
   try {
+    const relayChoices = await window.caishen.getRelayChoices().catch(() => state.relayChoices);
+    state.relayChoices = relayChoices || state.relayChoices;
+    const relays = state.relayChoices?.relays || [];
+    if (!relays.some(relay => relay.id === state.mobileStatsRelayId)) {
+      state.mobileStatsRelayId = state.relayChoices?.activeRelayId || relays[0]?.id || '';
+    }
+    if (!state.mobileStatsRelayId) throw new Error('暂无可用中转站，请先在 API 设置中启用中转站');
+    const relayId = state.mobileStatsRelayId;
     const [today, yesterday, d7, month] = await Promise.all([
-      window.caishen.getGlobalStats('today'),
-      window.caishen.getGlobalStats('yesterday'),
-      window.caishen.getGlobalStats('7d'),
-      window.caishen.getGlobalStats('month')
+      window.caishen.getGlobalStats('today', relayId),
+      window.caishen.getGlobalStats('yesterday', relayId),
+      window.caishen.getGlobalStats('7d', relayId),
+      window.caishen.getGlobalStats('month', relayId)
     ]);
     state.mobileStats = { today, yesterday, d7, month };
     state.mobileStatsUpdatedAt = new Date().toISOString();

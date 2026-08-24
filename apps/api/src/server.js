@@ -1356,7 +1356,39 @@ async function startServer() {
       const users = await auth.listUsers();
       const userLookup = new Map(users.map(user => [user.workspaceId, user]));
       const range = String(req.query.range || 'today');
-      return res.json({ data: await runtime.billing.getGlobalStats(range, userLookup) });
+      const relayChoices = await runtime.loadRelayChoices();
+      const requestedRelayId = String(req.query.relayId || '');
+      const selectedRelay = relayChoices.relays.find(relay => relay.id === requestedRelayId)
+        || relayChoices.relays.find(relay => relay.id === relayChoices.activeRelayId)
+        || relayChoices.relays[0];
+      if (!selectedRelay) return res.status(400).json({ error: '暂无可用中转站，请先在 API 设置中启用中转站' });
+      const [stats, transactions] = await Promise.all([
+        runtime.billing.getGlobalStats(range, userLookup, selectedRelay.id),
+        runtime.billing.listTransactions('', 300, selectedRelay.id)
+      ]);
+      const startedAt = new Date(stats.startedAt).getTime();
+      const endedAt = new Date(stats.endedAt).getTime();
+      const visibleTransactions = transactions.filter(entry => {
+        if (userLookup.get(entry.workspaceId)?.role === 'superadmin') return false;
+        const createdAt = new Date(entry.createdAt).getTime();
+        return Number.isFinite(createdAt) && createdAt >= startedAt && createdAt < endedAt;
+      }).slice(0, 50).map(entry => {
+        const user = userLookup.get(entry.workspaceId) || {};
+        return {
+          ...entry,
+          username: user.username || entry.workspaceId,
+          displayName: user.displayName || user.username || entry.workspaceId
+        };
+      });
+      return res.json({
+        data: {
+          ...stats,
+          relayId: selectedRelay.id,
+          relays: relayChoices.relays,
+          activeRelayId: relayChoices.activeRelayId,
+          transactions: visibleTransactions
+        }
+      });
     } catch (error) {
       return res.status(400).json({ error: error?.message || String(error) });
     }

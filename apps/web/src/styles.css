@@ -6896,6 +6896,49 @@ label input, label textarea {
   gap: 14px;
 }
 
+.mobile-stats-relay-picker {
+  padding: 15px 16px;
+  border: 1px solid rgba(47, 124, 116, .2);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, .9);
+  box-shadow: 0 12px 30px rgba(16, 27, 43, .07);
+}
+
+.mobile-stats-relay-picker label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.mobile-stats-relay-picker label span {
+  color: var(--navy);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.mobile-stats-relay-picker select {
+  min-width: 0;
+  min-height: 42px;
+  border-color: rgba(47, 124, 116, .24);
+  background: #f7faf9;
+  font-weight: 800;
+}
+
+.mobile-stats-relay-picker p {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.mobile-stats-relay-picker p small {
+  display: block;
+  margin-top: 2px;
+  color: var(--teal);
+  font-weight: 800;
+}
+
 .mobile-stats-loading {
   padding: 28px 18px;
   border: 1px solid rgba(47, 124, 116, .18);
@@ -8557,6 +8600,63 @@ label input, label textarea {
 .mobile-stats-summary-strip b {
   color: var(--navy);
   font-size: 16px;
+}
+
+.mobile-stats-ledger-list {
+  display: grid;
+  margin-top: 10px;
+}
+
+.mobile-stats-ledger-row {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0;
+  border-top: 1px solid rgba(203, 211, 205, .65);
+}
+
+.mobile-stats-ledger-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--teal);
+}
+
+.mobile-stats-ledger-dot.debit {
+  background: #b15a50;
+}
+
+.mobile-stats-ledger-row div {
+  min-width: 0;
+}
+
+.mobile-stats-ledger-row b,
+.mobile-stats-ledger-row small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-stats-ledger-row b {
+  color: var(--navy);
+  font-size: 13px;
+}
+
+.mobile-stats-ledger-row small {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.mobile-stats-ledger-row > strong {
+  color: var(--teal);
+  font-size: 13px;
+}
+
+.mobile-stats-ledger-row > strong.debit {
+  color: #a14d44;
 }
 
 @media (max-width: 1100px) {

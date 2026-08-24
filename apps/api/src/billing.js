@@ -301,7 +301,8 @@ function createBillingService(dataRoot) {
     return date.toISOString();
   }
 
-  async function buildBalanceSummary(userLookup = new Map()) {
+  async function buildBalanceSummary(userLookup = new Map(), relayIdValue = '') {
+    const relayId = relayIdValue ? normalizeRelayId(relayIdValue) : '';
     const state = await readAccounts();
     const totals = { count: 0, balanceMinor: 0, availableMinor: 0, reservedMinor: 0 };
     const byRole = new Map();
@@ -309,7 +310,10 @@ function createBillingService(dataRoot) {
     for (const [lookupWorkspaceId, user] of userLookup.entries()) {
       const workspaceId = String(user?.workspaceId || lookupWorkspaceId || '').trim();
       if (!workspaceId || user?.role === 'superadmin') continue;
-      const publicValue = publicWorkspaceAccount(workspaceId, state.accounts[workspaceId]);
+      const record = normalizeAccountRecord(state.accounts[workspaceId]);
+      const publicValue = relayId
+        ? publicAccount(workspaceId, relayId, record.wallets[relayId] || normalizeWallet({}))
+        : publicWorkspaceAccount(workspaceId, record);
       const role = String(user?.role || 'member');
       const roleSummary = byRole.get(role) || { role, count: 0, balanceMinor: 0, availableMinor: 0, reservedMinor: 0 };
       roleSummary.count += 1;
@@ -341,8 +345,9 @@ function createBillingService(dataRoot) {
     };
   }
 
-  async function getGlobalStats(rangeValue = 'today', userLookup = new Map()) {
-    const balanceSummary = await buildBalanceSummary(userLookup);
+  async function getGlobalStats(rangeValue = 'today', userLookup = new Map(), relayIdValue = '') {
+    const relayId = relayIdValue ? normalizeRelayId(relayIdValue) : '';
+    const balanceSummary = await buildBalanceSummary(userLookup, relayId);
     const windowRange = statsWindowRange(rangeValue);
     let text = '';
     try { text = await fs.readFile(ledgerFile, 'utf8'); } catch {
@@ -366,6 +371,8 @@ function createBillingService(dataRoot) {
     for (const line of text.trim().split('\n').filter(Boolean)) {
       let entry;
       try { entry = JSON.parse(line); } catch { continue; }
+      const entryRelayId = String(entry.relayId || legacyRelayId);
+      if (relayId && entryRelayId !== relayId) continue;
       if (!BILLING_TYPES.has(String(entry.kind || ''))) continue;
       if (userLookup.get(entry.workspaceId)?.role === 'superadmin') continue;
       const created = new Date(entry.createdAt).getTime();
@@ -432,6 +439,7 @@ function createBillingService(dataRoot) {
         : 0
     });
     return {
+      relayId,
       range: windowRange.range,
       startedAt: new Date(windowRange.startMs).toISOString(),
       endedAt: new Date(windowRange.endMs).toISOString(),
