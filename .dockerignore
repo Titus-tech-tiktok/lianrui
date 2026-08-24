@@ -1,0 +1,14 @@
+.git
+.github
+.runtime
+.env
+data
+output
+node_modules
+apps/*/node_modules
+apps/*/dist
+apps/web/dist
+*.log
+*.tar
+*.tar.gz
+.DS_Store
