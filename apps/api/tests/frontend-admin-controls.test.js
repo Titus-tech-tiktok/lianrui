@@ -56,3 +56,14 @@ test('团队余额中转站筛选不会被压缩成空白下拉框', async () =>
   assert.match(renderer, /function billingAdminWithRelayFallback\(billing, relayChoices\)/);
   assert.match(renderer, /window\.caishen\.getBillingAdmin\(\),[\s\S]*window\.caishen\.getRelayChoices\(\)/);
 });
+
+test('管理员线路选择和侧边栏不公开中转站单价', async () => {
+  const renderer = await fs.readFile(path.join(webRoot, 'src/renderer.js'), 'utf8');
+  const billingSummary = renderer.slice(renderer.indexOf('function renderBillingSummary()'), renderer.indexOf('function renderBillingDetail()'));
+  const relayStations = renderer.slice(renderer.indexOf('function renderRelayStations()'), renderer.indexOf('async function deleteRelay(button)'));
+  assert.match(billingSummary, /currentBillingHint'\)\.textContent = relay\.name \|\| '当前中转站'/);
+  assert.doesNotMatch(billingSummary, /feeRangeLabel|\/张/);
+  const adminChoices = relayStations.slice(relayStations.indexOf("if (!isSuperAdmin())"), relayStations.indexOf('return;', relayStations.indexOf("if (!isSuperAdmin())")));
+  assert.match(adminChoices, /item\.description \|\| '可用中转站'/);
+  assert.doesNotMatch(adminChoices, /feeRangeLabel|\/张/);
+});

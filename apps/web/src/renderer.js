@@ -1036,7 +1036,7 @@ function renderBillingSummary() {
   const relay = (summary.relays || []).find(item => item.id === summary.relayId) || {};
   $('#currentBalance').textContent = formatMoney(summary.account?.balanceMinor);
   $('#openBillingDetailButton span').textContent = '当前线路算力余额';
-  $('#currentBillingHint').textContent = `${relay.name || '当前中转站'} · ${feeRangeLabel(relay.imagePriceMinMinor, relay.imagePriceMaxMinor)}/张`;
+  $('#currentBillingHint').textContent = relay.name || '当前中转站';
   renderBillingDetail();
 }
 
@@ -5261,7 +5261,7 @@ function renderRelayStations() {
   if (!isSuperAdmin()) {
     list.innerHTML = relays.map(item => `
       <button class="relay-station-choice${item.id === activeId ? ' active' : ''}" type="button" data-select-relay="${escapeHtml(item.id)}">
-        <span><b>${escapeHtml(item.name)}</b><small>${escapeHtml(item.description || '可用中转站')} · ${feeRangeLabel(item.imagePriceMinMinor, item.imagePriceMaxMinor)}/张</small></span>
+        <span><b>${escapeHtml(item.name)}</b><small>${escapeHtml(item.description || '可用中转站')}</small></span>
         <em>${item.id === activeId ? '当前使用' : '切换'}</em>
       </button>`).join('');
     return;
