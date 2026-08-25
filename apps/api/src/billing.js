@@ -280,6 +280,55 @@ function createBillingService(dataRoot) {
     return { range: 'today', startMs: todayStartMs, endMs: nowMs };
   }
 
+  function accountingWindowRange(options = {}) {
+    const nowMs = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+    const chinaOffsetMs = 8 * 60 * 60 * 1000;
+    const todayStartMs = Math.floor((nowMs + chinaOffsetMs) / dayMs) * dayMs - chinaOffsetMs;
+    const range = String(options.range || 'month');
+    const chinaDate = ms => new Date(ms + chinaOffsetMs).toISOString().slice(0, 10);
+    const dateStart = value => {
+      const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (!match) return NaN;
+      const year = Number(match[1]);
+      const month = Number(match[2]);
+      const day = Number(match[3]);
+      const utc = Date.UTC(year, month - 1, day);
+      const parsed = new Date(utc);
+      if (parsed.getUTCFullYear() !== year || parsed.getUTCMonth() !== month - 1 || parsed.getUTCDate() !== day) return NaN;
+      return utc - chinaOffsetMs;
+    };
+    let startMs = todayStartMs;
+    let endMs = nowMs;
+    let normalizedRange = range;
+    if (range === '7d') startMs = todayStartMs - 6 * dayMs;
+    else if (range === 'month') {
+      const chinaNow = new Date(nowMs + chinaOffsetMs);
+      startMs = Date.UTC(chinaNow.getUTCFullYear(), chinaNow.getUTCMonth(), 1) - chinaOffsetMs;
+    } else if (range === 'last_month') {
+      const chinaNow = new Date(nowMs + chinaOffsetMs);
+      endMs = Date.UTC(chinaNow.getUTCFullYear(), chinaNow.getUTCMonth(), 1) - chinaOffsetMs;
+      startMs = Date.UTC(chinaNow.getUTCFullYear(), chinaNow.getUTCMonth() - 1, 1) - chinaOffsetMs;
+    } else if (range === 'custom') {
+      startMs = dateStart(options.startDate);
+      const inclusiveEndMs = dateStart(options.endDate);
+      if (!Number.isFinite(startMs) || !Number.isFinite(inclusiveEndMs) || inclusiveEndMs < startMs) throw new Error('自定义账目日期范围无效');
+      endMs = inclusiveEndMs + dayMs;
+      if (endMs - startMs > 3660 * dayMs) throw new Error('自定义账目日期范围不能超过十年');
+    } else if (range !== 'today') {
+      normalizedRange = 'month';
+      const chinaNow = new Date(nowMs + chinaOffsetMs);
+      startMs = Date.UTC(chinaNow.getUTCFullYear(), chinaNow.getUTCMonth(), 1) - chinaOffsetMs;
+    }
+    return {
+      range: normalizedRange,
+      startMs,
+      endMs,
+      startDate: chinaDate(startMs),
+      endDate: chinaDate(Math.max(startMs, endMs - 1))
+    };
+  }
+
   function operationBucket(entry) {
     const text = `${entry.description || ''} ${entry.reference || ''}`;
     if (entry.kind === 'image') {
@@ -465,18 +514,23 @@ function createBillingService(dataRoot) {
     };
   }
 
-  async function getAccountingReport(relayValues = [], userLookup = new Map()) {
+  async function getAccountingReport(relayValues = [], userLookup = new Map(), options = {}) {
+    const windowRange = accountingWindowRange(options);
+    const requestedRelayId = String(options.relayId || '').trim();
     const relays = (Array.isArray(relayValues) ? relayValues : []).map(relay => ({
       id: normalizeRelayId(relay?.id),
       name: String(relay?.name || relay?.id || '未命名中转站').slice(0, 80),
       enabled: relay?.enabled !== false,
       customerCnyPerUsd: Math.max(0.000001, Number(relay?.customerCnyPerUsd) || 7),
       upstreamImageCostCnyMicro: Math.max(0, Math.trunc(Number(relay?.upstreamImageCostCnyMicro) || 0))
-    }));
+    })).filter(relay => !requestedRelayId || relay.id === requestedRelayId);
+    if (requestedRelayId && !relays.length) throw new Error('中转站不存在');
     const byRelay = new Map(relays.map(relay => [relay.id, {
       ...relay,
+      lifetimeSpendUsdMinor: 0,
       confirmedSpendUsdMinor: 0,
-      successfulImages: 0
+      successfulImages: 0,
+      daily: new Map()
     }]));
     let text = '';
     try { text = await fs.readFile(ledgerFile, 'utf8'); } catch { text = ''; }
@@ -493,15 +547,24 @@ function createBillingService(dataRoot) {
         ? Math.trunc(Number(entry.amountMinor) || 0)
         : migrateMoney(entry.amountMinor, sourceScale);
       if (amountMinor >= 0) continue;
+      report.lifetimeSpendUsdMinor += Math.abs(amountMinor);
+      const createdAt = new Date(entry.createdAt).getTime();
+      if (!Number.isFinite(createdAt) || createdAt < windowRange.startMs || createdAt >= windowRange.endMs) continue;
       report.confirmedSpendUsdMinor += Math.abs(amountMinor);
       report.successfulImages += 1;
+      const day = new Date(createdAt + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const point = report.daily.get(day) || { date: day, spendUsdMinor: 0, successfulImages: 0 };
+      point.spendUsdMinor += Math.abs(amountMinor);
+      point.successfulImages += 1;
+      report.daily.set(day, point);
     }
     const reports = [];
+    const daily = [];
     for (const relay of relays) {
       const report = byRelay.get(relay.id);
       const balanceSummary = await buildBalanceSummary(userLookup, relay.id);
       const customerBalanceUsdMinor = balanceSummary.totals.balanceMinor;
-      const customerRechargeUsdMinor = customerBalanceUsdMinor + report.confirmedSpendUsdMinor;
+      const customerRechargeUsdMinor = customerBalanceUsdMinor + report.lifetimeSpendUsdMinor;
       const usdMicroToCnyMinor = amount => Math.round((Math.max(0, Number(amount) || 0) / BILLING_SCALE) * relay.customerCnyPerUsd * 100);
       const customerRechargeCnyMinor = usdMicroToCnyMinor(customerRechargeUsdMinor);
       const customerBalanceCnyMinor = usdMicroToCnyMinor(customerBalanceUsdMinor);
@@ -525,10 +588,30 @@ function createBillingService(dataRoot) {
         upstreamCostCnyMinor,
         grossProfitCnyMinor: confirmedRevenueCnyMinor - upstreamCostCnyMinor
       });
+      for (const point of report.daily.values()) {
+        const revenueCnyMinor = usdMicroToCnyMinor(point.spendUsdMinor);
+        const upstreamCostCnyMinor = Math.round((point.successfulImages * relay.upstreamImageCostCnyMicro) / 10_000);
+        daily.push({
+          date: point.date,
+          relayId: relay.id,
+          relayName: relay.name,
+          successfulImages: point.successfulImages,
+          revenueCnyMinor,
+          upstreamCostCnyMinor,
+          costConfigured: relay.upstreamImageCostCnyMicro > 0
+        });
+      }
     }
     return {
       currency: 'CNY',
+      range: windowRange.range,
+      startedAt: new Date(windowRange.startMs).toISOString(),
+      endedAt: new Date(windowRange.endMs).toISOString(),
+      startDate: windowRange.startDate,
+      endDate: windowRange.endDate,
+      relayId: requestedRelayId,
       relays: reports,
+      daily: daily.sort((left, right) => right.date.localeCompare(left.date) || left.relayName.localeCompare(right.relayName, 'zh-CN')),
       complete: reports.every(report => report.costConfigured),
       totals: {
         customerRechargeCnyMinor: reports.reduce((sum, report) => sum + report.customerRechargeCnyMinor, 0),

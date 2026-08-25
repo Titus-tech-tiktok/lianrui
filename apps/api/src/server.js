@@ -1399,7 +1399,32 @@ async function startServer() {
     try {
       const [users, apiSettings] = await Promise.all([auth.listUsers(), runtime.loadApiSettings()]);
       const userLookup = new Map(users.map(user => [user.workspaceId, user]));
-      return res.json({ data: await runtime.billing.getAccountingReport(apiSettings.relays || [], userLookup) });
+      const report = await runtime.billing.getAccountingReport(apiSettings.relays || [], userLookup, {
+        range: String(req.query.range || 'month'),
+        startDate: String(req.query.startDate || ''),
+        endDate: String(req.query.endDate || ''),
+        relayId: String(req.query.relayId || '')
+      });
+      const finance = await runtime.financeLedger.listRange({
+        startDate: report.startDate,
+        endDate: report.endDate,
+        relayId: report.relayId
+      });
+      const operatingExpensesCnyMinor = Number(finance.summary.operatingExpensesCnyMinor) || 0;
+      const upstreamCostCnyMinor = Number(report.totals.upstreamCostCnyMinor) || 0;
+      const totalExpensesCnyMinor = upstreamCostCnyMinor + operatingExpensesCnyMinor;
+      return res.json({
+        data: {
+          ...report,
+          finance,
+          totals: {
+            ...report.totals,
+            operatingExpensesCnyMinor,
+            totalExpensesCnyMinor,
+            netProfitCnyMinor: (Number(report.totals.confirmedRevenueCnyMinor) || 0) - totalExpensesCnyMinor
+          }
+        }
+      });
     } catch (error) {
       return res.status(400).json({ error: error?.message || String(error) });
     }

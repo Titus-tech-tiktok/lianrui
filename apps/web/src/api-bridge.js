@@ -331,7 +331,14 @@ window.caishen = {
   deleteUser: id => authRequest(`/api/auth/users/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   getBillingSummary: (days, relayId = '') => authRequest(`/api/billing/me?days=${encodeURIComponent(Math.max(1, Math.trunc(Number(days) || 30)))}${relayId ? `&relayId=${encodeURIComponent(relayId)}` : ''}`),
   getBillingAdmin: () => authRequest('/api/billing/admin'),
-  getBillingAccounting: () => authRequest('/api/billing/accounting'),
+  getBillingAccounting: (options = {}) => {
+    const query = new URLSearchParams();
+    query.set('range', options.range || 'month');
+    if (options.relayId) query.set('relayId', options.relayId);
+    if (options.startDate) query.set('startDate', options.startDate);
+    if (options.endDate) query.set('endDate', options.endDate);
+    return authRequest(`/api/billing/accounting?${query}`);
+  },
   getGlobalStats: (range, relayId = '') => authRequest(`/api/billing/global-stats?range=${encodeURIComponent(range || 'today')}${relayId ? `&relayId=${encodeURIComponent(relayId)}` : ''}`),
   getFinanceLedger: month => authRequest(`/api/finance/ledger?month=${encodeURIComponent(month || '')}`),
   createFinanceEntry: payload => authRequest('/api/finance/entries', { method: 'POST', body: JSON.stringify(payload) }),

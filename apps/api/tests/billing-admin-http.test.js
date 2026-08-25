@@ -227,12 +227,24 @@ test('admin billing endpoint hides platform ledger and backend actors', async ()
     assert.equal(adminSummaryAfterTransfer.body.data.account.balanceMinor, 650);
     assert.equal(adminSummaryAfterTransfer.body.data.transactions[0].description, '收到 Designer 划拨');
 
-    const accounting = await jsonFetch(`${base}/api/billing/accounting`, {
+    const chinaDate = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const miscExpense = await jsonFetch(`${base}/api/finance/entries`, {
+      method: 'POST',
+      headers: { Cookie: superCookie },
+      body: JSON.stringify({ date: chinaDate, category: 'server', amount: '12.34', currency: 'CNY' })
+    });
+    assert.equal(miscExpense.response.status, 201);
+
+    const accounting = await jsonFetch(`${base}/api/billing/accounting?range=custom&startDate=${chinaDate}&endDate=${chinaDate}`, {
       headers: { Cookie: superCookie }
     });
     assert.equal(accounting.response.status, 200);
     assert.deepEqual(accounting.body.data.relays.map(relay => relay.relayName), ['一号站', '二号站']);
     assert.deepEqual(accounting.body.data.relays.map(relay => relay.upstreamImageCostCnyMicro), [20000, 15000]);
+    assert.equal(accounting.body.data.range, 'custom');
+    assert.equal(accounting.body.data.totals.operatingExpensesCnyMinor, 1234);
+    assert.equal(accounting.body.data.totals.totalExpensesCnyMinor, 1234);
+    assert.equal(accounting.body.data.totals.netProfitCnyMinor, -1234);
   } finally {
     await new Promise(resolve => server.close(resolve));
     await removeTempWithRetry(temp);

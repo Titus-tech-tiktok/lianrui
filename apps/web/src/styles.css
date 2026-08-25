@@ -8860,7 +8860,8 @@ label input, label textarea {
   flex: 0 0 132px;
 }
 
-.mobile-finance-head input {
+.mobile-finance-head input,
+.mobile-finance-head select {
   min-width: 0;
   height: 38px;
   padding: 0 9px;
@@ -8870,6 +8871,44 @@ label input, label textarea {
   color: #fff;
   font: inherit;
   color-scheme: dark;
+}
+
+.mobile-finance-selectors {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  flex: 0 0 min(280px, 54%);
+}
+
+.mobile-finance-selectors label {
+  min-width: 0;
+}
+
+.mobile-finance-custom-range {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 12px 14px 0;
+}
+
+.mobile-finance-custom-range label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.mobile-finance-custom-range input {
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  padding: 0 10px;
+  border: 1px solid rgba(203, 211, 205, .9);
+  border-radius: 11px;
+  background: #fff;
+  color: var(--navy);
+  font: inherit;
 }
 
 .mobile-finance-kpis {
@@ -8896,6 +8935,25 @@ label input, label textarea {
 
 .mobile-finance-kpis article.total-profit {
   grid-column: 1 / -1;
+}
+
+.mobile-finance-kpis.simple {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.mobile-finance-kpis.simple article {
+  padding: 13px 10px;
+}
+
+.mobile-finance-kpis.simple strong {
+  font-size: clamp(17px, 5vw, 22px);
+}
+
+.mobile-finance-brief {
+  margin: 0 14px 14px;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
 }
 
 .mobile-finance-kpis span,
@@ -9035,6 +9093,50 @@ label input, label textarea {
   font-size: 10px;
 }
 
+.mobile-finance-details {
+  border-top: 1px solid rgba(203, 211, 205, .65);
+}
+
+.mobile-finance-details > summary {
+  padding: 15px 18px;
+  color: var(--teal);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 900;
+  list-style-position: inside;
+}
+
+.mobile-finance-details[open] > summary {
+  margin-bottom: 12px;
+  background: #f5f8f7;
+}
+
+.mobile-finance-detail-totals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 0 14px 14px;
+}
+
+.mobile-finance-detail-totals div {
+  min-width: 0;
+  padding: 11px;
+  border-radius: 12px;
+  background: #f3f6f5;
+  display: grid;
+  gap: 5px;
+}
+
+.mobile-finance-detail-totals span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.mobile-finance-detail-totals strong {
+  color: var(--navy);
+  font-size: 15px;
+}
+
 .mobile-finance-toolbar,
 .mobile-finance-list-head {
   display: flex;
@@ -9102,6 +9204,10 @@ label input, label textarea {
   background: transparent;
   color: inherit;
   text-align: left;
+}
+
+.mobile-finance-entry.compact {
+  padding: 10px 0;
 }
 
 .mobile-finance-entry-icon {
@@ -9274,6 +9380,11 @@ label input, label textarea {
   }
 
   .mobile-finance-head label {
+    flex-basis: auto;
+  }
+
+  .mobile-finance-selectors {
+    width: 100%;
     flex-basis: auto;
   }
 

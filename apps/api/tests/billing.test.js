@@ -308,6 +308,36 @@ test('reseller accounting recognizes image revenue and relay-specific upstream c
   assert.equal(report.totals.grossProfitCnyMinor, 8);
 });
 
+test('reseller accounting applies one Beijing date range and relay filter to revenue and cost', async t => {
+  const { root, billing } = await fixture();
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const secondRelayId = 'relay-two';
+  const users = new Map([['member-workspace', { role: 'member', username: 'seller' }]]);
+  await billing.saveRules({ enabled: true });
+  await billing.adjustBalance('member-workspace', RELAY_ID, 100_000);
+  await billing.adjustBalance('member-workspace', secondRelayId, 100_000);
+  await billing.commit(await billing.reserve('member-workspace', 'image', { relayId: RELAY_ID, amountMinor: 14_286 }));
+  await billing.commit(await billing.reserve('member-workspace', 'image', { relayId: secondRelayId, amountMinor: 28_571 }));
+  const ledgerFile = path.join(root, 'system', 'billing-ledger.jsonl');
+  const entries = (await fs.readFile(ledgerFile, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+  for (const entry of entries) entry.createdAt = entry.relayId === RELAY_ID ? '2026-08-10T04:00:00.000Z' : '2026-08-11T04:00:00.000Z';
+  await fs.writeFile(ledgerFile, `${entries.map(entry => JSON.stringify(entry)).join('\n')}\n`, 'utf8');
+
+  const report = await billing.getAccountingReport([
+    { id: RELAY_ID, name: '一号站', customerCnyPerUsd: 7, upstreamImageCostCnyMicro: 20_000 },
+    { id: secondRelayId, name: '二号站', customerCnyPerUsd: 7, upstreamImageCostCnyMicro: 15_000 }
+  ], users, { range: 'custom', startDate: '2026-08-10', endDate: '2026-08-10', relayId: RELAY_ID });
+
+  assert.equal(report.range, 'custom');
+  assert.equal(report.startDate, '2026-08-10');
+  assert.equal(report.endDate, '2026-08-10');
+  assert.deepEqual(report.relays.map(relay => relay.relayId), [RELAY_ID]);
+  assert.equal(report.totals.successfulImages, 1);
+  assert.equal(report.totals.confirmedRevenueCnyMinor, 10);
+  assert.equal(report.totals.upstreamCostCnyMinor, 2);
+  assert.deepEqual(report.daily.map(point => [point.date, point.relayId]), [['2026-08-10', RELAY_ID]]);
+});
+
 test('global stats current month excludes entries before Beijing month start', async t => {
   const { root, billing } = await fixture();
   t.after(() => fs.rm(root, { recursive: true, force: true }));

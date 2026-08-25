@@ -156,6 +156,38 @@ function createFinanceLedgerService(dataRoot) {
     return { month, entries, summary: summarize(state.entries, month) };
   }
 
+  async function listRange(options = {}) {
+    const startDate = normalizeDate(options.startDate);
+    const endDate = normalizeDate(options.endDate);
+    if (endDate < startDate) throw new Error('账目结束日期不能早于开始日期');
+    const relayId = String(options.relayId || '').trim().toLowerCase();
+    if (relayId && !/^[a-z0-9_-]{1,80}$/.test(relayId)) throw new Error('中转站编号无效');
+    const state = await readLedger();
+    const inScope = entry => String(entry.date || '') >= startDate
+      && String(entry.date || '') <= endDate
+      && (!relayId || entry.relayId === relayId);
+    const entries = state.entries.filter(inScope).sort((left, right) => String(right.date || '').localeCompare(String(left.date || ''))
+      || String(right.createdAt || '').localeCompare(String(left.createdAt || '')));
+    const sum = (items, predicate) => items.reduce(
+      (total, entry) => predicate(entry) ? total + Math.max(0, Number(entry.amountCnyMinor) || 0) : total,
+      0
+    );
+    return {
+      startDate,
+      endDate,
+      relayId,
+      entries,
+      summary: {
+        revenueCnyMinor: sum(entries, entry => entry.direction === 'income'),
+        operatingExpensesCnyMinor: sum(entries, entry => entry.direction === 'expense'),
+        gatewayTopupsCnyMinor: sum(entries, entry => entry.category === 'gateway_topup'),
+        cashFlowCnyMinor: sum(entries, entry => entry.direction === 'income')
+          - sum(entries, entry => entry.direction === 'expense')
+          - sum(entries, entry => entry.category === 'gateway_topup')
+      }
+    };
+  }
+
   async function create(input) {
     return mutate(async () => {
       const state = await readLedger();
@@ -191,7 +223,7 @@ function createFinanceLedgerService(dataRoot) {
     });
   }
 
-  return { create, list, remove, update };
+  return { create, list, listRange, remove, update };
 }
 
 module.exports = { createFinanceLedgerService, FINANCE_CATEGORIES };

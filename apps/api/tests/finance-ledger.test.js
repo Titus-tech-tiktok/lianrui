@@ -51,6 +51,15 @@ test('finance ledger separates profit expenses from gateway cash transfers', asy
   assert.equal(august.summary.byRelay[0].relayId, 'relay-one');
   assert.equal(august.summary.byRelay[0].totalGatewayTopupsCnyMinor, 20_000);
 
+  const relayRange = await ledger.listRange({ startDate: '2026-08-10', endDate: '2026-08-10', relayId: 'relay-one' });
+  assert.equal(relayRange.entries.length, 1);
+  assert.equal(relayRange.summary.gatewayTopupsCnyMinor, 20_000);
+  assert.equal(relayRange.summary.operatingExpensesCnyMinor, 0);
+
+  const allRange = await ledger.listRange({ startDate: '2026-08-10', endDate: '2026-08-11' });
+  assert.equal(allRange.entries.length, 3);
+  assert.equal(allRange.summary.operatingExpensesCnyMinor, 5_000);
+
   const updated = await ledger.update(expense.id, { amount: '75.50', note: '调整后' });
   assert.equal(updated.amountCnyMinor, 7_550);
   assert.equal(updated.note, '调整后');
