@@ -3,10 +3,12 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 
 const FINANCE_CATEGORIES = Object.freeze({
-  client_payment: { direction: 'income', label: '客户充值' },
+  client_payment: { direction: 'income', label: '客户充值（旧手工记录）' },
   other_income: { direction: 'income', label: '其他收入' },
   gateway_topup: { direction: 'transfer', label: '上游充值' },
   development: { direction: 'expense', label: '开发费用' },
+  advertising: { direction: 'expense', label: '推广费用' },
+  labor: { direction: 'expense', label: '人工费用' },
   membership: { direction: 'expense', label: '会员费' },
   server: { direction: 'expense', label: '服务器费用' },
   software: { direction: 'expense', label: '软件费用' },
@@ -179,6 +181,8 @@ function createFinanceLedgerService(dataRoot) {
       entries,
       summary: {
         revenueCnyMinor: sum(entries, entry => entry.direction === 'income'),
+        otherIncomeCnyMinor: sum(entries, entry => entry.category === 'other_income'),
+        legacyClientPaymentsCnyMinor: sum(entries, entry => entry.category === 'client_payment'),
         operatingExpensesCnyMinor: sum(entries, entry => entry.direction === 'expense'),
         gatewayTopupsCnyMinor: sum(entries, entry => entry.category === 'gateway_topup'),
         cashFlowCnyMinor: sum(entries, entry => entry.direction === 'income')

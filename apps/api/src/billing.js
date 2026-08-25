@@ -528,6 +528,7 @@ function createBillingService(dataRoot) {
     const byRelay = new Map(relays.map(relay => [relay.id, {
       ...relay,
       lifetimeSpendUsdMinor: 0,
+      customerTopupUsdMinor: 0,
       confirmedSpendUsdMinor: 0,
       successfulImages: 0,
       daily: new Map()
@@ -537,7 +538,6 @@ function createBillingService(dataRoot) {
     for (const line of text.trim().split('\n').filter(Boolean)) {
       let entry;
       try { entry = JSON.parse(line); } catch { continue; }
-      if (String(entry.kind || '') !== 'image') continue;
       if (userLookup.get(entry.workspaceId)?.role === 'superadmin') continue;
       const relayId = String(entry.relayId || legacyRelayId);
       const report = byRelay.get(relayId);
@@ -546,16 +546,24 @@ function createBillingService(dataRoot) {
       const amountMinor = sourceScale === BILLING_SCALE
         ? Math.trunc(Number(entry.amountMinor) || 0)
         : migrateMoney(entry.amountMinor, sourceScale);
-      if (amountMinor >= 0) continue;
-      report.lifetimeSpendUsdMinor += Math.abs(amountMinor);
       const createdAt = new Date(entry.createdAt).getTime();
-      if (!Number.isFinite(createdAt) || createdAt < windowRange.startMs || createdAt >= windowRange.endMs) continue;
-      report.confirmedSpendUsdMinor += Math.abs(amountMinor);
-      report.successfulImages += 1;
+      const inWindow = Number.isFinite(createdAt) && createdAt >= windowRange.startMs && createdAt < windowRange.endMs;
+      const kind = String(entry.kind || '');
+      if (kind === 'image' && amountMinor < 0) report.lifetimeSpendUsdMinor += Math.abs(amountMinor);
+      if (!inWindow) continue;
       const day = new Date(createdAt + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
-      const point = report.daily.get(day) || { date: day, spendUsdMinor: 0, successfulImages: 0 };
-      point.spendUsdMinor += Math.abs(amountMinor);
-      point.successfulImages += 1;
+      const point = report.daily.get(day) || { date: day, topupUsdMinor: 0, spendUsdMinor: 0, successfulImages: 0 };
+      if (kind === 'adjustment' && amountMinor > 0) {
+        report.customerTopupUsdMinor += amountMinor;
+        point.topupUsdMinor += amountMinor;
+      } else if (kind === 'image' && amountMinor < 0) {
+        report.confirmedSpendUsdMinor += Math.abs(amountMinor);
+        report.successfulImages += 1;
+        point.spendUsdMinor += Math.abs(amountMinor);
+        point.successfulImages += 1;
+      } else {
+        continue;
+      }
       report.daily.set(day, point);
     }
     const reports = [];
@@ -568,6 +576,7 @@ function createBillingService(dataRoot) {
       const usdMicroToCnyMinor = amount => Math.round((Math.max(0, Number(amount) || 0) / BILLING_SCALE) * relay.customerCnyPerUsd * 100);
       const customerRechargeCnyMinor = usdMicroToCnyMinor(customerRechargeUsdMinor);
       const customerBalanceCnyMinor = usdMicroToCnyMinor(customerBalanceUsdMinor);
+      const customerTopupCnyMinor = usdMicroToCnyMinor(report.customerTopupUsdMinor);
       const confirmedRevenueCnyMinor = usdMicroToCnyMinor(report.confirmedSpendUsdMinor);
       const upstreamCostCnyMinor = Math.round((report.successfulImages * relay.upstreamImageCostCnyMicro) / 10_000);
       const costConfigured = relay.upstreamImageCostCnyMicro > 0 || report.successfulImages === 0;
@@ -581,14 +590,17 @@ function createBillingService(dataRoot) {
         successfulImages: report.successfulImages,
         customerRechargeUsdMinor,
         customerBalanceUsdMinor,
+        customerTopupUsdMinor: report.customerTopupUsdMinor,
         confirmedSpendUsdMinor: report.confirmedSpendUsdMinor,
         customerRechargeCnyMinor,
         customerBalanceCnyMinor,
+        customerTopupCnyMinor,
         confirmedRevenueCnyMinor,
         upstreamCostCnyMinor,
         grossProfitCnyMinor: confirmedRevenueCnyMinor - upstreamCostCnyMinor
       });
       for (const point of report.daily.values()) {
+        const customerTopupCnyMinor = usdMicroToCnyMinor(point.topupUsdMinor);
         const revenueCnyMinor = usdMicroToCnyMinor(point.spendUsdMinor);
         const upstreamCostCnyMinor = Math.round((point.successfulImages * relay.upstreamImageCostCnyMicro) / 10_000);
         daily.push({
@@ -596,6 +608,7 @@ function createBillingService(dataRoot) {
           relayId: relay.id,
           relayName: relay.name,
           successfulImages: point.successfulImages,
+          customerTopupCnyMinor,
           revenueCnyMinor,
           upstreamCostCnyMinor,
           costConfigured: relay.upstreamImageCostCnyMicro > 0
@@ -616,6 +629,7 @@ function createBillingService(dataRoot) {
       totals: {
         customerRechargeCnyMinor: reports.reduce((sum, report) => sum + report.customerRechargeCnyMinor, 0),
         customerBalanceCnyMinor: reports.reduce((sum, report) => sum + report.customerBalanceCnyMinor, 0),
+        customerTopupCnyMinor: reports.reduce((sum, report) => sum + report.customerTopupCnyMinor, 0),
         confirmedRevenueCnyMinor: reports.reduce((sum, report) => sum + report.confirmedRevenueCnyMinor, 0),
         upstreamCostCnyMinor: reports.reduce((sum, report) => sum + report.upstreamCostCnyMinor, 0),
         grossProfitCnyMinor: reports.reduce((sum, report) => sum + report.grossProfitCnyMinor, 0),

@@ -22,6 +22,15 @@ test('管理员余额划拨界面支持选择转出和转入账号', async () =>
   assert.doesNotMatch(renderer, /data-transfer-billing=/);
 });
 
+test('超级管理员可在账号列表安全重置密码', async () => {
+  const renderer = await fs.readFile(path.join(webRoot, 'src/renderer.js'), 'utf8');
+  assert.match(renderer, /密码：安全加密，无法查看原密码/);
+  assert.match(renderer, /isSuperAdmin\(\)[\s\S]*data-team-user-password/);
+  assert.match(renderer, /async function resetTeamUserPassword/);
+  assert.match(renderer, /window\.caishen\.updateUser\(id, \{ password \}\)/);
+  assert.match(renderer, /关闭后无法再查看/);
+});
+
 test('全局价格和上游余额接口已从界面移除', async () => {
   const [html, renderer, bridge] = await Promise.all([
     fs.readFile(path.join(webRoot, 'index.html'), 'utf8'),

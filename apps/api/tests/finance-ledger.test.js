@@ -59,6 +59,8 @@ test('finance ledger separates profit expenses from gateway cash transfers', asy
   const allRange = await ledger.listRange({ startDate: '2026-08-10', endDate: '2026-08-11' });
   assert.equal(allRange.entries.length, 3);
   assert.equal(allRange.summary.operatingExpensesCnyMinor, 5_000);
+  assert.equal(allRange.summary.otherIncomeCnyMinor, 0);
+  assert.equal(allRange.summary.legacyClientPaymentsCnyMinor, 70_000);
 
   const updated = await ledger.update(expense.id, { amount: '75.50', note: '调整后' });
   assert.equal(updated.amountCnyMinor, 7_550);
@@ -73,6 +75,9 @@ test('finance ledger rejects invalid categories and money values', async t => {
   const dataRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'caishen-finance-validation-'));
   t.after(() => fs.rm(dataRoot, { recursive: true, force: true }));
   const ledger = createFinanceLedgerService(dataRoot);
+
+  assert.equal((await ledger.create({ date: '2026-08-10', category: 'advertising', amount: '1' })).direction, 'expense');
+  assert.equal((await ledger.create({ date: '2026-08-10', category: 'labor', amount: '1' })).direction, 'expense');
 
   await assert.rejects(() => ledger.create({ date: '2026-08-10', category: 'unknown', amount: '1' }), /分类无效/);
   await assert.rejects(() => ledger.create({ date: '2026-08-10', category: 'membership', amount: '1.001' }), /最多两位小数/);

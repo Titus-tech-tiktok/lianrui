@@ -1410,6 +1410,9 @@ async function startServer() {
         endDate: report.endDate,
         relayId: report.relayId
       });
+      const otherIncomeCnyMinor = Number(finance.summary.otherIncomeCnyMinor) || 0;
+      const customerTopupCnyMinor = Number(report.totals.customerTopupCnyMinor) || 0;
+      const businessRevenueCnyMinor = customerTopupCnyMinor + otherIncomeCnyMinor;
       const operatingExpensesCnyMinor = Number(finance.summary.operatingExpensesCnyMinor) || 0;
       const upstreamCostCnyMinor = Number(report.totals.upstreamCostCnyMinor) || 0;
       const totalExpensesCnyMinor = upstreamCostCnyMinor + operatingExpensesCnyMinor;
@@ -1419,9 +1422,11 @@ async function startServer() {
           finance,
           totals: {
             ...report.totals,
+            otherIncomeCnyMinor,
+            businessRevenueCnyMinor,
             operatingExpensesCnyMinor,
             totalExpensesCnyMinor,
-            netProfitCnyMinor: (Number(report.totals.confirmedRevenueCnyMinor) || 0) - totalExpensesCnyMinor
+            netProfitCnyMinor: businessRevenueCnyMinor - totalExpensesCnyMinor
           }
         }
       });

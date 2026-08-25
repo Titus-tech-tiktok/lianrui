@@ -302,6 +302,7 @@ test('reseller accounting recognizes image revenue and relay-specific upstream c
   assert.equal(report.relays[0].successfulImages, 1);
   assert.equal(report.relays[0].customerRechargeCnyMinor, 10);
   assert.equal(report.relays[0].customerBalanceCnyMinor, 0);
+  assert.equal(report.relays[0].customerTopupCnyMinor, 10);
   assert.equal(report.relays[0].confirmedRevenueCnyMinor, 10);
   assert.equal(report.relays[0].upstreamCostCnyMinor, 2);
   assert.equal(report.relays[0].grossProfitCnyMinor, 8);
@@ -333,6 +334,7 @@ test('reseller accounting applies one Beijing date range and relay filter to rev
   assert.equal(report.endDate, '2026-08-10');
   assert.deepEqual(report.relays.map(relay => relay.relayId), [RELAY_ID]);
   assert.equal(report.totals.successfulImages, 1);
+  assert.equal(report.totals.customerTopupCnyMinor, 70);
   assert.equal(report.totals.confirmedRevenueCnyMinor, 10);
   assert.equal(report.totals.upstreamCostCnyMinor, 2);
   assert.deepEqual(report.daily.map(point => [point.date, point.relayId]), [['2026-08-10', RELAY_ID]]);

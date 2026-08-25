@@ -639,10 +639,12 @@ function formatFinanceCnyMicro(micro = 0) {
 
 function financeCategoryLabel(category) {
   return ({
-    client_payment: '客户充值',
+    client_payment: '客户充值（旧手工记录）',
     other_income: '其他收入',
     gateway_topup: '上游充值',
     development: '开发费用',
+    advertising: '推广费用',
+    labor: '人工费用',
     membership: '会员费',
     server: '服务器费用',
     software: '软件费用',
@@ -658,32 +660,36 @@ function mobileFinanceRangeLabel(range = state.mobileFinanceRange) {
 function mobileFinanceBusinessEntries(accounting = state.mobileAccounting || {}) {
   const rows = [];
   for (const point of accounting.daily || []) {
-    rows.push({
-      id: `income-${point.relayId}-${point.date}`,
-      automatic: true,
-      direction: 'income',
-      date: point.date,
-      relayId: point.relayId,
-      relayName: point.relayName,
-      title: '客户生图消费收入',
-      detail: `${formatInteger(point.successfulImages)} 张成功图片`,
-      amountCnyMinor: Number(point.revenueCnyMinor) || 0
-    });
-    rows.push({
-      id: `cost-${point.relayId}-${point.date}`,
-      automatic: true,
-      direction: 'expense',
-      date: point.date,
-      relayId: point.relayId,
-      relayName: point.relayName,
-      title: '上游生图成本',
-      detail: point.costConfigured ? `${formatInteger(point.successfulImages)} 张 × 单张采购成本` : '尚未配置单张采购成本',
-      amountCnyMinor: Number(point.upstreamCostCnyMinor) || 0,
-      amountPending: !point.costConfigured
-    });
+    if (Number(point.customerTopupCnyMinor) > 0) {
+      rows.push({
+        id: `income-${point.relayId}-${point.date}`,
+        automatic: true,
+        direction: 'income',
+        date: point.date,
+        relayId: point.relayId,
+        relayName: point.relayName,
+        title: '客户充值收入',
+        detail: '站内充值自动同步，内部划拨已排除',
+        amountCnyMinor: Number(point.customerTopupCnyMinor) || 0
+      });
+    }
+    if (Number(point.successfulImages) > 0) {
+      rows.push({
+        id: `cost-${point.relayId}-${point.date}`,
+        automatic: true,
+        direction: 'expense',
+        date: point.date,
+        relayId: point.relayId,
+        relayName: point.relayName,
+        title: '上游生图成本',
+        detail: point.costConfigured ? `${formatInteger(point.successfulImages)} 张 × 单张采购成本` : '尚未配置单张采购成本',
+        amountCnyMinor: Number(point.upstreamCostCnyMinor) || 0,
+        amountPending: !point.costConfigured
+      });
+    }
   }
   for (const entry of accounting.finance?.entries || []) {
-    if (entry.direction !== 'expense') continue;
+    if (entry.direction !== 'expense' && entry.category !== 'other_income') continue;
     rows.push({
       ...entry,
       automatic: false,
@@ -716,7 +722,8 @@ function mobileFinancePanelHtml() {
       <dl>
         <div><dt>客户累计充值</dt><dd>${formatFinanceCny(relay.customerRechargeCnyMinor)}</dd></div>
         <div><dt>客户未消费余额</dt><dd>${formatFinanceCny(relay.customerBalanceCnyMinor)}</dd></div>
-        <div><dt>期间消费收入</dt><dd>${formatFinanceCny(relay.confirmedRevenueCnyMinor)}</dd></div>
+        <div><dt>期间充值收入</dt><dd>${formatFinanceCny(relay.customerTopupCnyMinor)}</dd></div>
+        <div><dt>期间客户已消费</dt><dd>${formatFinanceCny(relay.confirmedRevenueCnyMinor)}</dd></div>
         <div><dt>期间上游成本</dt><dd>${relay.costConfigured ? formatFinanceCny(relay.upstreamCostCnyMinor) : '待配置'}</dd></div>
       </dl>
       <p>站内折算 ${escapeHtml(relay.customerCnyPerUsd)} 元/美元 · 上游 ${formatFinanceCnyMicro(relay.upstreamImageCostCnyMicro)}/张</p>
@@ -749,7 +756,7 @@ function mobileFinancePanelHtml() {
       </header>
       ${state.mobileFinanceRange === 'custom' ? `<div class="mobile-finance-custom-range"><label><span>开始日期</span><input id="mobileFinanceStartDate" type="date" value="${escapeHtml(state.mobileFinanceStartDate)}"></label><label><span>结束日期</span><input id="mobileFinanceEndDate" type="date" value="${escapeHtml(state.mobileFinanceEndDate)}"></label></div>` : ''}
       <div class="mobile-finance-kpis simple">
-        <article><span>营业收入</span><strong>${formatFinanceCny(accountingTotals.confirmedRevenueCnyMinor)}</strong><small>客户成功生图实际扣费</small></article>
+        <article><span>营业收入</span><strong>${formatFinanceCny(accountingTotals.businessRevenueCnyMinor)}</strong><small>客户充值 + 其他收入</small></article>
         <article><span>总支出</span><strong>${hasMissingCost ? '成本未配齐' : formatFinanceCny(accountingTotals.totalExpensesCnyMinor)}</strong><small>上游成本 + 杂费</small></article>
         <article class="profit"><span>预估利润</span><strong>${hasMissingCost ? '请补全成本' : formatFinanceCny(accountingTotals.netProfitCnyMinor)}</strong><small>收入 - 支出</small></article>
       </div>
@@ -762,8 +769,9 @@ function mobileFinancePanelHtml() {
       <div class="mobile-finance-list">${entryHtml}</div>
       <details class="mobile-finance-details" id="mobileFinanceDetails"${state.mobileFinanceDetailsExpanded ? ' open' : ''}>
         <summary>资金与成本详情</summary>
-        <p class="mobile-finance-cost-note">客户充值和未消费余额不算营业收入；上游充值属于预付资金，不重复算作经营支出。选择单个中转站时，公共杂费不会强行分摊到该站。</p>
+        <p class="mobile-finance-cost-note">站内客户充值会自动计入营业收入，管理员与员工之间的内部划拨不计收入；客户已消费金额只展示经营进度，不再重复算收入。上游充值属于预付资金，不重复算作经营支出。</p>
         <div class="mobile-finance-detail-totals">
+          <div><span>客户已消费金额</span><strong>${formatFinanceCny(accountingTotals.confirmedRevenueCnyMinor)}</strong></div>
           <div><span>上游生图成本</span><strong>${hasMissingCost ? '待配置' : formatFinanceCny(accountingTotals.upstreamCostCnyMinor)}</strong></div>
           <div><span>期间杂费</span><strong>${formatFinanceCny(accountingTotals.operatingExpensesCnyMinor)}</strong></div>
           <div><span>期间上游充值</span><strong>${formatFinanceCny(financeSummary.gatewayTopupsCnyMinor)}</strong></div>
@@ -821,7 +829,7 @@ function exportMobileFinanceCsv() {
 
 function openMobileFinanceDialog(entry = null) {
   const editing = Boolean(entry?.id);
-  const category = entry?.category || 'client_payment';
+  const category = entry?.category || 'other_income';
   const currency = entry?.currency || 'CNY';
   const accountingRelays = state.relayChoices?.relays || state.mobileAccounting?.relays || [];
   const element = document.createElement('div');
@@ -831,12 +839,16 @@ function openMobileFinanceDialog(entry = null) {
     <div class="mobile-finance-form">
       <label><span>日期</span><input data-finance-date type="date" value="${escapeHtml(entry?.date || currentChinaDate())}"></label>
       <label><span>分类</span><select data-finance-category>
-        ${Object.entries({ client_payment: '客户充值', other_income: '其他收入', gateway_topup: '上游充值', development: '开发费用', membership: '会员费', server: '服务器费用', software: '软件费用', refund: '退款', other_expense: '其他支出' }).map(([value, label]) => `<option value="${value}" ${value === category ? 'selected' : ''}>${label}</option>`).join('')}
+        <optgroup label="收入"><option value="other_income" ${category === 'other_income' ? 'selected' : ''}>其他收入（非站内充值）</option></optgroup>
+        <optgroup label="资金操作"><option value="gateway_topup" ${category === 'gateway_topup' ? 'selected' : ''}>上游充值（不计利润）</option></optgroup>
+        <optgroup label="经营支出">${Object.entries({ development: '开发费用', advertising: '推广费用', labor: '人工费用', membership: '会员费', server: '服务器费用', software: '软件费用', refund: '退款', other_expense: '其他支出' }).map(([value, label]) => `<option value="${value}" ${value === category ? 'selected' : ''}>${label}</option>`).join('')}</optgroup>
+        ${category === 'client_payment' ? '<optgroup label="历史记录"><option value="client_payment" selected>客户充值（旧手工记录，不计利润）</option></optgroup>' : ''}
       </select></label>
+      <p class="wide mobile-finance-category-hint" data-finance-category-hint></p>
       <label class="wide"><span>项目或客户</span><input data-finance-counterparty maxlength="100" value="${escapeHtml(entry?.counterparty || '')}" placeholder="例如：张先生充值、8 月服务器"></label>
       <label><span>金额</span><input data-finance-amount inputmode="decimal" value="${editing ? (Number(entry.originalAmountMinor || 0) / 100).toFixed(2) : ''}" placeholder="0.00"></label>
       <label><span>币种</span><select data-finance-currency><option value="CNY" ${currency === 'CNY' ? 'selected' : ''}>人民币 CNY</option><option value="USD" ${currency === 'USD' ? 'selected' : ''}>美元 USD</option></select></label>
-      <label><span>归属中转站</span><select data-finance-relay><option value="">公共账目 / 不分站</option>${accountingRelays.map(relay => `<option value="${escapeHtml(relay.relayId)}"${relay.relayId === entry?.relayId ? ' selected' : ''}>${escapeHtml(relay.relayName)}</option>`).join('')}</select></label>
+      <label><span>归属中转站</span><select data-finance-relay><option value="">公共账目 / 不分站</option>${accountingRelays.map(relay => { const relayId = relay.id || relay.relayId; return `<option value="${escapeHtml(relayId)}"${relayId === entry?.relayId ? ' selected' : ''}>${escapeHtml(relay.name || relay.relayName)}</option>`; }).join('')}</select></label>
       <label data-finance-rate-field><span>美元汇率</span><input data-finance-rate inputmode="decimal" value="${escapeHtml(entry?.exchangeRate || 7)}"></label>
       <label class="wide"><span>备注</span><textarea data-finance-note rows="3" maxlength="500" placeholder="可选">${escapeHtml(entry?.note || '')}</textarea></label>
     </div>
@@ -844,10 +856,23 @@ function openMobileFinanceDialog(entry = null) {
   </section>`;
   document.body.appendChild(element);
   const currencyInput = element.querySelector('[data-finance-currency]');
+  const categoryInput = element.querySelector('[data-finance-category]');
+  const categoryHint = element.querySelector('[data-finance-category-hint]');
   const rateField = element.querySelector('[data-finance-rate-field]');
   const updateRateVisibility = () => { rateField.hidden = currencyInput.value !== 'USD'; };
+  const updateCategoryHint = () => {
+    categoryHint.textContent = categoryInput.value === 'gateway_topup'
+      ? '上游充值只记录预付资金，不重复计入当期支出和利润。'
+      : categoryInput.value === 'other_income'
+        ? '站内客户充值已由系统自动统计，这里只记录其他收入，避免重复入账。'
+        : categoryInput.value === 'client_payment'
+          ? '这是旧版手工记录，保留查账，不再重复计入利润。'
+          : '这笔记录会计入当期经营支出。';
+  };
   updateRateVisibility();
+  updateCategoryHint();
   currencyInput.onchange = updateRateVisibility;
+  categoryInput.onchange = updateCategoryHint;
   const close = () => element.remove();
   element.addEventListener('click', async event => {
     if (event.target === element || event.target.closest('[data-finance-close]')) return close();
@@ -5173,9 +5198,9 @@ function renderTeamUsers() {
   $('#teamUserCount').textContent = `${state.teamUsers.length} 人`;
   $('#teamUserList').innerHTML = state.teamUsers.length ? state.teamUsers.map(user => `
     <div class="team-user-row${user.active ? '' : ' inactive'}" data-team-user="${escapeHtml(user.id)}">
-      <div><b>${escapeHtml(user.displayName || user.username)}${user.id === state.currentUser?.id ? '（当前）' : ''}</b><span>${escapeHtml(user.username)} · ${roleLabel(user.role)} · ${user.active ? '可登录' : '已停用'}${user.billing ? ` · 当前线路 ${formatMoney(user.billing.wallets?.find(wallet => wallet.relayId === activeRelayId)?.balanceMinor || 0)}` : ''}</span></div>
+      <div><b>${escapeHtml(user.displayName || user.username)}${user.id === state.currentUser?.id ? '（当前）' : ''}</b><span>${escapeHtml(user.username)} · ${roleLabel(user.role)} · ${user.active ? '可登录' : '已停用'}${user.billing ? ` · 当前线路 ${formatMoney(user.billing.wallets?.find(wallet => wallet.relayId === activeRelayId)?.balanceMinor || 0)}` : ''}</span>${isSuperAdmin() ? `<span class="team-user-password-status">密码：安全加密，无法查看原密码${user.id === state.currentUser?.id ? ' · 请使用右下角改密' : ' · 可重置'}</span>` : ''}</div>
       <div class="team-user-actions">
-        ${user.id === state.currentUser?.id ? '' : `<button class="secondary" type="button" data-team-user-edit="${escapeHtml(user.id)}">编辑</button><button class="secondary${user.active ? ' danger-outline' : ''}" type="button" data-team-user-active="${escapeHtml(user.id)}" data-active="${user.active ? 'false' : 'true'}">${user.active ? '停用' : '恢复'}</button><button class="secondary danger-outline" type="button" data-team-user-delete="${escapeHtml(user.id)}">删除</button>`}
+        ${user.id === state.currentUser?.id ? '' : `${isSuperAdmin() ? `<button class="secondary" type="button" data-team-user-password="${escapeHtml(user.id)}">重置密码</button>` : ''}<button class="secondary" type="button" data-team-user-edit="${escapeHtml(user.id)}">编辑</button><button class="secondary${user.active ? ' danger-outline' : ''}" type="button" data-team-user-active="${escapeHtml(user.id)}" data-active="${user.active ? 'false' : 'true'}">${user.active ? '停用' : '恢复'}</button><button class="secondary danger-outline" type="button" data-team-user-delete="${escapeHtml(user.id)}">删除</button>`}
       </div>
     </div>`).join('') : '<div class="empty-inline">还没有团队账号</div>';
   renderTeamBalanceTransfer();
@@ -5286,6 +5311,34 @@ async function editTeamUser(id) {
     await window.caishen.updateUser(id, payload);
     await loadTeamUsers();
     toast('账号已更新');
+  } catch (error) {
+    toast(errorText(error), true);
+  }
+}
+
+function suggestedTeamPassword() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  const bytes = new Uint8Array(14);
+  window.crypto.getRandomValues(bytes);
+  return [...bytes].map(value => alphabet[value % alphabet.length]).join('');
+}
+
+async function resetTeamUserPassword(id) {
+  if (!isSuperAdmin()) return toast('只有超级管理员可以重置账号密码', true);
+  const user = state.teamUsers.find(item => item.id === id);
+  if (!user || user.id === state.currentUser?.id) return;
+  const password = window.prompt(`为 ${user.displayName || user.username} 设置新密码\n原密码已安全加密，无法查看。`, suggestedTeamPassword());
+  if (password === null) return;
+  if (password.length < 3 || password.length > 128) return toast('密码长度需要在 3-128 位之间', true);
+  try {
+    await window.caishen.updateUser(id, { password });
+    let copied = false;
+    try {
+      await window.caishen.copyText(password);
+      copied = true;
+    } catch {}
+    window.prompt(`密码已重置${copied ? '并复制到剪贴板' : ''}，请现在保存；关闭后无法再查看。`, password);
+    toast('账号密码已重置');
   } catch (error) {
     toast(errorText(error), true);
   }
@@ -5774,6 +5827,8 @@ function bindEvents() {
   $('#teamUserList').onclick = event => {
     const button = event.target.closest('[data-team-user-active]');
     if (button) return toggleTeamUser(button);
+    const passwordButton = event.target.closest('[data-team-user-password]');
+    if (passwordButton) return resetTeamUserPassword(passwordButton.dataset.teamUserPassword);
     const editButton = event.target.closest('[data-team-user-edit]');
     if (editButton) return editTeamUser(editButton.dataset.teamUserEdit);
     const deleteButton = event.target.closest('[data-team-user-delete]');

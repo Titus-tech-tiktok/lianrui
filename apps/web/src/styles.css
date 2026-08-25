@@ -271,6 +271,7 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .team-user-row b, .team-user-row span { display: block; }
 .team-user-row b { font-size: 12px; }
 .team-user-row span { margin-top: 3px; color: var(--subtle); font-size: 9px; }
+.team-user-row .team-user-password-status { color: #6f7f7a; }
 .team-user-row button { min-height: 34px; padding: 0 11px; font-size: 10px; }
 .team-user-actions { display: flex; gap: 7px; justify-content: flex-end; flex-wrap: wrap; }
 .team-transfer-controls { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; }
@@ -9333,6 +9334,17 @@ label input, label textarea {
 
 .mobile-finance-form label.wide {
   grid-column: 1 / -1;
+}
+
+.mobile-finance-category-hint {
+  grid-column: 1 / -1;
+  margin: -4px 0 0;
+  padding: 9px 11px;
+  border-radius: 10px;
+  background: #f3f6f5;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
 }
 
 .mobile-finance-form label > span {

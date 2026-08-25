@@ -19,9 +19,14 @@ test('mobile finance ledger uses Chinese labels and independent finance APIs', a
   for (const label of ['经营账本', '营业收入', '总支出', '预估利润', '今天', '近 7 天', '本月', '上月', '自定义日期', '全部中转站', '收支流水', '收入', '支出', '资金与成本详情', '记一笔', '导出 CSV']) {
     assert.match(renderer, new RegExp(label));
   }
-  assert.match(renderer, /客户成功生图实际扣费/);
+  assert.match(renderer, /客户充值 \+ 其他收入/);
   assert.match(renderer, /上游成本 \+ 杂费/);
-  assert.match(renderer, /客户充值和未消费余额不算营业收入/);
+  assert.match(renderer, /站内客户充值会自动计入营业收入/);
+  assert.match(renderer, /内部划拨不计收入/);
+  assert.match(renderer, /客户已消费金额只展示经营进度/);
+  assert.match(renderer, /其他收入（非站内充值）/);
+  assert.match(renderer, /推广费用/);
+  assert.match(renderer, /人工费用/);
   assert.doesNotMatch(renderer, /待成本同步|网关成本可用后/);
   assert.match(renderer, /getBillingAccounting\(\{/);
   assert.match(renderer, /mobileFinanceRange: 'month'/);

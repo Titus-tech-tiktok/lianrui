@@ -234,6 +234,18 @@ test('admin billing endpoint hides platform ledger and backend actors', async ()
       body: JSON.stringify({ date: chinaDate, category: 'server', amount: '12.34', currency: 'CNY' })
     });
     assert.equal(miscExpense.response.status, 201);
+    const otherIncome = await jsonFetch(`${base}/api/finance/entries`, {
+      method: 'POST',
+      headers: { Cookie: superCookie },
+      body: JSON.stringify({ date: chinaDate, category: 'other_income', amount: '5.00', currency: 'CNY' })
+    });
+    assert.equal(otherIncome.response.status, 201);
+    const legacyClientPayment = await jsonFetch(`${base}/api/finance/entries`, {
+      method: 'POST',
+      headers: { Cookie: superCookie },
+      body: JSON.stringify({ date: chinaDate, category: 'client_payment', amount: '100.00', currency: 'CNY' })
+    });
+    assert.equal(legacyClientPayment.response.status, 201);
 
     const accounting = await jsonFetch(`${base}/api/billing/accounting?range=custom&startDate=${chinaDate}&endDate=${chinaDate}`, {
       headers: { Cookie: superCookie }
@@ -242,9 +254,12 @@ test('admin billing endpoint hides platform ledger and backend actors', async ()
     assert.deepEqual(accounting.body.data.relays.map(relay => relay.relayName), ['一号站', '二号站']);
     assert.deepEqual(accounting.body.data.relays.map(relay => relay.upstreamImageCostCnyMicro), [20000, 15000]);
     assert.equal(accounting.body.data.range, 'custom');
+    assert.equal(accounting.body.data.totals.customerTopupCnyMinor, 2);
+    assert.equal(accounting.body.data.totals.otherIncomeCnyMinor, 500);
+    assert.equal(accounting.body.data.totals.businessRevenueCnyMinor, 502);
     assert.equal(accounting.body.data.totals.operatingExpensesCnyMinor, 1234);
     assert.equal(accounting.body.data.totals.totalExpensesCnyMinor, 1234);
-    assert.equal(accounting.body.data.totals.netProfitCnyMinor, -1234);
+    assert.equal(accounting.body.data.totals.netProfitCnyMinor, -732);
   } finally {
     await new Promise(resolve => server.close(resolve));
     await removeTempWithRetry(temp);
