@@ -272,8 +272,11 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .team-user-row b { font-size: 12px; }
 .team-user-row span { margin-top: 3px; color: var(--subtle); font-size: 9px; }
 .team-user-row .team-user-password-status { color: #6f7f7a; }
+.team-user-row .team-user-password-reason { color: #8b7750; }
 .team-user-row button { min-height: 34px; padding: 0 11px; font-size: 10px; }
 .team-user-actions { display: flex; gap: 7px; justify-content: flex-end; flex-wrap: wrap; }
+.team-user-head-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+.team-user-head-actions button { min-height: 34px; padding: 0 11px; font-size: 10px; }
 .team-transfer-controls { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; }
 .team-transfer-controls input { min-height: 36px; }
 .team-transfer-controls button { min-height: 36px; }

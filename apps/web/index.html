@@ -258,11 +258,11 @@
             <div class="settings-panel-head"><div><h2>团队账号</h2></div></div>
             <div class="team-settings-grid">
               <section class="settings-card team-create-card">
-                <div class="settings-card-head"><div><h3>添加美工账号</h3><p>创建后把账号和初始密码单独发给成员。</p></div></div>
+                <div class="settings-card-head"><div><h3>添加美工账号</h3><p>创建后把账号和初始密码单独发给成员；成员首次登录必须自己确认一次密码。</p></div></div>
                 <form id="createUserForm"><label>姓名或昵称<input id="newUserDisplayName" autocomplete="name" maxlength="40" required placeholder="例如：美工小林"></label><label>登录账号<input id="newUsername" autocomplete="username" maxlength="32" required placeholder="例如：xiaolin"></label><label id="newUserRoleLabel">账号角色<select id="newUserRole"><option value="member">成员</option><option value="admin">管理员</option></select></label><label>初始密码<input id="newUserPassword" type="password" autocomplete="new-password" minlength="3" maxlength="128" required placeholder="至少 3 位"></label><button class="primary" id="createUserButton" type="submit">创建账号</button></form>
               </section>
               <section class="settings-card team-list-card">
-                <div class="settings-card-head"><div><h3>账号列表</h3><p>停用后该成员会立即无法再次登录，素材不会删除。</p></div><span id="teamUserCount">0 人</span></div>
+                <div class="settings-card-head"><div><h3>账号列表</h3><p>可要求用户下次登录时使用原密码验证，并自行设置新密码。</p></div><div class="team-user-head-actions"><span id="teamUserCount">0 人</span><button class="secondary" id="requireAllPasswordChangesButton" type="button" hidden>全部下次登录强制改密</button></div></div>
                 <div class="team-user-list" id="teamUserList"><div class="empty-inline">正在读取团队账号…</div></div>
               </section>
               <section class="settings-card team-balance-transfer-card" id="teamBalanceTransferCard" hidden>

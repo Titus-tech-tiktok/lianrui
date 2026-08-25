@@ -20,9 +20,19 @@ test('团队账号支持首次管理员、成员登录、会话和停用', async
 
   const member = await auth.createUser({ username: 'artist_a', displayName: '美工 A', password: 'artist-pass-123' });
   assert.equal(member.role, 'member');
+  assert.equal(member.passwordChangeRequired, true);
+  assert.equal(member.passwordRecorded, true);
+  assert.match(member.passwordChangeReason, /系统已升级密码管理机制/);
   assert.notEqual(member.workspaceId, admin.workspaceId);
-  assert.equal((await auth.authenticate('artist_a', 'artist-pass-123')).id, member.id);
+  assert.equal((await auth.authenticate('artist_a', 'artist-pass-123')).passwordChangeRequired, true);
   assert.equal(await auth.authenticate('artist_a', 'wrong-password'), null);
+
+  const changed = await auth.changeOwnPassword(member.id, 'artist-pass-123', 'artist-pass-123');
+  assert.equal(changed.passwordChangeRequired, false);
+  assert.ok(changed.passwordChangedAt);
+  assert.equal((await auth.revealUserPassword(member.id, admin.id, 'admin-pass-123')).password, 'artist-pass-123');
+  await assert.rejects(auth.revealUserPassword(member.id, admin.id, 'wrong-password'), /超级管理员密码不正确/);
+  assert.equal((await auth.requirePasswordChange(member.id, admin.id)).passwordChangeRequired, true);
 
   const token = await auth.createSession(member);
   const request = { headers: { cookie: `other=1; caishen_session=${encodeURIComponent(token)}` } };

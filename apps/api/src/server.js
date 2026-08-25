@@ -1253,6 +1253,33 @@ async function startServer() {
     return res.json({ data: visibleUsersForActor(users, req.user) });
   });
 
+  app.post('/api/auth/users/:id/require-password-change', async (req, res) => {
+    if (!isSuperAdmin(req.user)) return res.status(403).json({ error: '只有超级管理员可以要求用户强制改密' });
+    try {
+      return res.json({ data: await auth.requirePasswordChange(req.params.id, req.user.id) });
+    } catch (error) {
+      return res.status(400).json({ error: error?.message || String(error) });
+    }
+  });
+
+  app.post('/api/auth/users/:id/reveal-password', async (req, res) => {
+    if (!isSuperAdmin(req.user)) return res.status(403).json({ error: '只有超级管理员可以查看已记录密码' });
+    try {
+      return res.json({ data: await auth.revealUserPassword(req.params.id, req.user.id, req.body?.currentPassword) });
+    } catch (error) {
+      return res.status(400).json({ error: error?.message || String(error) });
+    }
+  });
+
+  app.post('/api/auth/password-policy/require-all', async (req, res) => {
+    if (!isSuperAdmin(req.user)) return res.status(403).json({ error: '只有超级管理员可以要求用户强制改密' });
+    try {
+      return res.json({ data: await auth.requireAllPasswordChanges(req.user.id) });
+    } catch (error) {
+      return res.status(400).json({ error: error?.message || String(error) });
+    }
+  });
+
   app.post('/api/auth/users', async (req, res) => {
     if (!isTeamAdmin(req.user)) return res.status(403).json({ error: '只有管理员可以创建团队账号' });
     try {

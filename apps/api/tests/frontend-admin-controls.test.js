@@ -22,13 +22,24 @@ test('管理员余额划拨界面支持选择转出和转入账号', async () =>
   assert.doesNotMatch(renderer, /data-transfer-billing=/);
 });
 
-test('超级管理员可在账号列表安全重置密码', async () => {
-  const renderer = await fs.readFile(path.join(webRoot, 'src/renderer.js'), 'utf8');
-  assert.match(renderer, /密码：安全加密，无法查看原密码/);
-  assert.match(renderer, /isSuperAdmin\(\)[\s\S]*data-team-user-password/);
-  assert.match(renderer, /async function resetTeamUserPassword/);
-  assert.match(renderer, /window\.caishen\.updateUser\(id, \{ password \}\)/);
-  assert.match(renderer, /关闭后无法再查看/);
+test('超级管理员可强制用户下次登录改密并查看加密记录', async () => {
+  const [html, renderer, bridge] = await Promise.all([
+    fs.readFile(path.join(webRoot, 'index.html'), 'utf8'),
+    fs.readFile(path.join(webRoot, 'src/renderer.js'), 'utf8'),
+    fs.readFile(path.join(webRoot, 'src/api-bridge.js'), 'utf8')
+  ]);
+  assert.match(html, /id="requireAllPasswordChangesButton"/);
+  assert.match(renderer, /data-team-user-require-password/);
+  assert.match(renderer, /async function requireTeamUserPasswordChange/);
+  assert.match(renderer, /async function requireAllTeamPasswordChanges/);
+  assert.match(renderer, /data-team-user-view-password/);
+  assert.match(renderer, /async function viewTeamUserPassword/);
+  assert.match(renderer, /新密码可以与原密码相同/);
+  assert.match(renderer, /改密原因/);
+  assert.match(renderer, /authStatus\.user\.passwordChangeRequired/);
+  assert.match(bridge, /requireUserPasswordChange:[\s\S]*require-password-change/);
+  assert.match(bridge, /requireAllPasswordChanges:[\s\S]*password-policy\/require-all/);
+  assert.match(bridge, /revealUserPassword:[\s\S]*reveal-password/);
 });
 
 test('全局价格和上游余额接口已从界面移除', async () => {

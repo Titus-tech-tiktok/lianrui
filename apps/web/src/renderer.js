@@ -317,14 +317,22 @@ async function logout() {
 }
 
 function openChangePasswordModal() {
+  const required = Boolean(state.currentUser?.passwordChangeRequired);
   $('#changePasswordModal').hidden = false;
   $('#changePasswordForm').reset();
+  $('#changePasswordTitle').textContent = required ? '首次登录，请确认密码' : '修改登录密码';
+  $('#changePasswordModal').querySelector('.modal-head p').textContent = required
+    ? (state.currentUser?.passwordChangeReason || '为保障账号安全，请使用原密码验证身份并重新确认登录密码。新密码可以与原密码相同。')
+    : '所有账号都可以修改自己的密码；保存后请使用新密码登录。';
+  $('#closeChangePasswordButton').hidden = required;
+  $('#cancelChangePasswordButton').hidden = required;
   $('#changePasswordStatus').className = '';
-  $('#changePasswordStatus').textContent = '密码仅用于当前登录账号。';
+  $('#changePasswordStatus').textContent = required ? '完成后系统会记录改密时间。' : '密码仅用于当前登录账号。';
   requestAnimationFrame(() => $('#currentPasswordInput').focus());
 }
 
 function closeChangePasswordModal() {
+  if (state.currentUser?.passwordChangeRequired) return;
   $('#changePasswordModal').hidden = true;
 }
 
@@ -344,10 +352,12 @@ async function submitChangePassword(event) {
   $('#changePasswordStatus').className = 'saving';
   $('#changePasswordStatus').textContent = '正在修改密码…';
   try {
+    const required = Boolean(state.currentUser?.passwordChangeRequired);
     await window.caishen.changePassword({ currentPassword, newPassword });
     $('#changePasswordStatus').className = 'saved';
-    $('#changePasswordStatus').textContent = '密码已修改';
-    toast('密码已修改');
+    $('#changePasswordStatus').textContent = required ? '密码已确认，正在进入系统…' : '密码已修改';
+    toast(required ? '密码已确认' : '密码已修改');
+    if (required) return setTimeout(() => window.location.reload(), 350);
     setTimeout(closeChangePasswordModal, 450);
   } catch (error) {
     $('#changePasswordStatus').className = 'error';
@@ -5196,11 +5206,12 @@ async function adjustBillingBalance(button) {
 function renderTeamUsers() {
   const activeRelayId = state.billingAdmin?.activeRelayId || state.relayChoices?.activeRelayId || '';
   $('#teamUserCount').textContent = `${state.teamUsers.length} 人`;
+  $('#requireAllPasswordChangesButton').hidden = !isSuperAdmin();
   $('#teamUserList').innerHTML = state.teamUsers.length ? state.teamUsers.map(user => `
     <div class="team-user-row${user.active ? '' : ' inactive'}" data-team-user="${escapeHtml(user.id)}">
-      <div><b>${escapeHtml(user.displayName || user.username)}${user.id === state.currentUser?.id ? '（当前）' : ''}</b><span>${escapeHtml(user.username)} · ${roleLabel(user.role)} · ${user.active ? '可登录' : '已停用'}${user.billing ? ` · 当前线路 ${formatMoney(user.billing.wallets?.find(wallet => wallet.relayId === activeRelayId)?.balanceMinor || 0)}` : ''}</span>${isSuperAdmin() ? `<span class="team-user-password-status">密码：安全加密，无法查看原密码${user.id === state.currentUser?.id ? ' · 请使用右下角改密' : ' · 可重置'}</span>` : ''}</div>
+      <div><b>${escapeHtml(user.displayName || user.username)}${user.id === state.currentUser?.id ? '（当前）' : ''}</b><span>${escapeHtml(user.username)} · ${roleLabel(user.role)} · ${user.active ? '可登录' : '已停用'}${user.billing ? ` · 当前线路 ${formatMoney(user.billing.wallets?.find(wallet => wallet.relayId === activeRelayId)?.balanceMinor || 0)}` : ''}</span>${isSuperAdmin() ? `<span class="team-user-password-status">${user.role === 'superadmin' ? '密码：安全加密 · 请使用右下角改密' : user.passwordChangeRequired ? `密码状态：下次登录必须用原密码确认${user.passwordRecorded ? ' · 当前记录可查' : ' · 完成后可查'}` : `密码状态：用户已完成改密 · 已加密记录${user.passwordChangedAt ? ` · ${escapeHtml(formatLocalDateTime(user.passwordChangedAt))}` : ''}`}</span>${user.role === 'superadmin' ? '' : `<span class="team-user-password-reason">改密原因：${escapeHtml(user.passwordChangeReason || '账号安全升级')}</span>`}` : ''}</div>
       <div class="team-user-actions">
-        ${user.id === state.currentUser?.id ? '' : `${isSuperAdmin() ? `<button class="secondary" type="button" data-team-user-password="${escapeHtml(user.id)}">重置密码</button>` : ''}<button class="secondary" type="button" data-team-user-edit="${escapeHtml(user.id)}">编辑</button><button class="secondary${user.active ? ' danger-outline' : ''}" type="button" data-team-user-active="${escapeHtml(user.id)}" data-active="${user.active ? 'false' : 'true'}">${user.active ? '停用' : '恢复'}</button><button class="secondary danger-outline" type="button" data-team-user-delete="${escapeHtml(user.id)}">删除</button>`}
+        ${user.id === state.currentUser?.id ? '' : `${isSuperAdmin() ? `${user.passwordRecorded ? `<button class="secondary" type="button" data-team-user-view-password="${escapeHtml(user.id)}">查看密码</button>` : ''}<button class="secondary" type="button" data-team-user-require-password="${escapeHtml(user.id)}">强制下次登录改密</button>` : ''}<button class="secondary" type="button" data-team-user-edit="${escapeHtml(user.id)}">编辑</button><button class="secondary${user.active ? ' danger-outline' : ''}" type="button" data-team-user-active="${escapeHtml(user.id)}" data-active="${user.active ? 'false' : 'true'}">${user.active ? '停用' : '恢复'}</button><button class="secondary danger-outline" type="button" data-team-user-delete="${escapeHtml(user.id)}">删除</button>`}
       </div>
     </div>`).join('') : '<div class="empty-inline">还没有团队账号</div>';
   renderTeamBalanceTransfer();
@@ -5296,8 +5307,6 @@ async function editTeamUser(id) {
   if (!user) return;
   const displayName = window.prompt('修改姓名或昵称', user.displayName || user.username);
   if (displayName === null) return;
-  const password = window.prompt('重置密码（留空表示不修改）', '');
-  if (password === null) return;
   let role = user.role;
   if (isSuperAdmin() && user.role !== 'superadmin') {
     const nextRole = window.prompt('账号角色：admin 或 member', user.role);
@@ -5306,7 +5315,6 @@ async function editTeamUser(id) {
     if (!['admin', 'member'].includes(role)) return toast('角色只能填写 admin 或 member', true);
   }
   const payload = { displayName: displayName.trim(), role };
-  if (password) payload.password = password;
   try {
     await window.caishen.updateUser(id, payload);
     await loadTeamUsers();
@@ -5316,29 +5324,46 @@ async function editTeamUser(id) {
   }
 }
 
-function suggestedTeamPassword() {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
-  const bytes = new Uint8Array(14);
-  window.crypto.getRandomValues(bytes);
-  return [...bytes].map(value => alphabet[value % alphabet.length]).join('');
-}
-
-async function resetTeamUserPassword(id) {
-  if (!isSuperAdmin()) return toast('只有超级管理员可以重置账号密码', true);
+async function requireTeamUserPasswordChange(id) {
+  if (!isSuperAdmin()) return toast('只有超级管理员可以要求用户强制改密', true);
   const user = state.teamUsers.find(item => item.id === id);
   if (!user || user.id === state.currentUser?.id) return;
-  const password = window.prompt(`为 ${user.displayName || user.username} 设置新密码\n原密码已安全加密，无法查看。`, suggestedTeamPassword());
-  if (password === null) return;
-  if (password.length < 3 || password.length > 128) return toast('密码长度需要在 3-128 位之间', true);
+  if (!window.confirm(`确定要求 ${user.displayName || user.username} 下次登录时强制改密吗？\n用户需要输入原账号、原密码和新密码。`)) return;
   try {
-    await window.caishen.updateUser(id, { password });
+    await window.caishen.requireUserPasswordChange(id);
+    await loadTeamUsers();
+    toast('已设置为下次登录强制改密');
+  } catch (error) {
+    toast(errorText(error), true);
+  }
+}
+
+async function viewTeamUserPassword(id) {
+  if (!isSuperAdmin()) return;
+  const user = state.teamUsers.find(item => item.id === id);
+  if (!user?.passwordRecorded) return toast('该账号还没有可查看的密码记录', true);
+  const currentPassword = window.prompt('请输入当前超级管理员密码以验证身份', '');
+  if (currentPassword === null) return;
+  try {
+    const result = await window.caishen.revealUserPassword(id, currentPassword);
     let copied = false;
     try {
-      await window.caishen.copyText(password);
+      await window.caishen.copyText(result.password);
       copied = true;
     } catch {}
-    window.prompt(`密码已重置${copied ? '并复制到剪贴板' : ''}，请现在保存；关闭后无法再查看。`, password);
-    toast('账号密码已重置');
+    window.prompt(`${user.displayName || user.username} 的已记录密码${copied ? '（已复制）' : ''}`, result.password);
+  } catch (error) {
+    toast(errorText(error), true);
+  }
+}
+
+async function requireAllTeamPasswordChanges() {
+  if (!isSuperAdmin()) return;
+  if (!window.confirm('确定要求所有管理员和成员下次登录时强制改密吗？\n超级管理员自身不受影响。')) return;
+  try {
+    const result = await window.caishen.requireAllPasswordChanges();
+    await loadTeamUsers();
+    toast(`已要求 ${Number(result?.affected || 0)} 个账号下次登录强制改密`);
   } catch (error) {
     toast(errorText(error), true);
   }
@@ -5827,13 +5852,16 @@ function bindEvents() {
   $('#teamUserList').onclick = event => {
     const button = event.target.closest('[data-team-user-active]');
     if (button) return toggleTeamUser(button);
-    const passwordButton = event.target.closest('[data-team-user-password]');
-    if (passwordButton) return resetTeamUserPassword(passwordButton.dataset.teamUserPassword);
+    const passwordButton = event.target.closest('[data-team-user-require-password]');
+    if (passwordButton) return requireTeamUserPasswordChange(passwordButton.dataset.teamUserRequirePassword);
+    const viewPasswordButton = event.target.closest('[data-team-user-view-password]');
+    if (viewPasswordButton) return viewTeamUserPassword(viewPasswordButton.dataset.teamUserViewPassword);
     const editButton = event.target.closest('[data-team-user-edit]');
     if (editButton) return editTeamUser(editButton.dataset.teamUserEdit);
     const deleteButton = event.target.closest('[data-team-user-delete]');
     if (deleteButton) return deleteTeamUser(deleteButton.dataset.teamUserDelete);
   };
+  $('#requireAllPasswordChangesButton').onclick = requireAllTeamPasswordChanges;
   $('#teamTransferButton').onclick = transferTeamBalance;
   $$('.nav-item').forEach(button => button.onclick = () => setPage(button.dataset.page));
   $$('[data-page-link]').forEach(button => button.onclick = () => setPage(button.dataset.pageLink));
@@ -6393,9 +6421,13 @@ async function start() {
   ensureMobileStatsPage();
   applyCurrentUser(authStatus.user);
   applySidebarCollapsed(loadSidebarCollapsed());
+  bindEvents();
+  if (authStatus.user.passwordChangeRequired) {
+    openChangePasswordModal();
+    return;
+  }
   setTaskSourceTab(state.taskSourceTab);
   window.addEventListener('caishen:billing-changed', loadBillingSummary);
-  bindEvents();
   if (shouldOpenMobileStats()) setPage('mobile-stats');
   bindImageHoverPreview();
   updateGenerationModeUi();

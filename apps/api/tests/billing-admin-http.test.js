@@ -118,6 +118,26 @@ test('admin billing endpoint hides platform ledger and backend actors', async ()
     assert.equal(login.response.status, 200);
     const adminCookie = login.response.headers.get('set-cookie')?.split(';')[0] || '';
 
+    const forbiddenPasswordReveal = await jsonFetch(`${base}/api/auth/users/${admin.id}/reveal-password`, {
+      method: 'POST',
+      headers: { Cookie: adminCookie },
+      body: JSON.stringify({ currentPassword: 'abc147852' })
+    });
+    assert.equal(forbiddenPasswordReveal.response.status, 403);
+    const revealedAdminPassword = await jsonFetch(`${base}/api/auth/users/${admin.id}/reveal-password`, {
+      method: 'POST',
+      headers: { Cookie: superCookie },
+      body: JSON.stringify({ currentPassword: 'abc147852' })
+    });
+    assert.equal(revealedAdminPassword.response.status, 200);
+    assert.equal(revealedAdminPassword.body.data.password, 'abc147852');
+    const requiredPasswordChange = await jsonFetch(`${base}/api/auth/users/${admin.id}/require-password-change`, {
+      method: 'POST',
+      headers: { Cookie: superCookie }
+    });
+    assert.equal(requiredPasswordChange.response.status, 200);
+    assert.equal(requiredPasswordChange.body.data.passwordChangeRequired, true);
+
     const forbiddenAccounting = await jsonFetch(`${base}/api/billing/accounting`, {
       headers: { Cookie: adminCookie }
     });

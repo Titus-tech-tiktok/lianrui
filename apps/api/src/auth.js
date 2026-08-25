@@ -4,6 +4,7 @@ const path = require('node:path');
 
 const SESSION_COOKIE = 'caishen_session';
 const SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
+const DEFAULT_PASSWORD_CHANGE_REASON = '为保障账号安全，系统已升级密码管理机制。请使用原账号和原密码验证身份，并重新确认登录密码。新密码可以与原密码相同。';
 
 function createAuthService(dataRoot) {
   const authRoot = path.join(dataRoot, 'system');
@@ -79,6 +80,33 @@ function createAuthService(dataRoot) {
     return actual.length === expected.length && crypto.timingSafeEqual(actual, expected);
   }
 
+  async function passwordVaultKey() {
+    return crypto.createHash('sha256').update(`caishen-password-vault-v1:${await ensureSecret()}`).digest();
+  }
+
+  async function encryptRecordedPassword(password) {
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', await passwordVaultKey(), iv);
+    const ciphertext = Buffer.concat([cipher.update(String(password), 'utf8'), cipher.final()]);
+    return {
+      version: 1,
+      iv: iv.toString('base64'),
+      tag: cipher.getAuthTag().toString('base64'),
+      ciphertext: ciphertext.toString('base64')
+    };
+  }
+
+  async function decryptRecordedPassword(value) {
+    if (!value?.iv || !value?.tag || !value?.ciphertext) throw new Error('该账号还没有可查看的密码记录');
+    try {
+      const decipher = crypto.createDecipheriv('aes-256-gcm', await passwordVaultKey(), Buffer.from(value.iv, 'base64'));
+      decipher.setAuthTag(Buffer.from(value.tag, 'base64'));
+      return Buffer.concat([decipher.update(Buffer.from(value.ciphertext, 'base64')), decipher.final()]).toString('utf8');
+    } catch {
+      throw new Error('密码记录无法解密，请要求用户重新改密');
+    }
+  }
+
   function publicUser(user) {
     return user ? {
       id: user.id,
@@ -88,7 +116,12 @@ function createAuthService(dataRoot) {
       active: user.active !== false,
       workspaceId: user.workspaceId,
       parentUserId: user.parentUserId || '',
-      createdAt: user.createdAt
+      createdAt: user.createdAt,
+      passwordChangeRequired: user.role !== 'superadmin' && user.passwordChangeRequired !== false,
+      passwordChangeRequestedAt: user.passwordChangeRequestedAt || '',
+      passwordChangeReason: user.role !== 'superadmin' ? (user.passwordChangeReason || DEFAULT_PASSWORD_CHANGE_REASON) : '',
+      passwordChangedAt: user.passwordChangedAt || '',
+      passwordRecorded: Boolean(user.passwordVault?.ciphertext)
     } : null;
   }
 
@@ -100,7 +133,7 @@ function createAuthService(dataRoot) {
   }
 
   function createUser(payload = {}, options = {}) {
-    return mutateUsers(users => {
+    return mutateUsers(async users => {
       if (options.bootstrap && users.length) throw new Error('管理员账号已经创建');
       const username = normalizedUsername(payload.username);
       if (users.some(user => user.username === username)) throw new Error('该账号已存在');
@@ -113,10 +146,15 @@ function createAuthService(dataRoot) {
         displayName: normalizedDisplayName(payload.displayName, username),
         passwordSalt: salt,
         passwordHash: passwordHash(password, salt),
+        passwordVault: await encryptRecordedPassword(password),
         role: normalizeRole(payload.role, options),
         active: true,
         workspaceId: options.bootstrap ? 'local' : `user-${id.replaceAll('-', '').slice(0, 20)}`,
         parentUserId: options.parentUserId ? String(options.parentUserId) : '',
+        passwordChangeRequired: !options.bootstrap,
+        passwordChangeRequestedAt: options.bootstrap ? '' : new Date().toISOString(),
+        passwordChangeReason: options.bootstrap ? '' : DEFAULT_PASSWORD_CHANGE_REASON,
+        passwordChangedAt: options.bootstrap ? new Date().toISOString() : '',
         createdAt: new Date().toISOString()
       };
       users.push(user);
@@ -145,7 +183,7 @@ function createAuthService(dataRoot) {
   }
 
   function updateUser(id, payload = {}, actor = {}) {
-    return mutateUsers(users => {
+    return mutateUsers(async users => {
       const user = users.find(item => item.id === String(id));
       if (!user) throw new Error('账号不存在');
       if (user.role === 'superadmin' && actor.role !== 'superadmin') throw new Error('不能编辑超级管理员');
@@ -159,6 +197,10 @@ function createAuthService(dataRoot) {
         const salt = crypto.randomBytes(24).toString('hex');
         user.passwordSalt = salt;
         user.passwordHash = passwordHash(password, salt);
+        user.passwordVault = await encryptRecordedPassword(password);
+        user.passwordChangeRequired = user.role !== 'superadmin';
+        user.passwordChangeRequestedAt = new Date().toISOString();
+        user.passwordChangeReason = DEFAULT_PASSWORD_CHANGE_REASON;
       }
       if (actor.role === 'superadmin' && ['admin', 'member'].includes(String(payload.role || ''))) {
         if (user.role === 'superadmin') throw new Error('不能修改超级管理员角色');
@@ -169,7 +211,7 @@ function createAuthService(dataRoot) {
   }
 
   function changeOwnPassword(id, currentPassword, newPassword) {
-    return mutateUsers(users => {
+    return mutateUsers(async users => {
       const user = users.find(item => item.id === String(id) && item.active !== false);
       if (!user) throw new Error('账号不存在');
       if (!passwordMatches(user, currentPassword)) throw new Error('当前密码不正确');
@@ -177,8 +219,54 @@ function createAuthService(dataRoot) {
       const salt = crypto.randomBytes(24).toString('hex');
       user.passwordSalt = salt;
       user.passwordHash = passwordHash(password, salt);
+      user.passwordVault = await encryptRecordedPassword(password);
+      user.passwordChangeRequired = false;
+      user.passwordChangedAt = new Date().toISOString();
       return publicUser(user);
     });
+  }
+
+  function requirePasswordChange(id, actorId = '') {
+    return mutateUsers(users => {
+      const user = users.find(item => item.id === String(id));
+      if (!user) throw new Error('账号不存在');
+      if (user.role === 'superadmin') throw new Error('超级管理员请使用自助改密');
+      user.passwordChangeRequired = true;
+      user.passwordChangeRequestedAt = new Date().toISOString();
+      user.passwordChangeReason = DEFAULT_PASSWORD_CHANGE_REASON;
+      user.passwordChangeRequestedBy = String(actorId || '');
+      return publicUser(user);
+    });
+  }
+
+  function requireAllPasswordChanges(actorId = '') {
+    return mutateUsers(users => {
+      const requestedAt = new Date().toISOString();
+      const affected = [];
+      for (const user of users) {
+        if (user.role === 'superadmin') continue;
+        user.passwordChangeRequired = true;
+        user.passwordChangeRequestedAt = requestedAt;
+        user.passwordChangeReason = DEFAULT_PASSWORD_CHANGE_REASON;
+        user.passwordChangeRequestedBy = String(actorId || '');
+        affected.push(publicUser(user));
+      }
+      return { affected: affected.length, users: affected, requestedAt };
+    });
+  }
+
+  async function revealUserPassword(id, actorId, actorPassword) {
+    const users = await loadUsers();
+    const actor = users.find(item => item.id === String(actorId));
+    if (!actor || actor.role !== 'superadmin' || !passwordMatches(actor, String(actorPassword || ''))) {
+      throw new Error('超级管理员密码不正确');
+    }
+    const user = users.find(item => item.id === String(id));
+    if (!user) throw new Error('账号不存在');
+    return {
+      user: publicUser(user),
+      password: await decryptRecordedPassword(user.passwordVault)
+    };
   }
 
   function deleteUser(id, actor = {}) {
@@ -251,6 +339,9 @@ function createAuthService(dataRoot) {
     hasUsers,
     listUsers,
     publicUser,
+    requireAllPasswordChanges,
+    requirePasswordChange,
+    revealUserPassword,
     sessionCookie,
     setUserActive,
     updateUser,
