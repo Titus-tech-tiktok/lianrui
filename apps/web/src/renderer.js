@@ -4,6 +4,7 @@ const ASSET_PREVIEW_SIZE_STORAGE_KEY = 'caishen-web-asset-preview-sizes-v1';
 const REVIEW_VIEWED_STORAGE_KEY = 'caishen-web-viewed-review-jobs-v1';
 const REVIEW_REGENERATION_RECORDS_STORAGE_KEY = 'caishen-web-review-regeneration-records-v1';
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'caishen-web-sidebar-collapsed-v1';
+const IMAGE_PREVIEW_SIZE_STORAGE_KEY = 'duoxiluka-image-preview-size-v1';
 let storageScope = 'anonymous';
 const scopedStorageKey = key => `${key}:${storageScope}`;
 
@@ -78,6 +79,11 @@ function persistAssetPreviewSizes() {
   try { localStorage.setItem(scopedStorageKey(ASSET_PREVIEW_SIZE_STORAGE_KEY), JSON.stringify(state.assetPreviewSizes)); } catch {}
 }
 
+function loadImagePreviewSize() {
+  try { return Math.max(28, Math.min(50, Number(localStorage.getItem(IMAGE_PREVIEW_SIZE_STORAGE_KEY)) || 38)); }
+  catch { return 38; }
+}
+
 function loadViewedReviewJobs() {
   try {
     const saved = JSON.parse(localStorage.getItem(scopedStorageKey(REVIEW_VIEWED_STORAGE_KEY)) || '[]');
@@ -111,9 +117,16 @@ const state = {
   billingSummary: null,
   billingDetailSummary: null,
   billingDetailRelayId: '',
+  billingDetailUserId: '',
+  billingDetailRange: 'today',
+  billingDetailStartDate: '',
+  billingDetailEndDate: '',
   billingAdmin: null,
   billingAdminFilter: '',
   billingAdminRelayId: '',
+  alipayConfig: null,
+  alipayRecharges: [],
+  alipayReview: [],
   mobileStats: null,
   mobileStatsRange: 'today',
   mobileStatsRelayId: '',
@@ -168,7 +181,6 @@ const state = {
   freeResult: null,
   promptSettings: null,
   activePromptId: '',
-  freePromptDefaultApplied: false,
   apiSettings: null,
   relayChoices: null,
   selectedRelayId: '',
@@ -186,10 +198,87 @@ const state = {
   assetPreviewCache: new Map(),
   assetPreviewLoadId: 0,
   assetPreviewSizes: { printsPath: 138, detailSetsPath: 138 },
+  imagePreviewSize: loadImagePreviewSize(),
   assetTemplateFilter: 'all',
   selectedAssetPaths: new Set(),
   assetUploading: false,
-  activeTemplatePath: ''
+  activeTemplatePath: '',
+  childrenwearReal: null,
+  childrenwearReference: null,
+  childrenwearModelReference: null,
+  childrenwearActiveTask: null,
+  childrenwearTasks: [],
+  childrenwearCombinationSelection: new Set(),
+  childrenwearCombinationResult: null,
+  childrenwearLibraries: {
+    childrenwearRealAssetsPath: [],
+    childrenwearReferenceAssetsPath: [],
+    childrenwearModelAssetsPath: [],
+    childrenwearCombinationAssetsPath: []
+  },
+  childrenwearProductionLibraries: {
+    childrenwearRealAssetsPath: [],
+    childrenwearReferenceAssetsPath: [],
+    childrenwearModelAssetsPath: [],
+    childrenwearCombinationAssetsPath: []
+  },
+  childrenwearProductionFolders: {
+    childrenwearRealAssetsPath: [],
+    childrenwearReferenceAssetsPath: [],
+    childrenwearModelAssetsPath: [],
+    childrenwearCombinationAssetsPath: []
+  },
+  childrenwearLibraryUploading: new Set(),
+  childrenwearAnalysisScanRunning: false,
+  childrenwearAnalysisLastScanAt: '',
+  childrenwearAssetTab: 'childrenwearRealAssetsPath',
+  childrenwearProductionTab: 'master',
+  childrenwearSourceTabs: { master: 'master-real', model: 'model-master', combination: 'combination-master' },
+  childrenwearDrafts: { master: [], model: [], combination: [] },
+  childrenwearActiveDraft: { master: '', model: '', combination: '' },
+  childrenwearQueueFilters: { master: 'all', model: 'all', combination: 'all' },
+  childrenwearReviewSelection: new Set(),
+  childrenwearReviewFilter: 'pending',
+  childrenwearReviewGroupLimits: new Map(),
+  childrenwearCompareId: '',
+  childrenwearCompareContext: 'review',
+  childrenwearCompareZoom: 1,
+  childrenwearComparePan: { x: 0, y: 0 },
+  childrenwearCompareBusy: false,
+  childrenwearCompareVisibility: {},
+  childrenwearCompareOrder: {},
+  childrenwearLibraryFolders: {
+    childrenwearRealAssetsPath: [],
+    childrenwearReferenceAssetsPath: [],
+    childrenwearModelAssetsPath: [],
+    childrenwearCombinationAssetsPath: []
+  },
+  childrenwearLibraryFolder: {
+    childrenwearRealAssetsPath: 'auto',
+    childrenwearReferenceAssetsPath: 'auto',
+    childrenwearModelAssetsPath: 'auto',
+    childrenwearCombinationAssetsPath: 'auto'
+  },
+  childrenwearLibraryPage: {
+    childrenwearRealAssetsPath: 1,
+    childrenwearReferenceAssetsPath: 1,
+    childrenwearModelAssetsPath: 1,
+    childrenwearCombinationAssetsPath: 1
+  },
+  childrenwearLibraryTotals: {
+    childrenwearRealAssetsPath: { total: 0, totalPages: 0, pageSize: 48 },
+    childrenwearReferenceAssetsPath: { total: 0, totalPages: 0, pageSize: 48 },
+    childrenwearModelAssetsPath: { total: 0, totalPages: 0, pageSize: 48 },
+    childrenwearCombinationAssetsPath: { total: 0, totalPages: 0, pageSize: 48 }
+  },
+  childrenwearLibraryDeleteSelection: {
+    childrenwearRealAssetsPath: new Set(),
+    childrenwearReferenceAssetsPath: new Set(),
+    childrenwearModelAssetsPath: new Set(),
+    childrenwearCombinationAssetsPath: new Set()
+  },
+  childrenwearPickerKey: '',
+  childrenwearPickerSelected: ''
 };
 
 const $ = selector => document.querySelector(selector);
@@ -198,8 +287,9 @@ let toastTimer;
 let productSearchTimer;
 let printSearchTimer;
 let reviewRefreshTimer;
-let currentPage = 'tasks';
+let currentPage = 'assets';
 const promptSaveTimers = new Map();
+let activeBrandDialogResolve = null;
 
 function toast(message, error = false) {
   const element = $('#toast');
@@ -207,6 +297,86 @@ function toast(message, error = false) {
   element.className = `toast show${error ? ' error' : ''}`;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { element.className = 'toast'; }, 3200);
+}
+
+function closeBrandDialog(result) {
+  const modal = $('#brandDialogModal');
+  if (!modal || modal.hidden) return;
+  modal.hidden = true;
+  const resolve = activeBrandDialogResolve;
+  activeBrandDialogResolve = null;
+  resolve?.(result);
+}
+
+function openBrandDialog({
+  title = '操作确认',
+  message = '',
+  input = false,
+  value = '',
+  inputLabel = '请输入',
+  inputType = 'text',
+  readOnly = false,
+  confirmText = '确定',
+  cancelText = '取消',
+  danger = false
+} = {}) {
+  const modal = $('#brandDialogModal');
+  if (!modal) return Promise.resolve(input ? null : false);
+  if (activeBrandDialogResolve) closeBrandDialog(input ? null : false);
+  const field = $('#brandDialogField');
+  const control = $('#brandDialogInput');
+  const cancel = $('#brandDialogCancelButton');
+  const confirm = $('#brandDialogConfirmButton');
+  $('#brandDialogTitle').textContent = title;
+  $('#brandDialogMessage').textContent = message;
+  $('#brandDialogFieldLabel').textContent = inputLabel;
+  field.hidden = !input;
+  control.type = inputType;
+  control.value = String(value ?? '');
+  control.readOnly = readOnly;
+  cancel.hidden = !cancelText;
+  cancel.textContent = cancelText || '取消';
+  confirm.textContent = confirmText;
+  confirm.classList.toggle('danger-button', danger);
+  modal.hidden = false;
+  return new Promise(resolve => {
+    activeBrandDialogResolve = resolve;
+    const cancelResult = input ? null : false;
+    cancel.onclick = () => closeBrandDialog(cancelResult);
+    confirm.onclick = () => closeBrandDialog(input ? control.value : true);
+    modal.onclick = event => { if (event.target === modal) closeBrandDialog(cancelResult); };
+    modal.onkeydown = event => {
+      if (event.key === 'Escape') closeBrandDialog(cancelResult);
+      if (event.key === 'Enter' && event.target === control && !readOnly) {
+        event.preventDefault();
+        closeBrandDialog(control.value);
+      }
+    };
+    requestAnimationFrame(() => {
+      if (input) {
+        control.focus();
+        control.select();
+      } else confirm.focus();
+    });
+  });
+}
+
+function brandConfirm(message, options = {}) {
+  return openBrandDialog({ title: options.title || '请确认操作', message, confirmText: options.confirmText || '确定', cancelText: options.cancelText || '取消', danger: options.danger === true });
+}
+
+function brandPrompt(title, value = '', options = {}) {
+  return openBrandDialog({
+    title,
+    message: options.message || '',
+    input: true,
+    value,
+    inputLabel: options.inputLabel || '请输入',
+    inputType: options.inputType || 'text',
+    readOnly: options.readOnly === true,
+    confirmText: options.confirmText || '确定',
+    cancelText: options.cancelText === undefined ? '取消' : options.cancelText
+  });
 }
 
 function applySidebarCollapsed(collapsed) {
@@ -221,7 +391,7 @@ function applySidebarCollapsed(collapsed) {
     button.textContent = collapsed ? '›' : '‹';
   }
   const logo = $('.brand img');
-  if (logo) logo.title = '庞大科技';
+  if (logo) logo.title = '多嘻噜卡科技';
   try { localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, collapsed ? '1' : '0'); } catch {}
 }
 
@@ -231,6 +401,14 @@ function loadSidebarCollapsed() {
 
 function errorText(error) {
   return error?.message || String(error || '未知错误');
+}
+
+function childrenwearFriendlyError(error) {
+  const message = errorText(error);
+  if (/fetch failed|ECONNRESET|socket|network/i.test(message)) {
+    return '连接小恐龙中转站失败，系统已自动尝试备用上传方式。请稍后点击“重新生成这一张”；若持续失败，请到系统设置测试接口线路。';
+  }
+  return message;
 }
 
 let authBootstrapMode = false;
@@ -262,7 +440,7 @@ function applyCurrentUser(user) {
   state.assetPreviewSizes = loadStoredAssetPreviewSizes();
   $('#currentUserName').textContent = user.displayName || user.username;
   $('#currentUserName').title = `${user.username} · ${roleLabel(user.role)}`;
-  $('#promptSettingsNav').hidden = !canViewPrompts();
+  $('#promptSettingsNav').hidden = true;
   $('[data-settings-tab="general"]').hidden = user.role === 'admin';
   $('#apiSettingsTab').hidden = !isTeamAdmin();
   const apiTabStatus = $('#apiTabStatus');
@@ -506,9 +684,23 @@ function mobileFinanceBusinessEntries(accounting = state.mobileAccounting || {})
         relayId: point.relayId,
         relayName: point.relayName,
         title: '上游生图成本',
-        detail: point.costConfigured ? `${formatInteger(point.successfulImages)} 张 × 单张采购成本` : '尚未配置单张采购成本',
-        amountCnyMinor: Number(point.upstreamCostCnyMinor) || 0,
-        amountPending: !point.costConfigured
+        detail: point.imageCostConfigured ? `${formatInteger(point.successfulImages)} 张 × 单张采购成本` : '尚未配置单张采购成本',
+        amountCnyMinor: Number(point.upstreamImageCostCnyMinor) || 0,
+        amountPending: !point.imageCostConfigured
+      });
+    }
+    if (Number(point.successfulAnalyses) > 0) {
+      rows.push({
+        id: `analysis-cost-${point.relayId}-${point.date}`,
+        automatic: true,
+        direction: 'expense',
+        date: point.date,
+        relayId: point.relayId,
+        relayName: point.relayName,
+        title: '上游 AI 分析成本',
+        detail: point.analysisCostConfigured ? `${formatInteger(point.successfulAnalyses)} 次 × 单次分析成本` : '尚未配置单次 AI 分析成本',
+        amountCnyMinor: Number(point.upstreamAnalysisCostCnyMinor) || 0,
+        amountPending: !point.analysisCostConfigured
       });
     }
   }
@@ -542,7 +734,7 @@ function mobileFinancePanelHtml() {
   const relayNameById = new Map((accounting.relays || []).map(item => [item.relayId, item.relayName]));
   const relayCards = (accounting.relays || []).map(relay => {
     return `<article class="mobile-finance-relay-card">
-      <header><div><span>中转站</span><h3>${escapeHtml(relay.relayName)}</h3></div><b>${formatInteger(relay.successfulImages)} 张</b></header>
+      <header><div><span>中转站</span><h3>${escapeHtml(relay.relayName)}</h3></div><b>${formatInteger(relay.successfulImages)} 张 · ${formatInteger(relay.successfulAnalyses)} 次分析</b></header>
       <dl>
         <div><dt>客户累计充值</dt><dd>${formatFinanceCny(relay.customerRechargeCnyMinor)}</dd></div>
         <div><dt>客户未消费余额</dt><dd>${formatFinanceCny(relay.customerBalanceCnyMinor)}</dd></div>
@@ -550,7 +742,7 @@ function mobileFinancePanelHtml() {
         <div><dt>期间客户已消费</dt><dd>${formatFinanceCny(relay.confirmedRevenueCnyMinor)}</dd></div>
         <div><dt>期间上游成本</dt><dd>${relay.costConfigured ? formatFinanceCny(relay.upstreamCostCnyMinor) : '待配置'}</dd></div>
       </dl>
-      <p>站内折算 ${escapeHtml(relay.customerCnyPerUsd)} 元/美元 · 上游 ${formatFinanceCnyMicro(relay.upstreamImageCostCnyMicro)}/张</p>
+      <p>站内折算 ${escapeHtml(relay.customerCnyPerUsd)} 元/美元 · 生图 ${formatFinanceCnyMicro(relay.upstreamImageCostCnyMicro)}/张 · AI 分析 ${formatFinanceCnyMicro(relay.upstreamAnalysisCostCnyMicro)}/次</p>
     </article>`;
   }).join('') || '<div class="mobile-finance-empty">暂无中转站经营数据</div>';
   const businessEntries = mobileFinanceBusinessEntries(accounting);
@@ -568,7 +760,7 @@ function mobileFinancePanelHtml() {
       <span class="mobile-finance-entry-money ${escapeHtml(entry.direction)}"><b>${formatFinanceCny(entry.amountCnyMinor)}</b><small>点击编辑</small></span>
     </button>`).join('') || '<div class="mobile-finance-empty">所选时间没有手工资金记录</div>';
   const rangeOptions = Object.entries({ today: '今天', '7d': '近 7 天', month: '本月', last_month: '上月', custom: '自定义日期' });
-  const hasMissingCost = !accounting.complete && Number(accountingTotals.successfulImages) > 0;
+  const hasMissingCost = !accounting.complete && (Number(accountingTotals.successfulImages) > 0 || Number(accountingTotals.successfulAnalyses) > 0);
   return `
     <section class="mobile-finance-panel">
       <header class="mobile-finance-head">
@@ -584,7 +776,7 @@ function mobileFinancePanelHtml() {
         <article><span>总支出</span><strong>${hasMissingCost ? '成本未配齐' : formatFinanceCny(accountingTotals.totalExpensesCnyMinor)}</strong><small>上游成本 + 杂费</small></article>
         <article class="profit"><span>预估利润</span><strong>${hasMissingCost ? '请补全成本' : formatFinanceCny(accountingTotals.netProfitCnyMinor)}</strong><small>收入 - 支出</small></article>
       </div>
-      <p class="mobile-finance-brief">${escapeHtml(mobileFinanceRangeLabel())} · ${escapeHtml(state.mobileFinanceRelayId ? (availableRelays.find(relay => relay.id === state.mobileFinanceRelayId)?.name || '当前中转站') : '全部中转站')} · 成功生图 ${formatInteger(accountingTotals.successfulImages)} 张</p>
+      <p class="mobile-finance-brief">${escapeHtml(mobileFinanceRangeLabel())} · ${escapeHtml(state.mobileFinanceRelayId ? (availableRelays.find(relay => relay.id === state.mobileFinanceRelayId)?.name || '当前中转站') : '全部中转站')} · 成功生图 ${formatInteger(accountingTotals.successfulImages)} 张 · AI 分析 ${formatInteger(accountingTotals.successfulAnalyses)} 次</p>
       <div class="mobile-finance-toolbar">
         <div><button type="button" data-finance-filter="all" class="${state.mobileFinanceFilter === 'all' ? 'active' : ''}">全部</button><button type="button" data-finance-filter="income" class="${state.mobileFinanceFilter === 'income' ? 'active' : ''}">收入</button><button type="button" data-finance-filter="expense" class="${state.mobileFinanceFilter === 'expense' ? 'active' : ''}">支出</button></div>
         <button type="button" id="mobileFinanceAdd">记一笔</button>
@@ -596,7 +788,8 @@ function mobileFinancePanelHtml() {
         <p class="mobile-finance-cost-note">站内客户充值会自动计入营业收入，管理员与员工之间的内部划拨不计收入；客户已消费金额只展示经营进度，不再重复算收入。上游充值属于预付资金，不重复算作经营支出。</p>
         <div class="mobile-finance-detail-totals">
           <div><span>客户已消费金额</span><strong>${formatFinanceCny(accountingTotals.confirmedRevenueCnyMinor)}</strong></div>
-          <div><span>上游生图成本</span><strong>${hasMissingCost ? '待配置' : formatFinanceCny(accountingTotals.upstreamCostCnyMinor)}</strong></div>
+          <div><span>上游生图成本</span><strong>${accountingTotals.successfulImages && accountingTotals.upstreamImageCostCnyMinor === 0 ? '待配置' : formatFinanceCny(accountingTotals.upstreamImageCostCnyMinor)}</strong></div>
+          <div><span>上游 AI 分析成本</span><strong>${accountingTotals.successfulAnalyses && accountingTotals.upstreamAnalysisCostCnyMinor === 0 ? '待配置' : formatFinanceCny(accountingTotals.upstreamAnalysisCostCnyMinor)}</strong></div>
           <div><span>期间杂费</span><strong>${formatFinanceCny(accountingTotals.operatingExpensesCnyMinor)}</strong></div>
           <div><span>期间上游充值</span><strong>${formatFinanceCny(financeSummary.gatewayTopupsCnyMinor)}</strong></div>
         </div>
@@ -659,7 +852,7 @@ function openMobileFinanceDialog(entry = null) {
   const element = document.createElement('div');
   element.className = 'mobile-finance-modal-backdrop';
   element.innerHTML = `<section class="mobile-finance-modal" role="dialog" aria-modal="true" aria-labelledby="mobileFinanceDialogTitle">
-    <header><div><span>财务记录</span><h2 id="mobileFinanceDialogTitle">${editing ? '编辑记录' : '新增记录'}</h2></div><button type="button" data-finance-close aria-label="关闭">×</button></header>
+    <header><div><span>多嘻噜卡科技</span><h2 id="mobileFinanceDialogTitle">${editing ? '编辑记录' : '新增记录'}</h2></div><button type="button" data-finance-close aria-label="关闭">×</button></header>
     <div class="mobile-finance-form">
       <label><span>日期</span><input data-finance-date type="date" value="${escapeHtml(entry?.date || currentChinaDate())}"></label>
       <label><span>分类</span><select data-finance-category>
@@ -701,7 +894,7 @@ function openMobileFinanceDialog(entry = null) {
   element.addEventListener('click', async event => {
     if (event.target === element || event.target.closest('[data-finance-close]')) return close();
     if (event.target.closest('[data-finance-delete]')) {
-      if (!window.confirm('确定删除这条财务记录吗？')) return;
+      if (!await brandConfirm('确定删除这条财务记录吗？', { title: '删除财务记录', danger: true, confirmText: '删除' })) return;
       try {
         await window.caishen.deleteFinanceEntry(entry.id);
         close();
@@ -988,7 +1181,7 @@ function moneyMinorToSixDecimalInput(minor = 0) {
 }
 
 function billingKindName(kind) {
-  return { image: '成功生图', llm: '语言模型调用', adjustment: '账户充值到账', transfer: '账户划拨' }[kind] || '费用记录';
+  return { image: '上游生图请求', llm: 'AI 分析请求', adjustment: '账户充值到账', transfer: '账户划拨' }[kind] || '费用记录';
 }
 
 function renderBillingLedger(entries = [], userMap = new Map()) {
@@ -1003,16 +1196,25 @@ function renderBillingLedger(entries = [], userMap = new Map()) {
   }).join('');
 }
 
-function renderBillingSpendTotals(summary) {
-  const totals = summary?.spendTotals || {};
-  const customDays = Math.max(1, Math.min(3660, Number(summary?.customSpendDays || state.billingCustomDays) || 30));
-  const customValue = totals[String(customDays)] ?? totals[customDays] ?? 0;
+function renderBillingDetailMetrics(summary) {
+  const metrics = summary?.metrics || {};
   return [
-    `<div class="billing-rate-item"><span>今日费用</span><b>${formatMoney(totals['1'] || 0)}</b></div>`,
-    `<div class="billing-rate-item"><span>7日费用</span><b>${formatMoney(totals['7'] || 0)}</b></div>`,
-    `<div class="billing-rate-item"><span>30天费用</span><b>${formatMoney(totals['30'] || 0)}</b></div>`,
-    `<label class="billing-rate-item billing-custom-days"><span>自定义时长费用</span><div><input id="billingCustomDaysInput" type="number" min="1" max="3660" step="1" value="${customDays}" aria-label="自定义统计天数"><em>天</em></div><b>${formatMoney(customValue)}</b></label>`
+    `<div class="billing-rate-item billing-metric-primary"><span>生图消费</span><b>${formatMoney(metrics.imageSpendMinor || 0)}</b><small>所选范围实际扣费</small></div>`,
+    `<div class="billing-rate-item"><span>计费请求</span><b>${Number(metrics.imageCount || 0).toLocaleString('zh-CN')} 次</b><small>实际发往上游的图片请求</small></div>`,
+    `<div class="billing-rate-item"><span>平均费用</span><b>${formatMoney(metrics.averageImageCostMinor || 0)}</b><small>生图消费 ÷ 计费请求数</small></div>`,
+    `<div class="billing-rate-item"><span>流水记录</span><b>${Number(metrics.transactionCount || 0).toLocaleString('zh-CN')} 条</b><small>${Number(metrics.activeUserCount || 0).toLocaleString('zh-CN')} 个账号有变动</small></div>`
   ].join('');
+}
+
+function billingRangeLabel(summary) {
+  const labels = { today: '今天', yesterday: '昨天', '7d': '近 7 日', month: '本月', custom: '自定义日期' };
+  return summary?.range === 'custom' ? `${summary.startDate || ''} 至 ${summary.endDate || ''}` : (labels[summary?.range] || '所选日期');
+}
+
+function chinaDateToday() {
+  const parts = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
 }
 
 function renderBillingSummary() {
@@ -1030,25 +1232,24 @@ function renderBillingDetail() {
   if (!summary) return;
   const relays = summary.relays || state.billingSummary?.relays || [];
   const relay = relays.find(item => item.id === summary.relayId) || {};
-  const wallets = summary.wallets || [];
-  $('#billingDetailSummary').textContent = `${relay.name || '当前中转站'}：可用 ${formatMoney(summary.account?.availableMinor)}${summary.account?.reservedMinor ? `，任务预占 ${formatMoney(summary.account.reservedMinor)}` : ''}，扣费 ${feeRangeLabel(relay.imagePriceMinMinor, relay.imagePriceMaxMinor)}/张`;
-  const walletCards = relays.map(item => {
-    const wallet = wallets.find(value => value.relayId === item.id) || { balanceMinor: 0, availableMinor: 0 };
-    return `<button class="billing-rate-item${item.id === summary.relayId ? ' active' : ''}" type="button" data-billing-detail-relay="${escapeHtml(item.id)}"><span>${escapeHtml(item.name)}</span><b>${formatMoney(wallet.balanceMinor)}</b><em>${feeRangeLabel(item.imagePriceMinMinor, item.imagePriceMaxMinor)}/张</em></button>`;
-  }).join('');
-  $('#billingDetailRates').innerHTML = walletCards + renderBillingSpendTotals(summary);
+  const viewedUser = summary.viewedUser || state.currentUser || {};
+  const visibleUsers = summary.users || [viewedUser];
+  const transactions = summary.transactions || [];
+  const viewedName = viewedUser.id === 'team' ? '全团队' : (viewedUser.displayName || viewedUser.username || '当前账号');
+  const relayName = summary.relayId === 'all' ? '全部服务' : (relay.name || '当前服务');
+  const totalCount = Number(summary.metrics?.transactionCount || transactions.length);
+  $('#billingDetailSummary').textContent = `${viewedName} · ${relayName} · ${billingRangeLabel(summary)} · ${totalCount.toLocaleString('zh-CN')} 条流水${summary.truncated ? `（显示最新 ${transactions.length} 条）` : ''}`;
+  $('#billingDetailFilters').hidden = false;
+  const teamOption = state.currentUser?.role === 'member' ? '' : `<option value="team"${viewedUser.id === 'team' ? ' selected' : ''}>全团队（合并流水）</option>`;
+  $('#billingDetailUserFilter').innerHTML = teamOption + visibleUsers.map(user => `<option value="${escapeHtml(user.id)}"${user.id === viewedUser.id ? ' selected' : ''}>${escapeHtml(user.displayName || user.username)} · ${escapeHtml(user.username)}</option>`).join('');
+  $('#billingDetailRelayFilter').innerHTML = `<option value="all"${summary.relayId === 'all' ? ' selected' : ''}>全部服务</option>` + relays.map(item => `<option value="${escapeHtml(item.id)}"${item.id === summary.relayId ? ' selected' : ''}>${escapeHtml(item.name)}</option>`).join('');
+  $('#billingDetailRangeFilter').value = summary.range || state.billingDetailRange;
+  $('#billingDetailCustomRange').hidden = (summary.range || state.billingDetailRange) !== 'custom';
+  $('#billingDetailStartDate').value = state.billingDetailStartDate || summary.startDate || chinaDateToday();
+  $('#billingDetailEndDate').value = state.billingDetailEndDate || summary.endDate || chinaDateToday();
+  $('#billingDetailRates').innerHTML = renderBillingDetailMetrics(summary);
   $('#billingDetailRates').hidden = false;
-  $('#billingDetailList').innerHTML = renderBillingLedger(summary.transactions || []);
-  const customInput = $('#billingCustomDaysInput');
-  if (customInput) {
-    customInput.onchange = async () => {
-      state.billingCustomDays = Math.max(1, Math.min(3660, Number(customInput.value) || 30));
-      await loadBillingDetail(summary.relayId);
-    };
-  }
-  $$('[data-billing-detail-relay]').forEach(button => {
-    button.onclick = () => loadBillingDetail(button.dataset.billingDetailRelay);
-  });
+  $('#billingDetailList').innerHTML = renderBillingLedger(transactions, new Map(visibleUsers.map(user => [user.workspaceId, user])));
 }
 
 async function loadBillingSummary() {
@@ -1064,13 +1265,18 @@ async function loadBillingSummary() {
 async function openBillingDetail() {
   $('#billingDetailModal').hidden = false;
   await loadBillingSummary();
-  await loadBillingDetail(state.billingSummary?.relayId);
+  state.billingDetailUserId = state.currentUser?.role === 'member' ? (state.currentUser?.id || '') : 'team';
+  state.billingDetailRelayId = 'all';
+  state.billingDetailRange = 'today';
+  await loadBillingDetail('all', state.billingDetailUserId);
 }
 
-async function loadBillingDetail(relayId) {
+async function loadBillingDetail(relayId, userId = state.billingDetailUserId || state.currentUser?.id || '') {
   try {
-    state.billingDetailSummary = await window.caishen.getBillingSummary(state.billingCustomDays, relayId || '');
+    state.billingDetailSummary = await window.caishen.getBillingDetail({ relayId: relayId || state.billingDetailRelayId || 'all', userId, range: state.billingDetailRange, startDate: state.billingDetailRange === 'custom' ? state.billingDetailStartDate : '', endDate: state.billingDetailRange === 'custom' ? state.billingDetailEndDate : '' });
     state.billingDetailRelayId = state.billingDetailSummary.relayId || '';
+    state.billingDetailUserId = state.billingDetailSummary.viewedUser?.id || userId;
+    state.billingDetailRange = state.billingDetailSummary.range || state.billingDetailRange;
     renderBillingDetail();
   } catch (error) { toast(errorText(error), true); }
 }
@@ -1080,6 +1286,85 @@ function closeBillingDetail() {
   state.billingDetailSummary = null;
 }
 
+function formatRechargeMoney(minor) { return `$${((Number(minor) || 0) / BILLING_AMOUNT_SCALE).toFixed(2)}`; }
+function formatCny(cents) { return `¥${((Number(cents) || 0) / 100).toFixed(2)}`; }
+function rechargeStatusLabel(status) { return { pending: '到账核验中', approved: '充值成功', rejected: '未通过核验' }[status] || '处理中'; }
+
+function renderAlipayHistory() {
+  const list = $('#alipayHistoryList');
+  if (!list) return;
+  list.innerHTML = state.alipayRecharges.length ? state.alipayRecharges.slice(0, 10).map(order => `<div class="alipay-history-row ${escapeHtml(order.status)}"><div><b>${escapeHtml(rechargeStatusLabel(order.status))}</b><span>${escapeHtml(order.serviceName || '当前服务')} · ${escapeHtml(formatLocalDateTime(order.submittedAt))} · 订单号 ${escapeHtml(order.alipayOrderNo)}</span>${order.rejectionReason ? `<small>${escapeHtml(order.rejectionReason)}</small>` : ''}</div><strong>${order.status === 'approved' ? `${formatRechargeMoney(order.creditMinor)} 已入账` : formatRechargeMoney(order.requestedCreditMinor)}</strong></div>`).join('') : '<div class="empty-inline">暂无充值记录</div>';
+}
+
+async function loadAlipayEntry() {
+  if (state.currentUser?.role !== 'admin') return;
+  try {
+    state.alipayConfig = await window.caishen.getAlipayConfig();
+    $('#openAlipayButton').hidden = !state.alipayConfig.enabled;
+  } catch { $('#openAlipayButton').hidden = true; }
+}
+
+function updateAlipayPaymentAmount() {
+  const value = String($('#alipayAmountUsd')?.value || '').trim();
+  const valid = /^\d{1,7}(?:\.\d{0,2})?$/.test(value) && Number(value) >= 1 && Number(value) <= 1_000_000;
+  $('#alipayPaymentCny').textContent = valid ? `¥${(Number(value) * 7).toFixed(2)}` : '¥0.00';
+  return valid;
+}
+async function loadAlipayHistory() { state.alipayRecharges = await window.caishen.getAlipayRecharges(); renderAlipayHistory(); }
+async function openAlipay() {
+  $('#alipayModal').hidden = false;
+  $('#alipayCustomerStatus').textContent = '正在读取 Alipay 配置…';
+  try {
+    state.alipayConfig = await window.caishen.getAlipayConfig();
+    if (!state.alipayConfig.enabled || !state.alipayConfig.qrAvailable) throw new Error('Alipay 当前暂不可用');
+    $('#alipayService').innerHTML = '<option value="">请选择到账账户</option>' + (state.alipayConfig.services || []).map(service => `<option value="${escapeHtml(service.id)}">${escapeHtml(service.name)}</option>`).join('');
+    $('#alipayQrImage').src = `${state.alipayConfig.qrUrl}?v=${Date.now()}`;
+    $('#alipayQrImage').hidden = false;
+    $('#alipayQrEmpty').hidden = true;
+    $('#alipayCustomerStatus').textContent = state.alipayConfig.payeeName ? `收款方：${state.alipayConfig.payeeName}` : '请按页面显示金额完成付款。';
+    await loadAlipayHistory();
+  } catch (error) { $('#alipayQrImage').hidden = true; $('#alipayQrEmpty').hidden = false; $('#alipayCustomerStatus').textContent = errorText(error); }
+}
+function closeAlipay() { $('#alipayModal').hidden = true; }
+async function submitAlipayRecharge() {
+  const amountUsd = String($('#alipayAmountUsd').value || '').trim();
+  const serviceId = String($('#alipayService').value || '').trim();
+  const alipayOrderNo = String($('#alipayOrderNo').value || '').replace(/\s+/g, '');
+  if (!serviceId) return toast('请选择充值到账账户', true);
+  if (!updateAlipayPaymentAmount()) return toast('请输入正确的充值金额，最多保留两位小数', true);
+  if (!/^\d{12,64}$/.test(alipayOrderNo)) return toast('请输入正确的支付宝订单号（12-64 位数字）', true);
+  const button = $('#submitAlipayRechargeButton');
+  button.disabled = true;
+  try { await window.caishen.submitAlipayRecharge({ serviceId, amountUsd, alipayOrderNo }); $('#alipayOrderNo').value = ''; await loadAlipayHistory(); $('#alipayCustomerStatus').textContent = '已提交，正在进行到账核验。'; toast('已提交到账核验'); }
+  catch (error) { toast(errorText(error), true); } finally { button.disabled = false; }
+}
+
+function renderAlipayReview() {
+  const list = $('#alipayReviewList');
+  if (!list) return;
+  list.innerHTML = state.alipayReview.length ? state.alipayReview.map(order => `<div class="alipay-review-row ${escapeHtml(order.status)}" data-alipay-review="${escapeHtml(order.id)}"><div class="alipay-review-copy"><b>${escapeHtml(order.displayName || order.username)} · ${escapeHtml(rechargeStatusLabel(order.status))}</b><span>订单号 ${escapeHtml(order.alipayOrderNo)} · ${escapeHtml(formatLocalDateTime(order.submittedAt))}</span><small>申请 ${formatRechargeMoney(order.requestedCreditMinor)} · 应付 ${formatCny(order.requestedPaymentCnyCents)} · 服务 ${escapeHtml(order.serviceName || '当前服务')}</small></div>${order.status === 'pending' ? `<label>确认入账额度（USD）<input data-alipay-actual type="number" min="1" max="1000000" step="0.01" value="${(Number(order.requestedCreditMinor || 0) / BILLING_AMOUNT_SCALE).toFixed(2)}"></label><div class="inline-actions"><button class="secondary danger-outline" data-alipay-reject type="button">未核验到款</button><button class="primary" data-alipay-approve type="button">确认到账</button></div>` : `<strong>${order.status === 'approved' ? `已入账 ${formatRechargeMoney(order.creditMinor)}` : escapeHtml(order.rejectionReason || '未通过')}</strong>`}</div>`).join('') : '<div class="empty-inline">暂无到账核验记录</div>';
+}
+async function loadAlipayAdmin() {
+  if (!isSuperAdmin()) return;
+  try { const [settings, review] = await Promise.all([window.caishen.getAlipaySettings(), window.caishen.getAlipayReview()]); state.alipayReview = review; $('#alipayPayeeName').value = settings.payeeName || ''; $('#alipayEnabled').checked = settings.enabled === true; $('#alipayQrHint').textContent = settings.qrAvailable ? '已上传收款码' : '尚未上传收款码'; $('#alipayAdminStatus').textContent = settings.enabled ? '已启用' : '未启用'; renderAlipayReview(); }
+  catch (error) { toast(errorText(error), true); }
+}
+async function saveAlipaySettings() { try { await window.caishen.saveAlipaySettings({ enabled: $('#alipayEnabled').checked, payeeName: $('#alipayPayeeName').value.trim() }); await loadAlipayAdmin(); await loadAlipayEntry(); toast('Alipay 配置已保存'); } catch (error) { toast(errorText(error), true); } }
+async function uploadAlipayQr() { const file = $('#alipayQrFile').files?.[0]; if (!file) return toast('请选择支付宝收款码图片', true); try { await window.caishen.uploadAlipayQr(file); $('#alipayQrFile').value = ''; await loadAlipayAdmin(); toast('收款码已上传'); } catch (error) { toast(errorText(error), true); } }
+async function handleAlipayReviewClick(event) {
+  const row = event.target.closest('[data-alipay-review]');
+  if (!row) return;
+  if (event.target.closest('[data-alipay-reject]')) { const reason = await brandPrompt('填写未通过原因', '未核验到对应款项', { inputLabel: '原因' }); if (reason === null) return; try { await window.caishen.rejectAlipayRecharge(row.dataset.alipayReview, reason); await loadAlipayAdmin(); toast('已更新核验结果'); } catch (error) { toast(errorText(error), true); } return; }
+  const approve = event.target.closest('[data-alipay-approve]');
+  if (!approve) return;
+  const actualAmountUsd = String(row.querySelector('[data-alipay-actual]')?.value || '').trim();
+  if (!/^\d{1,7}(?:\.\d{1,2})?$/.test(actualAmountUsd) || Number(actualAmountUsd) < 1) return toast('请输入正确的实际入账额度', true);
+  if (!await brandConfirm(`确认支付宝已到账，并按 $${Number(actualAmountUsd).toFixed(2)} 入账？`, { title: '确认到账', confirmText: '确认入账' })) return;
+  approve.disabled = true;
+  try { await window.caishen.approveAlipayRecharge(row.dataset.alipayReview, actualAmountUsd); await Promise.all([loadAlipayAdmin(), loadBillingAdmin(), loadBillingSummary()]); toast(`充值成功，$${Number(actualAmountUsd).toFixed(2)} 已入账`); }
+  catch (error) { approve.disabled = false; toast(errorText(error), true); }
+}
+
 function apiTestErrorText(error) {
   const text = errorText(error);
   if (/token_expired|authentication token is expired/i.test(text)) return '上游登录 Token 已过期，请在 API 服务端重新登录后再测试。';
@@ -1087,14 +1372,113 @@ function apiTestErrorText(error) {
   return text;
 }
 
+function setImagePreviewSize(value) {
+  const size = Math.max(28, Math.min(50, Number(value) || 38));
+  state.imagePreviewSize = size;
+  document.documentElement.style.setProperty('--image-preview-width', `${size}vw`);
+  document.documentElement.style.setProperty('--image-preview-height', `${size}vh`);
+  $$('[data-image-preview-size]').forEach(input => { if (Number(input.value) !== size) input.value = String(size); });
+  $$('[data-image-preview-size-value]').forEach(label => { label.textContent = `${size}%`; });
+  try { localStorage.setItem(IMAGE_PREVIEW_SIZE_STORAGE_KEY, String(size)); } catch {}
+}
+
+function bindImagePreviewSizeControls() {
+  setImagePreviewSize(state.imagePreviewSize);
+  $$('[data-image-preview-size]').forEach(input => {
+    input.oninput = () => setImagePreviewSize(input.value);
+  });
+}
+
 function bindImageHoverPreview() {
+  bindImagePreviewSizeControls();
   if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
   const preview = $('#imageHoverPreview');
+  const viewport = $('#imageHoverPreviewViewport');
   const previewImage = $('#imageHoverPreviewImage');
   const caption = $('#imageHoverPreviewCaption');
+  const lens = $('#imageHoverLens');
   let sourceImage = null;
+  let pointerX = 0;
+  let pointerY = 0;
   let positionFrame = 0;
   let positionAnimation = null;
+  const zoomFactor = 1.7;
+
+  const sizeMagnifierPane = () => {
+    if (!sourceImage) return;
+    const naturalWidth = Number(previewImage.naturalWidth) || Number(sourceImage.naturalWidth) || 1;
+    const naturalHeight = Number(previewImage.naturalHeight) || Number(sourceImage.naturalHeight) || 1;
+    const aspect = Math.max(.35, Math.min(2.8, naturalWidth / naturalHeight));
+    const requestedWidth = window.innerWidth * Math.max(28, Math.min(50, Number(state.imagePreviewSize) || 38)) / 100;
+    const maxWidth = window.innerWidth * .5;
+    const maxHeight = window.innerHeight * .76;
+    let paneWidth = Math.min(maxWidth, Math.max(Math.min(440, maxWidth), requestedWidth));
+    let paneHeight = paneWidth / aspect;
+    if (paneHeight > maxHeight) {
+      paneHeight = maxHeight;
+      paneWidth = paneHeight * aspect;
+    }
+    viewport.style.width = `${Math.round(paneWidth)}px`;
+    viewport.style.height = `${Math.round(paneHeight)}px`;
+    preview.style.width = `${Math.round(paneWidth + 16)}px`;
+  };
+
+  const sourceMetrics = () => {
+    if (!sourceImage) return null;
+    const rect = sourceImage.getBoundingClientRect();
+    const naturalWidth = Number(previewImage.naturalWidth) || Number(sourceImage.naturalWidth) || 1;
+    const naturalHeight = Number(previewImage.naturalHeight) || Number(sourceImage.naturalHeight) || 1;
+    const fit = getComputedStyle(sourceImage).objectFit || 'fill';
+    const scale = fit === 'contain'
+      ? Math.min(rect.width / naturalWidth, rect.height / naturalHeight)
+      : fit === 'cover'
+        ? Math.max(rect.width / naturalWidth, rect.height / naturalHeight)
+        : rect.width / naturalWidth;
+    const displayedWidth = naturalWidth * scale;
+    const displayedHeight = naturalHeight * scale;
+    const offsetX = (rect.width - displayedWidth) / 2;
+    const offsetY = (rect.height - displayedHeight) / 2;
+    return { rect, naturalWidth, naturalHeight, scale, displayedWidth, displayedHeight, offsetX, offsetY };
+  };
+
+  const updateMagnifiedPreview = () => {
+    const source = sourceMetrics();
+    if (!source || !previewImage.naturalWidth || !viewport.clientWidth || !viewport.clientHeight) return;
+    const localX = pointerX - source.rect.left;
+    const localY = pointerY - source.rect.top;
+    const imageX = Math.max(0, Math.min(1, (localX - source.offsetX) / source.displayedWidth));
+    const imageY = Math.max(0, Math.min(1, (localY - source.offsetY) / source.displayedHeight));
+    const paneWidth = viewport.clientWidth;
+    const paneHeight = viewport.clientHeight;
+    const baseScale = Math.max(paneWidth / source.naturalWidth, paneHeight / source.naturalHeight);
+    const renderedScale = baseScale * zoomFactor;
+    const renderedWidth = Math.ceil(source.naturalWidth * renderedScale);
+    const renderedHeight = Math.ceil(source.naturalHeight * renderedScale);
+    const left = Math.max(paneWidth - renderedWidth, Math.min(0, paneWidth / 2 - imageX * renderedWidth));
+    const top = Math.max(paneHeight - renderedHeight, Math.min(0, paneHeight / 2 - imageY * renderedHeight));
+    previewImage.style.width = `${renderedWidth}px`;
+    previewImage.style.height = `${renderedHeight}px`;
+    previewImage.style.transform = `translate3d(${Math.round(left)}px, ${Math.round(top)}px, 0)`;
+
+    const visibleLeft = Math.max(source.rect.left, source.rect.left + source.offsetX);
+    const visibleTop = Math.max(source.rect.top, source.rect.top + source.offsetY);
+    const visibleRight = Math.min(source.rect.right, source.rect.left + source.offsetX + source.displayedWidth);
+    const visibleBottom = Math.min(source.rect.bottom, source.rect.top + source.offsetY + source.displayedHeight);
+    const visibleWidth = Math.max(1, visibleRight - visibleLeft);
+    const visibleHeight = Math.max(1, visibleBottom - visibleTop);
+    let lensWidth = Math.max(72, paneWidth / renderedScale * source.scale);
+    let lensHeight = Math.max(72, paneHeight / renderedScale * source.scale);
+    lensWidth = Math.max(visibleWidth * .56, Math.min(lensWidth, visibleWidth * .7));
+    lensHeight = Math.max(visibleHeight * .56, Math.min(lensHeight, visibleHeight * .7));
+    const lensScale = Math.min(1, visibleWidth / lensWidth, visibleHeight / lensHeight);
+    lensWidth *= lensScale;
+    lensHeight *= lensScale;
+    const lensLeft = Math.max(visibleLeft, Math.min(pointerX - lensWidth / 2, visibleRight - lensWidth));
+    const lensTop = Math.max(visibleTop, Math.min(pointerY - lensHeight / 2, visibleBottom - lensHeight));
+    lens.style.width = `${Math.round(lensWidth)}px`;
+    lens.style.height = `${Math.round(lensHeight)}px`;
+    lens.style.transform = `translate3d(${Math.round(lensLeft)}px, ${Math.round(lensTop)}px, 0)`;
+  };
 
   const positionBesideSource = () => {
     cancelAnimationFrame(positionFrame);
@@ -1145,31 +1529,59 @@ function bindImageHoverPreview() {
     positionAnimation = null;
     sourceImage = null;
     preview.classList.remove('show', 'positioning');
+    lens.classList.remove('show');
     preview.setAttribute('aria-hidden', 'true');
+    lens.setAttribute('aria-hidden', 'true');
   };
 
   document.addEventListener('mouseover', event => {
     const image = event.target.closest?.('img');
-    if (!image || image.closest('.brand') || image.closest('#imageHoverPreview')) return;
+    if (!image || image.closest('.brand') || image.closest('#imageHoverPreview') || image.closest('#cwCompareModal')) return;
     const source = image.dataset.previewSrc || image.currentSrc || image.src;
     if (!source) return;
     sourceImage = image;
+    const sourceRect = image.getBoundingClientRect();
+    pointerX = Number(event.clientX) || sourceRect.left + sourceRect.width / 2;
+    pointerY = Number(event.clientY) || sourceRect.top + sourceRect.height / 2;
     previewImage.src = source;
     previewImage.alt = image.alt || '图片放大预览';
     caption.textContent = image.alt || '图片放大预览';
+    sizeMagnifierPane();
     preview.classList.add('show', 'positioning');
     preview.setAttribute('aria-hidden', 'false');
+    lens.setAttribute('aria-hidden', 'false');
+    if (previewImage.complete && previewImage.naturalWidth) {
+      updateMagnifiedPreview();
+      lens.classList.add('show');
+    }
     positionBesideSource();
+  });
+
+  document.addEventListener('mousemove', event => {
+    if (!sourceImage || event.target !== sourceImage) return;
+    pointerX = event.clientX;
+    pointerY = event.clientY;
+    updateMagnifiedPreview();
+    lens.classList.add('show');
   });
 
   document.addEventListener('mouseout', event => {
     if (event.target === sourceImage && event.relatedTarget !== sourceImage) hide();
   });
-  document.addEventListener('pointerdown', hide, true);
+  document.addEventListener('pointerdown', event => {
+    if (sourceImage && event.target === sourceImage && !event.target.closest('[data-cw-review-compare]')) return;
+    hide();
+  }, true);
   document.addEventListener('keydown', event => { if (event.key === 'Escape') hide(); });
   window.addEventListener('scroll', hide, true);
   window.addEventListener('resize', hide);
-  previewImage.addEventListener('load', () => { if (sourceImage) positionBesideSource(); });
+  previewImage.addEventListener('load', () => {
+    if (!sourceImage) return;
+    sizeMagnifierPane();
+    updateMagnifiedPreview();
+    lens.classList.add('show');
+    positionBesideSource();
+  });
 }
 
 function shortPath(value) {
@@ -1188,6 +1600,15 @@ function setPage(name) {
     else if (state.settingsTab === 'team' && !isTeamAdmin()) state.settingsTab = 'general';
   }
   const nextPage = $(`#page-${name}`);
+  const productionScrollLock = name === 'childrenwear' || name === 'childrenwear-review';
+  if (productionScrollLock) {
+    document.documentElement.classList.remove('production-scroll-lock');
+    document.body.classList.remove('production-scroll-lock');
+    document.scrollingElement.scrollTop = 0;
+  }
+  $('#appShell')?.classList.toggle('production-scroll-lock', productionScrollLock);
+  document.body.classList.toggle('production-scroll-lock', productionScrollLock);
+  document.documentElement.classList.toggle('production-scroll-lock', productionScrollLock);
   if (!nextPage || (name === currentPage && nextPage.classList.contains('active'))) return;
   currentPage = name;
   $('#appShell')?.classList.toggle('mobile-stats-mode', name === 'mobile-stats');
@@ -1199,7 +1620,8 @@ function setPage(name) {
     state.reviewTaskActivated = false;
   }
   $$('.nav-item').forEach(button => {
-    const active = button.dataset.page === name;
+    const active = button.dataset.page === name
+      && (name !== 'childrenwear' || !button.dataset.childrenwearProductionNav || button.dataset.childrenwearProductionNav === state.childrenwearProductionTab);
     button.classList.toggle('active', active);
     if (active) button.setAttribute('aria-current', 'page');
     else button.removeAttribute('aria-current');
@@ -1209,7 +1631,7 @@ function setPage(name) {
     if (currentPage !== name) return;
     if (name === 'review') loadReviews({ silent: state.reviews.length > 0 });
     if (name === 'prompts' && canViewPrompts() && !state.promptSettings) loadPromptSettings();
-    if (name === 'assets') loadAssetLibraryPreview(state.assetPreviewKey, { preserveSelection: true });
+    if (name === 'assets') loadChildrenwearLibraries();
     if (name === 'mobile-stats') loadMobileStats();
     if (name === 'settings' && isTeamAdmin() && !state.relayChoices) loadRelayChoices();
     if (name === 'settings' && isSuperAdmin() && !state.apiSettings) loadApiSettings();
@@ -1271,6 +1693,7 @@ function renderConfig() {
   $('#auditModeStatus').textContent = state.config.auditMode === 'quality'
     ? '当前：质检模式，生成后执行 AI 审核。'
     : '当前：省钱模式，生成后交给人工确认。';
+  renderChildrenwearAnalysisAutomation();
   renderTemplateWorkflow();
 }
 
@@ -1287,7 +1710,7 @@ function isClientSubPath(root, candidate) {
 async function sanitizeConfigWorkspacePaths() {
   if (!state.config?.workspaceRoot) return;
   let changed = false;
-  for (const key of ['categoriesPath', 'printsPath', 'detailSetsPath']) {
+  for (const key of ['categoriesPath', 'printsPath', 'detailSetsPath', 'childrenwearRealAssetsPath', 'childrenwearReferenceAssetsPath', 'childrenwearModelAssetsPath', 'childrenwearCombinationAssetsPath']) {
     if (state.config[key] && !isClientSubPath(state.config.workspaceRoot, state.config[key])) {
       state.config[key] = '';
       changed = true;
@@ -1900,7 +2323,7 @@ async function deleteTemplateFolder(folderPath) {
   if (runningTasks) return toast('该套图正在生成任务，完成后才能删除', true);
   const pendingTasks = state.queue.filter(task => task.templateFolderPath === folderPath).length;
   const taskNotice = pendingTasks ? `\n同时会移除使用该套图的 ${pendingTasks} 个待生成任务。` : '';
-  if (!window.confirm(`确定删除套图文件夹“${folder.name}”及其中 ${folder.count} 张图片吗？${taskNotice}\n此操作不可撤销。`)) return;
+  if (!await brandConfirm(`确定删除套图文件夹“${folder.name}”及其中 ${folder.count} 张图片吗？${taskNotice}\n此操作不可撤销。`, { title: '删除套图文件夹', danger: true, confirmText: '删除' })) return;
   try {
     await window.caishen.deleteTemplateFolder(folderPath);
     state.queue = state.queue.filter(task => task.templateFolderPath !== folderPath);
@@ -2280,7 +2703,7 @@ async function chooseAndAddAssetFiles() {
 async function deleteSelectedAssets() {
   const paths = [...state.selectedAssetPaths];
   if (!paths.length) return toast('请先选择需要删除的素材', true);
-  if (!window.confirm(`确定删除选中的 ${paths.length} 张素材吗？此操作会删除服务器工作区中的图片。`)) return;
+  if (!await brandConfirm(`确定删除选中的 ${paths.length} 张素材吗？此操作会删除主电脑工作区中的图片。`, { title: '删除素材', danger: true, confirmText: '删除' })) return;
   const key = state.assetPreviewKey;
   const button = $('#deleteSelectedAssetsButton');
   button.disabled = true;
@@ -2435,7 +2858,7 @@ function openReviewRegenerationDialog(item, job) {
   element.className = 'review-regenerate-modal-backdrop';
   element.innerHTML = `<section class="review-regenerate-modal" role="dialog" aria-modal="true" aria-labelledby="reviewRegenerateTitle">
     <header>
-      <div><span>REGENERATE</span><h2 id="reviewRegenerateTitle">重新生成图片</h2><p>当前图片：${escapeHtml(job.relativePath)}</p></div>
+      <div><span>多嘻噜卡科技</span><h2 id="reviewRegenerateTitle">重新生成图片</h2><p>当前图片：${escapeHtml(job.relativePath)}</p></div>
       <button class="icon-button" type="button" data-review-regenerate-close aria-label="关闭">×</button>
     </header>
     <div class="review-regenerate-body">
@@ -2991,7 +3414,7 @@ async function generateQueue(options = {}) {
   if (incompleteTemplateTask) {
     const fullCount = state.taskTemplateItems.filter(item => item.action === 'replace_print' && templateFolderPathForItem(item) === incompleteTemplateTask.templateFolderPath).length;
     const queuedCount = state.queue.filter(item => item.generationMode === 'template_print' && item.templateFolderPath === incompleteTemplateTask.templateFolderPath && item.printPath === incompleteTemplateTask.printPath).length;
-    if (window.confirm(`当前任务只包含 ${queuedCount}/${fullCount} 张换印花图片，是否补齐为整套后再生成？`)) {
+    if (await brandConfirm(`当前任务只包含 ${queuedCount}/${fullCount} 张换印花图片，是否补齐为整套后再生成？`, { title: '补齐整套任务', confirmText: '补齐并生成' })) {
       const added = expandTemplateTaskGroupToFullSet(incompleteTemplateTask);
       if (added) {
         toast(`已补齐 ${added} 张整套任务`);
@@ -4117,13 +4540,6 @@ function renderPromptEditor() {
     : '尚未选择';
 }
 
-function applyFreePromptDefault() {
-  if (state.freePromptDefaultApplied || !state.promptSettings) return;
-  const prompt = state.promptSettings.prompts.find(item => item.id === 'freeImageDefault');
-  if (prompt?.value && !$('#freePrompt').value) $('#freePrompt').value = prompt.value;
-  state.freePromptDefaultApplied = true;
-}
-
 async function loadPromptSettings() {
   if (!canViewPrompts()) return;
   try {
@@ -4133,7 +4549,6 @@ async function loadPromptSettings() {
     }
     renderPromptSettingList();
     renderPromptEditor();
-    applyFreePromptDefault();
   } catch (error) {
     $('#promptSettingList').innerHTML = `<div class="empty-inline">${escapeHtml(errorText(error))}</div>`;
     toast(errorText(error), true);
@@ -4155,9 +4570,6 @@ function schedulePromptSave(prompt, value) {
   const previousValue = prompt.value;
   prompt.value = value;
   prompt.customized = true;
-  if (prompt.id === 'freeImageDefault' && (!$('#freePrompt').value || $('#freePrompt').value === previousValue)) {
-    $('#freePrompt').value = value;
-  }
   $('#promptCharacterCount').textContent = `${value.length} 字`;
   $('#promptSaveStatus').className = 'saving';
   $('#promptSaveStatus').textContent = '等待自动保存…';
@@ -4188,7 +4600,7 @@ function schedulePromptSave(prompt, value) {
 async function resetCurrentPrompt() {
   if (!canManagePrompts()) return toast('只有超级管理员可以修改提示词', true);
   const prompt = activePrompt();
-  if (!prompt || !window.confirm(`确定将“${prompt.title}”恢复为系统默认吗？`)) return;
+  if (!prompt || !await brandConfirm(`确定将“${prompt.title}”恢复为系统默认吗？`, { title: '恢复默认提示词' })) return;
   clearTimeout(promptSaveTimers.get(prompt.id));
   promptSaveTimers.delete(prompt.id);
   try {
@@ -4201,7 +4613,7 @@ async function resetCurrentPrompt() {
 
 async function resetAllPrompts() {
   if (!canManagePrompts()) return toast('只有超级管理员可以修改提示词', true);
-  if (!window.confirm('确定将全部提示词恢复为系统默认吗？当前自定义内容会被清除。')) return;
+  if (!await brandConfirm('确定将全部提示词恢复为系统默认吗？当前自定义内容会被清除。', { title: '恢复全部提示词', danger: true, confirmText: '恢复默认' })) return;
   for (const timer of promptSaveTimers.values()) clearTimeout(timer);
   promptSaveTimers.clear();
   try {
@@ -4233,7 +4645,7 @@ function renderSettingsTabs(name = state.settingsTab) {
     loadRelayChoices();
   }
   if (name === 'team') loadTeamUsers();
-  if (name === 'billing') loadBillingAdmin();
+  if (name === 'billing') Promise.all([loadBillingAdmin(), loadAlipayAdmin()]);
 }
 
 function renderBillingAdmin() {
@@ -4322,7 +4734,7 @@ async function saveBillingRules() {
 
 async function clearBillingLedger() {
   if (!isSuperAdmin()) return toast('只有超级管理员可以清空费用流水', true);
-  if (!window.confirm('确定清空全部费用流水吗？此操作只删除明细记录，不会修改任何账号算力余额。')) return;
+  if (!await brandConfirm('确定清空全部费用流水吗？此操作只删除明细记录，不会修改任何账号算力余额。', { title: '清空费用流水', danger: true, confirmText: '确认清空' })) return;
   const button = $('#clearBillingLedgerButton');
   button.disabled = true;
   try {
@@ -4462,11 +4874,11 @@ async function toggleTeamUser(button) {
 async function editTeamUser(id) {
   const user = state.teamUsers.find(item => item.id === id);
   if (!user) return;
-  const displayName = window.prompt('修改姓名或昵称', user.displayName || user.username);
+  const displayName = await brandPrompt('修改姓名或昵称', user.displayName || user.username, { inputLabel: '姓名或昵称' });
   if (displayName === null) return;
   let role = user.role;
   if (isSuperAdmin() && user.role !== 'superadmin') {
-    const nextRole = window.prompt('账号角色：admin 或 member', user.role);
+    const nextRole = await brandPrompt('修改账号角色', user.role, { inputLabel: '请输入 admin 或 member' });
     if (nextRole === null) return;
     role = String(nextRole).trim();
     if (!['admin', 'member'].includes(role)) return toast('角色只能填写 admin 或 member', true);
@@ -4485,7 +4897,7 @@ async function requireTeamUserPasswordChange(id) {
   if (!isSuperAdmin()) return toast('只有超级管理员可以要求用户强制改密', true);
   const user = state.teamUsers.find(item => item.id === id);
   if (!user || user.id === state.currentUser?.id) return;
-  if (!window.confirm(`确定要求 ${user.displayName || user.username} 下次登录时强制改密吗？\n用户需要输入原账号、原密码和新密码。`)) return;
+  if (!await brandConfirm(`确定要求 ${user.displayName || user.username} 下次登录时强制改密吗？\n用户需要输入原账号、原密码和新密码。`, { title: '要求用户修改密码' })) return;
   try {
     await window.caishen.requireUserPasswordChange(id);
     await loadTeamUsers();
@@ -4499,7 +4911,7 @@ async function viewTeamUserPassword(id) {
   if (!isSuperAdmin()) return;
   const user = state.teamUsers.find(item => item.id === id);
   if (!user?.passwordRecorded) return toast('该账号还没有可查看的密码记录', true);
-  const currentPassword = window.prompt('请输入当前超级管理员密码以验证身份', '');
+  const currentPassword = await brandPrompt('验证超级管理员身份', '', { inputLabel: '当前超级管理员密码', inputType: 'password' });
   if (currentPassword === null) return;
   try {
     const result = await window.caishen.revealUserPassword(id, currentPassword);
@@ -4508,7 +4920,7 @@ async function viewTeamUserPassword(id) {
       await window.caishen.copyText(result.password);
       copied = true;
     } catch {}
-    window.prompt(`${user.displayName || user.username} 的已记录密码${copied ? '（已复制）' : ''}`, result.password);
+    await brandPrompt(`${user.displayName || user.username} 的已记录密码`, result.password, { message: copied ? '密码已复制到剪贴板。' : '可手动复制下方密码。', inputLabel: '登录密码', readOnly: true, confirmText: '关闭', cancelText: '' });
   } catch (error) {
     toast(errorText(error), true);
   }
@@ -4516,7 +4928,7 @@ async function viewTeamUserPassword(id) {
 
 async function requireAllTeamPasswordChanges() {
   if (!isSuperAdmin()) return;
-  if (!window.confirm('确定要求所有管理员和成员下次登录时强制改密吗？\n超级管理员自身不受影响。')) return;
+  if (!await brandConfirm('确定要求所有管理员和成员下次登录时强制改密吗？\n超级管理员自身不受影响。', { title: '批量要求修改密码' })) return;
   try {
     const result = await window.caishen.requireAllPasswordChanges();
     await loadTeamUsers();
@@ -4530,7 +4942,7 @@ async function deleteTeamUser(id) {
   const user = state.teamUsers.find(item => item.id === id);
   if (!user || user.id === state.currentUser?.id) return;
   const name = user.displayName || user.username || '该账号';
-  if (!window.confirm(`确定删除 ${name}？\n只删除登录账号，不删除素材和历史任务。`)) return;
+  if (!await brandConfirm(`确定删除 ${name}？\n只删除登录账号，不删除素材和历史任务。`, { title: '删除团队账号', danger: true, confirmText: '删除账号' })) return;
   try {
     await window.caishen.deleteUser(id);
     await loadTeamUsers();
@@ -4553,7 +4965,7 @@ async function transferTeamBalance() {
   const fromUser = state.teamUsers.find(user => user.id === fromUserId);
   const toUser = state.teamUsers.find(user => user.id === toUserId);
   const message = `确定从“${fromUser?.displayName || fromUser?.username || '转出账号'}”划拨 $${amount.toFixed(6)} 给“${toUser?.displayName || toUser?.username || '转入账号'}”吗？`;
-  if (!window.confirm(message)) return;
+  if (!await brandConfirm(message, { title: '确认算力划拨', confirmText: '确认划拨' })) return;
   const button = $('#teamTransferButton');
   button.disabled = true;
   button.textContent = '划拨中…';
@@ -4580,10 +4992,11 @@ function newRelayDraft() {
   return {
     _unsaved: true,
     id: `relay-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-    name: '新中转站', description: '', enabled: true, baseUrl: '', imageModel: '',
+    name: '新中转站', description: '', enabled: true, baseUrl: '', imageModel: '', analysisModel: 'gpt-5-6',
     healthPath: '/models', modelsPath: '/models',
     imagePriceMinMinor: 0, imagePriceMaxMinor: 0,
-    customerCnyPerUsd: 7, upstreamImageCostCnyMicro: 0
+    llmPriceMinMinor: 0, llmPriceMaxMinor: 0,
+    customerCnyPerUsd: 7, upstreamImageCostCnyMicro: 0, upstreamAnalysisCostCnyMicro: 0
   };
 }
 
@@ -4592,9 +5005,13 @@ function relayRowPayload(row) {
   const imagePriceMinMinor = moneyInputToMinor(read('imagePriceMinMinor')?.value || '0', '最低扣费');
   const imagePriceMaxMinor = moneyInputToMinor(read('imagePriceMaxMinor')?.value || '0', '最高扣费');
   if (imagePriceMaxMinor < imagePriceMinMinor) throw new Error('最高扣费不能低于最低扣费');
+  const llmPriceMinMinor = moneyInputToMinor(read('llmPriceMinMinor')?.value || '0', 'AI 分析最低扣费');
+  const llmPriceMaxMinor = moneyInputToMinor(read('llmPriceMaxMinor')?.value || '0', 'AI 分析最高扣费');
+  if (llmPriceMaxMinor < llmPriceMinMinor) throw new Error('AI 分析最高扣费不能低于最低扣费');
   const customerCnyPerUsd = Number(read('customerCnyPerUsd')?.value || 0);
   if (!Number.isFinite(customerCnyPerUsd) || customerCnyPerUsd <= 0 || customerCnyPerUsd > 1000) throw new Error('请填写有效的站内余额人民币折算汇率');
   const upstreamImageCostCnyMicro = moneyInputToMinor(read('upstreamImageCostCnyMicro')?.value || '0', '上游每张采购成本');
+  const upstreamAnalysisCostCnyMicro = moneyInputToMinor(read('upstreamAnalysisCostCnyMicro')?.value || '0', '上游每次 AI 分析成本');
   return {
     id: row.dataset.relayId,
     name: read('name')?.value.trim() || '未命名中转站',
@@ -4603,12 +5020,16 @@ function relayRowPayload(row) {
     baseUrl: read('baseUrl')?.value.trim() || '',
     imageApiKey: read('imageKey')?.value.trim() || '',
     imageModel: read('imageModel')?.value.trim() || '',
+    analysisModel: read('analysisModel')?.value.trim() || '',
     healthPath: read('healthPath')?.value.trim() || '/models',
     modelsPath: read('modelsPath')?.value.trim() || '/models',
     imagePriceMinMinor,
     imagePriceMaxMinor,
+    llmPriceMinMinor,
+    llmPriceMaxMinor,
     customerCnyPerUsd: Number(customerCnyPerUsd.toFixed(6)),
-    upstreamImageCostCnyMicro
+    upstreamImageCostCnyMicro,
+    upstreamAnalysisCostCnyMicro
   };
 }
 
@@ -4656,12 +5077,16 @@ function renderRelayStations() {
           <label>OpenAI Base URL<input data-relay-field="baseUrl" type="url" value="${escapeHtml(item.baseUrl || '')}" placeholder="https://example.com/v1" spellcheck="false"></label>
           <label>图片 API Key<input data-relay-field="imageKey" type="password" placeholder="${item.imageKeyConfigured ? `已保存：${escapeHtml(item.imageKeyMasked || '')}` : '输入图片 API Key'}" autocomplete="new-password"></label>
           <label>图片模型（读取后选择）<input data-relay-field="imageModel" value="${escapeHtml(item.imageModel || '')}" readonly placeholder="请点击读取图片模型"></label>
+          <label>素材分析模型<input data-relay-field="analysisModel" value="${escapeHtml(item.analysisModel || 'gpt-5-6')}" placeholder="支持图片理解的多模态模型" spellcheck="false"></label>
           <label>健康检测接口<input data-relay-field="healthPath" value="${escapeHtml(item.healthPath || '/models')}" placeholder="/models" spellcheck="false"></label>
           <label>模型列表接口<input data-relay-field="modelsPath" value="${escapeHtml(item.modelsPath || '/models')}" placeholder="/models" spellcheck="false"></label>
           <label>每张最低扣费<div class="money-input"><span>$</span><input data-relay-field="imagePriceMinMinor" type="number" min="0" max="1000000" step="0.000001" inputmode="decimal" placeholder="0.000000" value="${moneyMinorToSixDecimalInput(item.imagePriceMinMinor ?? 0)}"></div></label>
           <label>每张最高扣费<div class="money-input"><span>$</span><input data-relay-field="imagePriceMaxMinor" type="number" min="0" max="1000000" step="0.000001" inputmode="decimal" placeholder="0.000000" value="${moneyMinorToSixDecimalInput(item.imagePriceMaxMinor ?? item.imagePriceMinMinor ?? 0)}"></div></label>
+          <label>站内 AI 分析最低扣费<div class="money-input"><span>$</span><input data-relay-field="llmPriceMinMinor" type="number" min="0" max="1000000" step="0.000001" inputmode="decimal" placeholder="0.000000" value="${moneyMinorToSixDecimalInput(item.llmPriceMinMinor ?? 0)}"></div></label>
+          <label>站内 AI 分析最高扣费<div class="money-input"><span>$</span><input data-relay-field="llmPriceMaxMinor" type="number" min="0" max="1000000" step="0.000001" inputmode="decimal" placeholder="0.000000" value="${moneyMinorToSixDecimalInput(item.llmPriceMaxMinor ?? item.llmPriceMinMinor ?? 0)}"></div></label>
           <label>站内美元余额折算（人民币/美元）<input data-relay-field="customerCnyPerUsd" type="number" min="0.000001" max="1000" step="0.000001" inputmode="decimal" value="${escapeHtml(item.customerCnyPerUsd ?? 7)}" placeholder="7.000000"></label>
           <label>上游每张采购成本<div class="money-input"><span>¥</span><input data-relay-field="upstreamImageCostCnyMicro" type="number" min="0" max="1000000" step="0.000001" inputmode="decimal" placeholder="0.020000" value="${moneyMinorToSixDecimalInput(item.upstreamImageCostCnyMicro ?? 0)}"></div></label>
+          <label>上游每次 AI 分析成本<div class="money-input"><span>¥</span><input data-relay-field="upstreamAnalysisCostCnyMicro" type="number" min="0" max="1000000" step="0.000001" inputmode="decimal" placeholder="0.000000" value="${moneyMinorToSixDecimalInput(item.upstreamAnalysisCostCnyMicro ?? 0)}"></div></label>
         </div>
         <div class="relay-station-actions">
           <button class="secondary" type="button" data-relay-health>健康检测</button>
@@ -4681,7 +5106,7 @@ function addRelay() {
 
 async function deleteRelay(button) {
   if (!isSuperAdmin()) return;
-  if (!window.confirm('确定删除这个中转站吗？删除后立即生效。')) return;
+  if (!await brandConfirm('确定删除这个中转站吗？删除后立即生效。', { title: '删除中转站', danger: true, confirmText: '删除' })) return;
   const relays = collectRelaysFromForm().filter(item => item.id !== button.dataset.deleteRelay);
   const activeRelayId = state.apiSettings?.activeRelayId === button.dataset.deleteRelay
     ? relays.find(item => item.enabled !== false)?.id || ''
@@ -4980,11 +5405,15 @@ async function saveSettings() {
 }
 
 async function resetSettings() {
-  if (!window.confirm('确定重置系统设置吗？已上传的素材和素材映射会保留。')) return;
+  if (!await brandConfirm('确定重置系统设置吗？已上传的素材和素材映射会保留。', { title: '重置系统设置', danger: true, confirmText: '确认重置' })) return;
   const assetSettings = {
     categoriesPath: state.config.categoriesPath,
     printsPath: state.config.printsPath,
-    detailSetsPath: state.config.detailSetsPath
+    detailSetsPath: state.config.detailSetsPath,
+    childrenwearRealAssetsPath: state.config.childrenwearRealAssetsPath,
+    childrenwearReferenceAssetsPath: state.config.childrenwearReferenceAssetsPath,
+    childrenwearModelAssetsPath: state.config.childrenwearModelAssetsPath,
+    childrenwearCombinationAssetsPath: state.config.childrenwearCombinationAssetsPath
   };
   state.config = await window.caishen.resetConfig();
   state.config = await window.caishen.saveConfig({ ...state.config, ...assetSettings });
@@ -4993,7 +5422,2111 @@ async function resetSettings() {
   toast('基础设置已重置，API 和素材保持不变');
 }
 
+const CHILDRENWEAR_LIBRARY_META = Object.freeze({
+  childrenwearRealAssetsPath: {
+    grid: '#childrenwearRealAssetsGrid',
+    summary: '#childrenwearRealAssetsSummary',
+    stateKey: 'childrenwearReal',
+    empty: '尚未上传实拍图',
+    selected: '当前实拍图',
+    analysisRole: 'product'
+  },
+  childrenwearReferenceAssetsPath: {
+    grid: '#childrenwearReferenceAssetsGrid',
+    summary: '#childrenwearReferenceAssetsSummary',
+    stateKey: 'childrenwearReference',
+    empty: '尚未上传参考图',
+    selected: '当前成品参考图',
+    analysisRole: 'flat_reference'
+  },
+  childrenwearModelAssetsPath: {
+    grid: '#childrenwearModelAssetsGrid',
+    summary: '#childrenwearModelAssetsSummary',
+    stateKey: 'childrenwearModelReference',
+    empty: '尚未上传模特图',
+    selected: '当前模特参考图',
+    analysisRole: 'model_reference'
+  },
+  childrenwearCombinationAssetsPath: {
+    grid: '#childrenwearCombinationAssetsGrid',
+    summary: '#childrenwearCombinationAssetsSummary',
+    empty: '尚未上传组合图',
+    selected: '当前组合图',
+    analysisRole: 'combination_reference'
+  }
+});
+
+function childrenwearAnalysisLabel(value) {
+  const status = value?.status || 'pending';
+  if (status === 'analyzed') return 'AI 已分析';
+  if (status === 'analyzing') return 'AI 分析中';
+  if (status === 'failed') return '分析失败';
+  return '待 AI 分析';
+}
+
+function renderChildrenwearLibrary(key) {
+  const meta = CHILDRENWEAR_LIBRARY_META[key];
+  const grid = meta && $(meta.grid);
+  const summary = meta && $(meta.summary);
+  if (!meta || !grid || !summary) return;
+  const items = state.childrenwearLibraries[key] || [];
+  const folders = state.childrenwearLibraryFolders[key] || [];
+  const activeFolder = state.childrenwearLibraryFolder[key] || 'root';
+  const totals = state.childrenwearLibraryTotals[key] || { total: items.length, totalPages: 0, pageSize: 48 };
+  const page = state.childrenwearLibraryPage[key] || 1;
+  const deleteSelection = state.childrenwearLibraryDeleteSelection[key] || new Set();
+  const analyzedCount = items.filter(item => item.analysis?.analyzed).length;
+  const failedCount = items.filter(item => item.analysis?.status === 'failed').length;
+  summary.textContent = `${totals.total} 张素材${totals.totalPages > 1 ? ` · 第 ${page}/${totals.totalPages} 页` : ''} · 本页已分析 ${analyzedCount}${failedCount ? ` · 失败 ${failedCount}` : ''}${deleteSelection.size ? ` · 已勾选 ${deleteSelection.size} 张` : ''}`;
+  const folderList = $(`[data-childrenwear-folder-list="${key}"]`);
+  if (folderList) {
+    folderList.innerHTML = folders.length ? folders.map(folder => `
+      <div class="childrenwear-folder-entry">
+        <button class="childrenwear-folder-card${folder.id === activeFolder ? ' active' : ''}" type="button" data-childrenwear-folder-key="${key}" data-childrenwear-folder-id="${escapeHtml(folder.id)}">
+          <span aria-hidden="true"></span><b>${escapeHtml(folder.name)}</b><small>${Number(folder.count) || 0} 张图片</small>
+        </button>
+        ${folder.id === 'root' ? '' : `<button class="childrenwear-folder-rename" type="button" data-rename-childrenwear-folder="${key}" data-childrenwear-folder-id="${escapeHtml(folder.id)}" data-childrenwear-folder-name="${escapeHtml(folder.name)}" aria-label="重命名 ${escapeHtml(folder.name)}">改名</button>`}
+      </div>`).join('') : '<div class="childrenwear-folder-empty">尚无素材文件夹</div>';
+  }
+  grid.innerHTML = items.length ? items.map(item => {
+    const checked = deleteSelection.has(item.path);
+    const analysisStatus = item.analysis?.status || 'pending';
+    const analysisTitle = item.analysis?.error || item.analysis?.summary || childrenwearAnalysisLabel(item.analysis);
+    return `<article class="childrenwear-library-item analysis-${escapeHtml(analysisStatus)}${checked ? ' selected' : ''}" title="${escapeHtml(item.name)}">
+      <button class="childrenwear-library-select" type="button" data-childrenwear-delete-key="${key}" data-childrenwear-delete-path="${escapeHtml(item.path)}" aria-pressed="${checked}"><span class="childrenwear-select-mark">${checked ? '✓' : ''}</span><span class="childrenwear-analysis-badge" title="${escapeHtml(analysisTitle)}">${escapeHtml(childrenwearAnalysisLabel(item.analysis))}</span><img loading="lazy" decoding="async" src="${escapeHtml(item.thumbnailUrl || item.url)}" data-preview-src="${escapeHtml(item.previewUrl || item.url)}" alt="${escapeHtml(item.name)}"><span class="childrenwear-library-caption"><b>${escapeHtml(item.name)}</b><small>${escapeHtml(item.folder && item.folder !== '根目录' ? item.folder : '未分类文件')}</small></span></button>
+    </article>`;
+  }).join('') : `<div class="empty-inline"><b>${meta.empty}</b><span>点击右上角按钮，可添加文件或上传整个文件夹。</span></div>`;
+  const pagination = $(`[data-childrenwear-pagination="${key}"]`);
+  if (pagination) {
+    pagination.innerHTML = totals.totalPages > 1 ? `
+      <button class="secondary" type="button" data-childrenwear-page-key="${key}" data-childrenwear-page="${page - 1}"${page <= 1 ? ' disabled' : ''}>上一页</button>
+      <span>第 ${page} 页，共 ${totals.totalPages} 页 · 每页 ${totals.pageSize} 张</span>
+      <button class="secondary" type="button" data-childrenwear-page-key="${key}" data-childrenwear-page="${page + 1}"${page >= totals.totalPages ? ' disabled' : ''}>下一页</button>` : '';
+  }
+  const deleteButton = $(`[data-delete-childrenwear-library="${key}"]`);
+  if (deleteButton) {
+    deleteButton.disabled = deleteSelection.size === 0;
+    deleteButton.textContent = deleteSelection.size ? `删除选中（${deleteSelection.size}）` : '删除选中';
+  }
+  const selectAllButton = $(`[data-select-all-childrenwear-library="${key}"]`);
+  if (selectAllButton) {
+    const allVisibleSelected = items.length > 0 && items.every(item => deleteSelection.has(item.path));
+    selectAllButton.disabled = items.length === 0;
+    selectAllButton.textContent = allVisibleSelected ? '取消全选' : '全选';
+  }
+  const analyzeButton = $(`[data-analyze-childrenwear-library="${key}"]`);
+  if (analyzeButton && !state.childrenwearLibraryUploading.has(key)) {
+    const selectedPending = items.filter(item => deleteSelection.has(item.path) && item.analysis?.status !== 'analyzed').length;
+    const pagePending = items.filter(item => item.analysis?.status !== 'analyzed').length;
+    analyzeButton.disabled = (selectedPending || pagePending) === 0;
+    analyzeButton.textContent = selectedPending ? `AI 分析选中（${selectedPending}）` : `AI 分析未完成（${pagePending}）`;
+  }
+}
+
+function setChildrenwearAssetTab(key) {
+  if (!CHILDRENWEAR_LIBRARY_META[key]) return;
+  state.childrenwearAssetTab = key;
+  $$('[data-childrenwear-library-tab]').forEach(button => {
+    const active = button.dataset.childrenwearLibraryTab === key;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+  $$('[data-childrenwear-library]').forEach(panel => {
+    const active = panel.dataset.childrenwearLibrary === key;
+    panel.hidden = !active;
+    panel.classList.toggle('active', active);
+  });
+}
+
+const CHILDRENWEAR_PRODUCTION_HINTS = Object.freeze({
+  master: '实拍产品图 + 成品参考图 → 平铺图',
+  model: '已审核平铺图 + 参考模特图 → 模特上身图',
+  combination: '选择 2～4 个已审核平铺图 → 多 SKU 组合图'
+});
+
+function setChildrenwearProductionTabLegacy(tab) {
+  const next = CHILDRENWEAR_PRODUCTION_HINTS[tab] ? tab : 'master';
+  state.childrenwearProductionTab = next;
+  $$('[data-childrenwear-production-tab]').forEach(button => {
+    const active = button.dataset.childrenwearProductionTab === next;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+  $$('[data-childrenwear-production-panel]').forEach(panel => {
+    panel.hidden = panel.dataset.childrenwearProductionPanel !== next;
+  });
+  $$('[data-childrenwear-production-nav]').forEach(button => {
+    const active = currentPage === 'childrenwear' && button.dataset.childrenwearProductionNav === next;
+    button.classList.toggle('active', active);
+    if (active) button.setAttribute('aria-current', 'page');
+    else button.removeAttribute('aria-current');
+  });
+  const taskPanel = $('#childrenwearMasterTaskPanel');
+  if (taskPanel) taskPanel.hidden = next !== 'master';
+  $('#page-childrenwear')?.classList.toggle('childrenwear-master-mode', next === 'master');
+  const hint = $('#childrenwearProductionTabHint');
+  if (hint) hint.textContent = CHILDRENWEAR_PRODUCTION_HINTS[next];
+}
+
+function openChildrenwearProduction(tab) {
+  setChildrenwearProductionTab(tab);
+  setPage('childrenwear');
+  setChildrenwearProductionTab(tab);
+}
+
+function openChildrenwearLibrary(key) {
+  setChildrenwearAssetTab(key);
+  setPage('assets');
+}
+
+const CHILDRENWEAR_PICKER_COPY = Object.freeze({
+  childrenwearRealAssetsPath: ['选择实拍产品图', '实拍图决定商品版型、颜色、材质和全部细节。'],
+  childrenwearReferenceAssetsPath: ['选择成品参考图', '参考图只决定平铺姿态、背景、光影和构图。'],
+  childrenwearModelAssetsPath: ['选择参考模特图', '模特参考图只决定人物、姿势、场景和光线。']
+});
+
+function closeChildrenwearPicker() {
+  $('#childrenwearAssetPickerModal').hidden = true;
+  state.childrenwearPickerKey = '';
+  state.childrenwearPickerSelected = '';
+}
+
+function renderChildrenwearPicker() {
+  const key = state.childrenwearPickerKey;
+  const meta = CHILDRENWEAR_LIBRARY_META[key];
+  if (!meta) return;
+  const items = state.childrenwearProductionLibraries[key] || [];
+  const folders = state.childrenwearProductionFolders[key] || [];
+  const activeFolder = state.childrenwearLibraryFolder[key] || 'root';
+  const totals = state.childrenwearLibraryTotals[key] || { total: 0, totalPages: 0, pageSize: 48 };
+  const page = state.childrenwearLibraryPage[key] || 1;
+  $('#childrenwearPickerFolders').innerHTML = folders.length ? folders.map(folder => `
+    <button class="childrenwear-picker-folder${folder.id === activeFolder ? ' active' : ''}" type="button" data-picker-folder-id="${escapeHtml(folder.id)}"><b>${escapeHtml(folder.name)}</b><span>${Number(folder.count) || 0}</span></button>`).join('') : '<span>暂无素材文件夹</span>';
+  $('#childrenwearPickerGrid').innerHTML = items.length ? items.map(item => `
+    <button class="childrenwear-picker-item${item.path === state.childrenwearPickerSelected ? ' selected' : ''}" type="button" data-picker-asset-path="${escapeHtml(item.path)}">
+      <img loading="lazy" decoding="async" src="${escapeHtml(item.thumbnailUrl || item.url)}" data-preview-src="${escapeHtml(item.previewUrl || item.url)}" alt="${escapeHtml(item.name)}"><span><b>${escapeHtml(item.name)}</b><small>${escapeHtml(item.folder || '未分类文件')}</small></span>
+    </button>`).join('') : '<div class="empty-inline">当前文件夹没有素材</div>';
+  $('#childrenwearPickerPagination').innerHTML = totals.totalPages > 1 ? `
+    <button class="secondary" type="button" data-picker-page="${page - 1}"${page <= 1 ? ' disabled' : ''}>上一页</button><span>${page} / ${totals.totalPages}</span><button class="secondary" type="button" data-picker-page="${page + 1}"${page >= totals.totalPages ? ' disabled' : ''}>下一页</button>` : '';
+  $('#childrenwearPickerStatus').textContent = state.childrenwearPickerSelected ? '已选中 1 张素材' : `当前文件夹 ${totals.total} 张，请选择 1 张`;
+  $('#applyChildrenwearPickerButton').disabled = !state.childrenwearPickerSelected;
+}
+
+async function openChildrenwearPicker(key) {
+  const meta = CHILDRENWEAR_LIBRARY_META[key];
+  if (!meta) return;
+  state.childrenwearPickerKey = key;
+  state.childrenwearPickerSelected = state[meta.stateKey]?.path || '';
+  const copy = CHILDRENWEAR_PICKER_COPY[key];
+  $('#childrenwearPickerTitle').textContent = copy[0];
+  $('#childrenwearPickerDescription').textContent = copy[1];
+  $('#childrenwearAssetPickerModal').hidden = false;
+  $('#childrenwearPickerGrid').innerHTML = '<div class="empty-inline">正在读取素材…</div>';
+  await loadChildrenwearLibrary(key);
+  renderChildrenwearPicker();
+}
+
+function applyChildrenwearPicker() {
+  const key = state.childrenwearPickerKey;
+  const meta = CHILDRENWEAR_LIBRARY_META[key];
+  const item = (state.childrenwearProductionLibraries[key] || []).find(candidate => candidate.path === state.childrenwearPickerSelected);
+  if (!meta || !item) return;
+  state[meta.stateKey] = item;
+  if (key !== 'childrenwearModelAssetsPath') state.childrenwearActiveTask = null;
+  closeChildrenwearPicker();
+  renderChildrenwear();
+  toast(`已选择${meta.selected}`);
+}
+
+async function loadChildrenwearLibrary(key) {
+  const meta = CHILDRENWEAR_LIBRARY_META[key];
+  if (!meta || !state.config) return;
+  const root = state.config[key] || '';
+  if (!root) {
+    state.childrenwearLibraries[key] = [];
+    state.childrenwearProductionLibraries[key] = [];
+    state.childrenwearLibraryFolders[key] = [];
+    state.childrenwearProductionFolders[key] = [];
+    state.childrenwearLibraryTotals[key] = { total: 0, totalPages: 0, pageSize: 48 };
+    renderChildrenwearLibrary(key);
+    if (state.childrenwearPickerKey === key) renderChildrenwearPicker();
+    return;
+  }
+  try {
+    const [result, productionResult] = await Promise.all([
+      window.caishen.listImageLibrary(root, {
+        folder: state.childrenwearLibraryFolder[key],
+        page: state.childrenwearLibraryPage[key],
+        pageSize: 48,
+        analysisRole: meta.analysisRole
+      }),
+      window.caishen.listImageLibrary(root, {
+        folder: state.childrenwearLibraryFolder[key],
+        page: 1,
+        pageSize: 120,
+        analysisRole: meta.analysisRole,
+        analysisOnly: true,
+        strictFolder: true
+      })
+    ]);
+    state.childrenwearLibraries[key] = result.items || [];
+    state.childrenwearProductionLibraries[key] = productionResult.items || [];
+    state.childrenwearLibraryFolders[key] = result.folders || [];
+    state.childrenwearProductionFolders[key] = productionResult.folders || [];
+    state.childrenwearLibraryFolder[key] = result.folder || 'root';
+    state.childrenwearLibraryPage[key] = result.page || 1;
+    state.childrenwearLibraryTotals[key] = {
+      total: Number(result.total) || 0,
+      totalPages: Number(result.totalPages) || 0,
+      pageSize: Number(result.pageSize) || 48
+    };
+  } catch (error) {
+    state.childrenwearLibraries[key] = [];
+    state.childrenwearProductionLibraries[key] = [];
+    const summary = $(meta.summary);
+    if (summary) summary.textContent = `读取失败：${errorText(error)}`;
+  }
+  renderChildrenwearLibrary(key);
+  if (state.childrenwearPickerKey === key) renderChildrenwearPicker();
+}
+
+async function selectChildrenwearLibraryFolder(key, folderId) {
+  if (!CHILDRENWEAR_LIBRARY_META[key]) return;
+  state.childrenwearLibraryFolder[key] = folderId || 'root';
+  state.childrenwearLibraryPage[key] = 1;
+  const grid = $(CHILDRENWEAR_LIBRARY_META[key].grid);
+  if (grid) grid.innerHTML = '<div class="empty-inline">正在读取文件夹…</div>';
+  await loadChildrenwearLibrary(key);
+}
+
+async function changeChildrenwearLibraryPage(key, page) {
+  const totals = state.childrenwearLibraryTotals[key];
+  const next = Math.max(1, Math.min(Number(totals?.totalPages) || 1, Number(page) || 1));
+  if (next === state.childrenwearLibraryPage[key]) return;
+  state.childrenwearLibraryPage[key] = next;
+  await loadChildrenwearLibrary(key);
+}
+
+async function loadChildrenwearLibraries() {
+  await Promise.all(Object.keys(CHILDRENWEAR_LIBRARY_META).map(loadChildrenwearLibrary));
+}
+
+function renderChildrenwearAnalysisAutomation() {
+  const enabled = state.config?.childrenwearAutoAnalysisEnabled === true;
+  const interval = [1, 5, 10, 30, 60].includes(Number(state.config?.childrenwearAutoAnalysisIntervalMinutes))
+    ? Number(state.config.childrenwearAutoAnalysisIntervalMinutes)
+    : 5;
+  const enabledInput = $('#childrenwearAutoAnalysisEnabled');
+  const intervalInput = $('#childrenwearAutoAnalysisInterval');
+  const runButton = $('#runChildrenwearAnalysisScanButton');
+  const status = $('#childrenwearAnalysisScanStatus');
+  if (enabledInput) enabledInput.checked = enabled;
+  if (intervalInput) {
+    intervalInput.value = String(interval);
+    intervalInput.disabled = false;
+  }
+  if (runButton) {
+    runButton.disabled = state.childrenwearAnalysisScanRunning;
+    runButton.textContent = state.childrenwearAnalysisScanRunning ? '正在并发分析…' : '立即扫描分析';
+  }
+  if (status && !state.childrenwearAnalysisScanRunning) {
+    status.textContent = state.childrenwearAnalysisLastScanAt
+      ? `上次 ${formatLocalDateTime(state.childrenwearAnalysisLastScanAt)}`
+      : enabled ? `已开启 · 每 ${interval} 分钟` : '自动扫描已关闭';
+  }
+}
+
+function scheduleChildrenwearAutoAnalysis(options = {}) {
+  renderChildrenwearAnalysisAutomation();
+  if (state.config?.childrenwearAutoAnalysisEnabled !== true) return;
+  if (options.runNow === true) void runChildrenwearAnalysisScan({ manual: false });
+}
+
+async function saveChildrenwearAnalysisAutomation(changes, options = {}) {
+  const previous = state.config;
+  state.config = { ...state.config, ...changes };
+  renderChildrenwearAnalysisAutomation();
+  try {
+    state.config = await window.caishen.saveConfig(state.config);
+    scheduleChildrenwearAutoAnalysis({ runNow: options.runNow === true });
+  } catch (error) {
+    state.config = previous;
+    renderChildrenwearAnalysisAutomation();
+    toast(errorText(error), true);
+  }
+}
+
+async function runChildrenwearAnalysisScan(options = {}) {
+  if (state.childrenwearAnalysisScanRunning) return null;
+  state.childrenwearAnalysisScanRunning = true;
+  const status = $('#childrenwearAnalysisScanStatus');
+  renderChildrenwearAnalysisAutomation();
+  if (status) status.textContent = '正在查找未分析素材…';
+  try {
+    const result = await window.caishen.scanPendingChildrenwearAnalysis({
+      includeFailed: options.manual === true
+    }, progress => {
+      if (status) status.textContent = progress.message || `已处理 ${progress.current || 0}/${progress.total || 0}`;
+    });
+    state.childrenwearAnalysisLastScanAt = new Date().toISOString();
+    if (result.total > 0) await loadChildrenwearLibraries();
+    if (options.manual === true) {
+      if (!result.total) toast('扫描完成：没有需要 AI 分析的新素材');
+      else if (result.failed) toast(`AI 分析完成 ${result.analyzed}/${result.total}，失败 ${result.failed}`, true);
+      else toast(`AI 分析完成：${result.analyzed} 张，并发数 ${result.concurrency}`);
+    }
+    return result;
+  } catch (error) {
+    if (options.manual === true) toast(errorText(error), true);
+    if (status) status.textContent = `扫描失败：${errorText(error)}`;
+    throw error;
+  } finally {
+    state.childrenwearAnalysisScanRunning = false;
+    renderChildrenwearAnalysisAutomation();
+  }
+}
+
+async function analyzeChildrenwearPaths(key, paths, options = {}) {
+  const meta = CHILDRENWEAR_LIBRARY_META[key];
+  const uniquePaths = [...new Set((paths || []).filter(Boolean))];
+  if (!meta || !uniquePaths.length) return { total: 0, analyzed: 0, reused: 0, failed: 0, failures: [] };
+  const button = options.button || null;
+  const originalText = button?.textContent || '';
+  if (button) button.disabled = true;
+  try {
+    const result = await window.caishen.analyzeChildrenwearAssets({
+      role: meta.analysisRole,
+      paths: uniquePaths,
+      force: options.force === true
+    }, progress => {
+      if (button) button.textContent = progress.message || `正在 AI 分析 ${progress.current || 0}/${progress.total || uniquePaths.length}`;
+    });
+    return result;
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+  }
+}
+
+async function analyzeChildrenwearLibrarySelection(key, button) {
+  const items = state.childrenwearLibraries[key] || [];
+  const selection = state.childrenwearLibraryDeleteSelection[key] || new Set();
+  const selected = items.filter(item => selection.has(item.path));
+  const targets = (selected.length
+    ? selected
+    : items.filter(item => item.analysis?.status !== 'analyzed'))
+    .map(item => item.path);
+  if (!targets.length) return toast('当前页素材均已完成 AI 分析；如需按新提示词重新分析，请先勾选素材');
+  try {
+    const result = await analyzeChildrenwearPaths(key, targets, { button, force: selected.length > 0 });
+    await loadChildrenwearLibrary(key);
+    if (result.failed) toast(`AI 分析完成 ${result.analyzed}/${result.total}，失败 ${result.failed}；失败素材不会进入生成选材区`, true);
+    else toast(`AI 分析完成：${result.analyzed} 张素材已可用于生成`);
+  } catch (error) {
+    await loadChildrenwearLibrary(key).catch(() => {});
+    toast(errorText(error), true);
+  }
+}
+
+function validChildrenwearFolderName(value) {
+  const name = String(value || '').trim();
+  return name && name !== '.' && name !== '..' && !/[\\/:*?"<>|]/.test(name) && !/[. ]$/.test(name) && name.length <= 80;
+}
+
+async function prepareChildrenwearFolderUpload(key, entries) {
+  const firstParts = String(entries[0]?.relativePath || '').replaceAll('\\', '/').split('/').filter(Boolean);
+  const sourceName = firstParts.length > 1 ? firstParts[0] : '新建文件夹';
+  const existingNames = new Set((state.childrenwearLibraryFolders[key] || [])
+    .filter(folder => folder.id !== 'root')
+    .flatMap(folder => [folder.name, String(folder.id || '').replace(/^folder:/, '')])
+    .map(name => String(name || '').toLocaleLowerCase('zh-CN')));
+  let suggested = sourceName;
+  for (let suffix = 2; existingNames.has(suggested.toLocaleLowerCase('zh-CN')); suffix += 1) suggested = `${sourceName} (${suffix})`;
+  const requested = await brandPrompt('设置款式或分组名称', suggested, {
+    message: '这是按当前用途导入。若选择的是“实拍图、成品图、模特图或组合图”文件夹，请在这里填写它所属的款式名称。',
+    inputLabel: '款式/分组名称'
+  });
+  if (requested === null) return null;
+  const folderName = requested.trim();
+  if (!validChildrenwearFolderName(folderName)) {
+    toast('文件夹名称不能为空，且不能包含 \\ / : * ? " < > |', true);
+    return null;
+  }
+  if (existingNames.has(folderName.toLocaleLowerCase('zh-CN'))) {
+    toast(`文件夹“${folderName}”已存在，请换一个名称，避免素材被合并`, true);
+    return null;
+  }
+  return {
+    folderName,
+    entries: entries.map(entry => {
+      const parts = String(entry.relativePath || entry.file?.name || '').replaceAll('\\', '/').split('/').filter(Boolean);
+      const tail = parts.length > 1 ? parts.slice(1) : [entry.file?.name || parts[0]];
+      return { ...entry, relativePath: [folderName, ...tail].filter(Boolean).join('/') };
+    })
+  };
+}
+
+const CHILDRENWEAR_STYLE_PACKAGE_KINDS = Object.freeze({
+  实拍图: 'childrenwearRealAssetsPath',
+  实拍产品图: 'childrenwearRealAssetsPath',
+  成品图: 'childrenwearReferenceAssetsPath',
+  成品参考图: 'childrenwearReferenceAssetsPath',
+  模特图: 'childrenwearModelAssetsPath',
+  参考模特图: 'childrenwearModelAssetsPath',
+  组合图: 'childrenwearCombinationAssetsPath',
+  SKU组合图: 'childrenwearCombinationAssetsPath'
+});
+
+const CHILDRENWEAR_STYLE_PACKAGE_LABELS = Object.freeze({
+  childrenwearRealAssetsPath: '实拍图',
+  childrenwearReferenceAssetsPath: '成品图',
+  childrenwearModelAssetsPath: '模特图',
+  childrenwearCombinationAssetsPath: '组合图'
+});
+
+function childrenwearPackageKind(folderName) {
+  const normalized = String(folderName || '').replaceAll(' ', '').trim();
+  return CHILDRENWEAR_STYLE_PACKAGE_KINDS[normalized] || '';
+}
+
+function parseChildrenwearStylePackage(entries) {
+  const groups = new Map(Object.keys(CHILDRENWEAR_LIBRARY_META).map(key => [key, []]));
+  const styles = new Map();
+  const ignored = [];
+  for (const entry of entries) {
+    const parts = String(entry.relativePath || entry.file?.name || '').replaceAll('\\', '/').split('/').filter(Boolean);
+    const kindIndex = parts.findIndex(part => childrenwearPackageKind(part));
+    if (kindIndex < 1 || kindIndex >= parts.length - 1) {
+      ignored.push(entry);
+      continue;
+    }
+    const styleName = parts[kindIndex - 1]?.trim();
+    const key = childrenwearPackageKind(parts[kindIndex]);
+    if (!key || !validChildrenwearFolderName(styleName)) {
+      ignored.push(entry);
+      continue;
+    }
+    const relativePath = [styleName, ...parts.slice(kindIndex + 1)].join('/');
+    groups.get(key).push({ ...entry, relativePath });
+    if (!styles.has(styleName)) styles.set(styleName, Object.fromEntries(Object.keys(CHILDRENWEAR_LIBRARY_META).map(item => [item, 0])));
+    styles.get(styleName)[key] += 1;
+  }
+  return { groups, styles, ignored };
+}
+
+function childrenwearStylePackageSummary(parsed) {
+  const lines = [...parsed.styles].map(([styleName, counts]) => {
+    const detail = Object.entries(CHILDRENWEAR_STYLE_PACKAGE_LABELS).map(([key, label]) => `${label} ${counts[key] || 0} 张`).join('，');
+    return `${styleName}：${detail}`;
+  });
+  if (parsed.ignored.length) lines.push(`未识别图片：${parsed.ignored.length} 张（不会导入）`);
+  return lines.join('\n');
+}
+
+async function importChildrenwearStylePackage(button) {
+  if (!button || state.childrenwearLibraryUploading.size) return;
+  const entries = await window.caishen.chooseAssetFolder();
+  if (!entries.length) return;
+  const parsed = parseChildrenwearStylePackage(entries);
+  const recognized = [...parsed.groups.values()].reduce((total, items) => total + items.length, 0);
+  if (!recognized || !parsed.styles.size) {
+    return toast('没有识别到“款式文件夹 → 实拍图/成品图/模特图/组合图 → 图片”的目录结构', true);
+  }
+  const confirmed = await brandConfirm(`识别到 ${parsed.styles.size} 个款式、${recognized} 张图片：\n\n${childrenwearStylePackageSummary(parsed)}\n\n系统会按四种用途分别归档，并保留款式名称。`, {
+    title: '按款式整包导入',
+    confirmText: '确认导入'
+  });
+  if (!confirmed) return;
+  const activeKeys = [...parsed.groups].filter(([, items]) => items.length).map(([key]) => key);
+  const previousRoots = Object.fromEntries(activeKeys.map(key => [key, state.config[key] || '']));
+  const completed = [];
+  activeKeys.forEach(key => state.childrenwearLibraryUploading.add(key));
+  button.disabled = true;
+  button.textContent = `正在导入 ${recognized} 张…`;
+  try {
+    let added = 0;
+    let skipped = 0;
+    for (const key of activeKeys) {
+      const result = await window.caishen.addAssetFiles(key, state.config[key], parsed.groups.get(key));
+      state.config[key] = result.root;
+      completed.push({ key, result });
+      added += Number(result.added) || 0;
+      skipped += Number(result.skipped) || 0;
+    }
+    state.config = await window.caishen.saveConfig(state.config);
+    const onlyStyle = parsed.styles.size === 1 ? [...parsed.styles.keys()][0] : '';
+    for (const key of activeKeys) {
+      state.childrenwearLibraryFolder[key] = onlyStyle ? `folder:${onlyStyle}` : 'auto';
+      state.childrenwearLibraryPage[key] = 1;
+    }
+    button.textContent = `正在并发 AI 分析 ${added} 张素材…`;
+    const analysis = await window.caishen.scanPendingChildrenwearAnalysis({ includeFailed: false }, progress => {
+      button.textContent = progress.message || `正在并发 AI 分析 ${progress.current || 0}/${progress.total || added}…`;
+    });
+    const analyzed = Number(analysis.analyzed) || 0;
+    const failed = Number(analysis.failed) || 0;
+    await loadChildrenwearLibraries();
+    toast(`款式整包导入完成：${parsed.styles.size} 个款式，${added} 张素材，AI 已分析 ${analyzed} 张${failed ? `，失败 ${failed} 张（不会进入生成选材区）` : ''}${skipped ? `，跳过 ${skipped} 张` : ''}`, failed > 0);
+  } catch (error) {
+    let rollbackFailed = false;
+    for (const item of completed.reverse()) {
+      try {
+        await window.caishen.deleteAssetFiles(item.key, item.result.root, item.result.paths || []);
+        state.config[item.key] = previousRoots[item.key];
+      } catch { rollbackFailed = true; }
+    }
+    await window.caishen.saveConfig(state.config).catch(() => { rollbackFailed = true; });
+    toast(`${errorText(error)}${completed.length ? rollbackFailed ? '；部分已导入文件未能自动回滚，请检查素材库' : '；本次已导入内容已自动回滚' : ''}`, true);
+  } finally {
+    activeKeys.forEach(key => state.childrenwearLibraryUploading.delete(key));
+    button.disabled = false;
+    button.textContent = '按款式整包导入';
+  }
+}
+
+async function renameChildrenwearLibraryFolder(key, folderId, currentName) {
+  if (!CHILDRENWEAR_LIBRARY_META[key] || folderId === 'root') return;
+  const requested = await brandPrompt('修改文件夹名称', currentName || '', { inputLabel: '新的文件夹名称' });
+  if (requested === null) return;
+  const nextName = requested.trim();
+  if (nextName === currentName) return;
+  if (!validChildrenwearFolderName(nextName)) return toast('文件夹名称不能为空，且不能包含 \\ / : * ? " < > |', true);
+  const duplicate = (state.childrenwearLibraryFolders[key] || []).some(folder => folder.id !== folderId
+    && String(folder.name || '').toLocaleLowerCase('zh-CN') === nextName.toLocaleLowerCase('zh-CN'));
+  if (duplicate) return toast(`文件夹“${nextName}”已存在，请换一个名称`, true);
+  try {
+    await window.caishen.renameAssetFolder(key, state.config[key], folderId, nextName);
+    await loadChildrenwearLibrary(key);
+    toast(`文件夹已重命名为“${nextName}”`);
+  } catch (error) { toast(errorText(error), true); }
+}
+
+async function uploadChildrenwearLibrary(key, source = 'files') {
+  const meta = CHILDRENWEAR_LIBRARY_META[key];
+  if (!meta || state.childrenwearLibraryUploading.has(key)) return;
+  const isFolder = source === 'folder';
+  let entries = isFolder ? await window.caishen.chooseAssetFolder() : await window.caishen.chooseAssetFiles();
+  if (!entries.length) return;
+  let uploadedFolderName = '';
+  if (isFolder) {
+    const prepared = await prepareChildrenwearFolderUpload(key, entries);
+    if (!prepared) return;
+    entries = prepared.entries;
+    uploadedFolderName = prepared.folderName;
+  }
+  state.childrenwearLibraryUploading.add(key);
+  const button = $(`[data-childrenwear-library-${isFolder ? 'folder' : 'upload'}="${key}"]`);
+  if (button) {
+    button.disabled = true;
+    button.textContent = isFolder ? `正在导入 ${entries.length} 张…` : '上传中…';
+  }
+  try {
+    const result = await window.caishen.addAssetFiles(key, state.config[key], entries);
+    state.config[key] = result.root;
+    state.config = await window.caishen.saveConfig(state.config);
+    if (button) button.textContent = `正在 AI 分析 0/${result.paths?.length || result.added || 0}…`;
+    const analysis = await analyzeChildrenwearPaths(key, result.paths || [], { button });
+    if (isFolder) state.childrenwearLibraryFolder[key] = uploadedFolderName ? `folder:${uploadedFolderName}` : 'root';
+    else state.childrenwearLibraryFolder[key] = 'root';
+    state.childrenwearLibraryPage[key] = 1;
+    await loadChildrenwearLibrary(key);
+    const latest = (state.childrenwearLibraries[key] || []).find(item => result.paths?.includes?.(item.path))
+      || state.childrenwearLibraries[key]?.at(-1);
+    if (latest && meta.stateKey && !state[meta.stateKey]) state[meta.stateKey] = latest;
+    renderChildrenwearLibrary(key);
+    renderChildrenwear();
+    toast(`${isFolder ? '文件夹导入完成' : '上传完成'}：${result.added} 张素材，AI 已分析 ${analysis.analyzed} 张${analysis.failed ? `，失败 ${analysis.failed} 张（不会进入生成选材区）` : ''}${result.skipped ? `，跳过 ${result.skipped} 个文件` : ''}`, analysis.failed > 0);
+  } catch (error) {
+    toast(errorText(error), true);
+  } finally {
+    state.childrenwearLibraryUploading.delete(key);
+    if (button) {
+      button.disabled = false;
+      button.textContent = isFolder ? '按用途文件夹导入' : '添加文件';
+    }
+  }
+}
+
+function toggleChildrenwearLibraryDelete(key, assetPath, checked) {
+  const meta = CHILDRENWEAR_LIBRARY_META[key];
+  const selection = state.childrenwearLibraryDeleteSelection[key];
+  if (!meta || !selection) return;
+  if (checked) selection.add(assetPath);
+  else selection.delete(assetPath);
+  renderChildrenwearLibrary(key);
+}
+
+function toggleAllChildrenwearLibraryItems(key) {
+  const items = state.childrenwearLibraries[key] || [];
+  const selection = state.childrenwearLibraryDeleteSelection[key];
+  if (!items.length || !selection) return;
+  const allVisibleSelected = items.every(item => selection.has(item.path));
+  for (const item of items) {
+    if (allVisibleSelected) selection.delete(item.path);
+    else selection.add(item.path);
+  }
+  renderChildrenwearLibrary(key);
+}
+
+async function deleteChildrenwearLibrarySelection(key) {
+  const selection = state.childrenwearLibraryDeleteSelection[key];
+  if (!selection?.size || !state.config?.[key]) return;
+  if (!await brandConfirm(`确定删除选中的 ${selection.size} 张素材吗？此操作不可撤销。`, { title: '删除素材', danger: true, confirmText: '删除' })) return;
+  try {
+    const result = await window.caishen.deleteAssetFiles(key, state.config[key], [...selection]);
+    selection.clear();
+    await loadChildrenwearLibrary(key);
+    toast(`已删除 ${result.deleted} 张素材`);
+  } catch (error) { toast(errorText(error), true); }
+}
+
+function bindChildrenwearLibraryEvents() {
+  $('#childrenwearAutoAnalysisEnabled').onchange = event => saveChildrenwearAnalysisAutomation({
+    childrenwearAutoAnalysisEnabled: event.target.checked
+  }, { runNow: event.target.checked });
+  $('#childrenwearAutoAnalysisInterval').onchange = event => saveChildrenwearAnalysisAutomation({
+    childrenwearAutoAnalysisIntervalMinutes: Number(event.target.value) || 5
+  });
+  $('#runChildrenwearAnalysisScanButton').onclick = () => runChildrenwearAnalysisScan({ manual: true });
+  $$('[data-import-childrenwear-style-package]').forEach(button => {
+    button.onclick = () => importChildrenwearStylePackage(button).catch(error => toast(errorText(error), true));
+  });
+  $$('[data-childrenwear-library-tab]').forEach(button => {
+    button.onclick = () => setChildrenwearAssetTab(button.dataset.childrenwearLibraryTab);
+  });
+  $$('[data-childrenwear-library-upload]').forEach(button => {
+    button.onclick = () => uploadChildrenwearLibrary(button.dataset.childrenwearLibraryUpload);
+  });
+  $$('[data-childrenwear-library-folder]').forEach(button => {
+    button.onclick = () => uploadChildrenwearLibrary(button.dataset.childrenwearLibraryFolder, 'folder');
+  });
+  $$('[data-analyze-childrenwear-library]').forEach(button => {
+    button.onclick = () => analyzeChildrenwearLibrarySelection(button.dataset.analyzeChildrenwearLibrary, button);
+  });
+  $$('[data-delete-childrenwear-library]').forEach(button => {
+    button.onclick = () => deleteChildrenwearLibrarySelection(button.dataset.deleteChildrenwearLibrary);
+  });
+  $$('[data-select-all-childrenwear-library]').forEach(button => {
+    button.onclick = () => toggleAllChildrenwearLibraryItems(button.dataset.selectAllChildrenwearLibrary);
+  });
+  $$('.childrenwear-folder-browser').forEach(container => {
+    container.onclick = event => {
+      const renameButton = event.target.closest('[data-rename-childrenwear-folder]');
+      if (renameButton) {
+        renameChildrenwearLibraryFolder(
+          renameButton.dataset.renameChildrenwearFolder,
+          renameButton.dataset.childrenwearFolderId,
+          renameButton.dataset.childrenwearFolderName
+        );
+        return;
+      }
+      const button = event.target.closest('[data-childrenwear-folder-id]');
+      if (button) selectChildrenwearLibraryFolder(button.dataset.childrenwearFolderKey, button.dataset.childrenwearFolderId).catch(error => toast(errorText(error), true));
+    };
+  });
+  $$('.childrenwear-library-pagination').forEach(container => {
+    container.onclick = event => {
+      const button = event.target.closest('[data-childrenwear-page]');
+      if (button && !button.disabled) changeChildrenwearLibraryPage(button.dataset.childrenwearPageKey, button.dataset.childrenwearPage).catch(error => toast(errorText(error), true));
+    };
+  });
+  $$('[data-open-childrenwear-library]').forEach(button => {
+    button.onclick = () => openChildrenwearLibrary(button.dataset.openChildrenwearLibrary);
+  });
+  $$('[data-open-childrenwear-picker]').forEach(button => {
+    button.onclick = () => openChildrenwearPicker(button.dataset.openChildrenwearPicker).catch(error => toast(errorText(error), true));
+  });
+  $('#closeChildrenwearPickerButton').onclick = closeChildrenwearPicker;
+  $('#cancelChildrenwearPickerButton').onclick = closeChildrenwearPicker;
+  $('#childrenwearAssetPickerModal').onclick = event => { if (event.target === $('#childrenwearAssetPickerModal')) closeChildrenwearPicker(); };
+  $('#childrenwearPickerFolders').onclick = event => {
+    const button = event.target.closest('[data-picker-folder-id]');
+    if (!button || !state.childrenwearPickerKey) return;
+    state.childrenwearPickerSelected = '';
+    selectChildrenwearLibraryFolder(state.childrenwearPickerKey, button.dataset.pickerFolderId).catch(error => toast(errorText(error), true));
+  };
+  $('#childrenwearPickerGrid').onclick = event => {
+    const button = event.target.closest('[data-picker-asset-path]');
+    if (!button) return;
+    state.childrenwearPickerSelected = button.dataset.pickerAssetPath;
+    renderChildrenwearPicker();
+  };
+  $('#childrenwearPickerPagination').onclick = event => {
+    const button = event.target.closest('[data-picker-page]');
+    if (!button || button.disabled || !state.childrenwearPickerKey) return;
+    state.childrenwearPickerSelected = '';
+    changeChildrenwearLibraryPage(state.childrenwearPickerKey, button.dataset.pickerPage).catch(error => toast(errorText(error), true));
+  };
+  $('#applyChildrenwearPickerButton').onclick = applyChildrenwearPicker;
+  $$('.childrenwear-library-items').forEach(grid => {
+    grid.onclick = event => {
+      const button = event.target.closest('[data-childrenwear-delete-path]');
+      if (!button) return;
+      const selection = state.childrenwearLibraryDeleteSelection[button.dataset.childrenwearDeleteKey];
+      toggleChildrenwearLibraryDelete(button.dataset.childrenwearDeleteKey, button.dataset.childrenwearDeletePath, !selection.has(button.dataset.childrenwearDeletePath));
+    };
+  });
+}
+
+function childrenwearCategoryMaterial(category) {
+  const text = String(category || '');
+  if (text.includes('梭织')) return '纯棉梭织';
+  if (text.includes('套装') || text.includes('长爬')) return '纯棉针织';
+  return $('#childrenwearMaterial')?.value || '纯棉';
+}
+
+function setChildrenwearPreview(imageSelector, emptySelector, source) {
+  const image = $(imageSelector);
+  const empty = $(emptySelector);
+  if (!image || !empty) return;
+  const url = source?.url || '';
+  image.hidden = !url;
+  empty.hidden = Boolean(url);
+  if (url) image.src = url;
+  else image.removeAttribute('src');
+}
+
+function childrenwearInputFromTask(pathKey, urlKey, nameFallback) {
+  const task = state.childrenwearActiveTask;
+  if (!task?.[pathKey]) return null;
+  return {
+    path: task[pathKey],
+    url: task[urlKey] || '',
+    name: task[pathKey].split(/[\\/]/).at(-1) || nameFallback
+  };
+}
+
+function renderChildrenwearModelResults() {
+  const container = $('#childrenwearModelResults');
+  if (!container) return;
+  const outputs = state.childrenwearActiveTask?.modelOutputs || [];
+  container.innerHTML = outputs.length ? outputs.slice().reverse().map(output => `
+    <article class="childrenwear-model-result${output.approved ? ' approved' : ''}" data-childrenwear-model-id="${escapeHtml(output.id)}">
+      <img src="${escapeHtml(output.url)}" alt="模特上身图">
+      <div><b>${output.approved ? '已审核模特图' : '模特图候选'}</b><span>${escapeHtml(formatLocalDateTime(output.createdAt))}</span><div><button class="${output.approved ? 'secondary' : 'primary'}" type="button" data-approve-childrenwear-model="${escapeHtml(output.id)}">${output.approved ? '取消通过' : '审核通过'}</button><button class="text-button" type="button" data-open-childrenwear-model="${escapeHtml(output.path)}">查看原图</button></div></div>
+    </article>`).join('') : '<div class="empty-inline">还没有模特图</div>';
+}
+
+function renderChildrenwearMasterLibrary() {
+  const container = $('#childrenwearMasterLibrary');
+  if (!container) return;
+  const tasks = state.childrenwearTasks.filter(task => task.masterApproved && task.masterPath && task.masterUrl);
+  const availablePaths = new Set(tasks.map(task => task.masterPath));
+  for (const selected of [...state.childrenwearCombinationSelection]) {
+    if (!availablePaths.has(selected)) state.childrenwearCombinationSelection.delete(selected);
+  }
+  container.innerHTML = tasks.length ? tasks.map(task => `
+    <label class="childrenwear-master-option${state.childrenwearCombinationSelection.has(task.masterPath) ? ' selected' : ''}">
+      <input type="checkbox" data-childrenwear-master-path="${escapeHtml(task.masterPath)}"${state.childrenwearCombinationSelection.has(task.masterPath) ? ' checked' : ''}>
+      <img src="${escapeHtml(task.masterUrl)}" alt="${escapeHtml(task.category || '童装平铺图')}">
+      <span><b>${escapeHtml(task.category || '童装')}</b><small>${escapeHtml(task.material || '材质未标注')} · 平铺图 v${Number(task.masterVersion) || 1}</small></span>
+    </label>`).join('') : '<div class="empty-inline">还没有已审核平铺图</div>';
+  const count = state.childrenwearCombinationSelection.size;
+  $('#childrenwearCombinationStatus').textContent = count ? `已选择 ${count}/4 个平铺图` : '请选择 2～4 个平铺图';
+}
+
+function childrenwearTaskStatus(task) {
+  if (task.masterApproved) return '平铺图已审核';
+  if (task.masterPath) return '等待成品审核';
+  return '等待生成';
+}
+
+function renderChildrenwearMasterTasks() {
+  const container = $('#childrenwearMasterTaskList');
+  const count = $('#childrenwearMasterTaskCount');
+  if (!container || !count) return;
+  count.textContent = `${state.childrenwearTasks.length} 项`;
+  container.innerHTML = state.childrenwearTasks.length ? state.childrenwearTasks.map(task => `
+    <button class="childrenwear-task-item${task.folder === state.childrenwearActiveTask?.folder ? ' active' : ''}" type="button" data-childrenwear-task-folder="${escapeHtml(task.folder)}">
+      <img loading="lazy" src="${escapeHtml(task.masterUrl || task.realPhotoUrl || '')}" alt="${escapeHtml(task.category || '平铺图任务')}">
+      <span><b>${escapeHtml(task.category || '童装平铺图')}</b><small>${escapeHtml(task.material || '材质未填写')}</small><em>${childrenwearTaskStatus(task)}</em></span>
+    </button>`).join('') : '<div class="empty-inline"><b>还没有平铺图任务</b><span>选择实拍图和参考图后生成第一项任务。</span></div>';
+}
+
+function selectChildrenwearTask(folder) {
+  const task = state.childrenwearTasks.find(item => item.folder === folder);
+  if (!task) return;
+  state.childrenwearActiveTask = task;
+  state.childrenwearReal = childrenwearInputFromTask('realPhotoPath', 'realPhotoUrl', '实拍图');
+  state.childrenwearReference = childrenwearInputFromTask('referencePath', 'referenceUrl', '参考图');
+  renderChildrenwear();
+}
+
+function newChildrenwearMasterTask() {
+  state.childrenwearActiveTask = null;
+  state.childrenwearReal = null;
+  state.childrenwearReference = null;
+  $('#childrenwearCraft').value = '';
+  $('#childrenwearMasterNote').value = '';
+  $('#childrenwearMasterStatus').textContent = '请从素材库选择实拍产品图和成品参考图';
+  renderChildrenwear();
+}
+
+function renderChildrenwearApprovedMasters() {
+  const container = $('#childrenwearApprovedMasterList');
+  if (!container) return;
+  const tasks = state.childrenwearTasks.filter(task => task.masterApproved && task.masterUrl);
+  container.innerHTML = tasks.length ? `<div class="childrenwear-approved-master-head"><b>选择已审核平铺图</b><span>${tasks.length} 个可用</span></div><div>` + tasks.map(task => `
+    <button class="childrenwear-approved-master${task.folder === state.childrenwearActiveTask?.folder ? ' active' : ''}" type="button" data-childrenwear-model-task-folder="${escapeHtml(task.folder)}"><img loading="lazy" src="${escapeHtml(task.masterUrl)}" alt="${escapeHtml(task.category || '平铺图')}"><span><b>${escapeHtml(task.category || '童装')}</b><small>${escapeHtml(task.material || '')}</small></span></button>`).join('') + '</div>' : '<div class="empty-inline">还没有已审核平铺图，请先在 02 完成审核。</div>';
+}
+
+function renderChildrenwearLegacy() {
+  const task = state.childrenwearActiveTask;
+  if (task) {
+    state.childrenwearReal ||= childrenwearInputFromTask('realPhotoPath', 'realPhotoUrl', '实拍图');
+    state.childrenwearReference ||= childrenwearInputFromTask('referencePath', 'referenceUrl', '参考图');
+    $('#childrenwearCategory').value = [...$('#childrenwearCategory').options].some(option => option.value === task.category) ? task.category : '其他童装';
+    $('#childrenwearMaterial').value = task.material || $('#childrenwearMaterial').value;
+    $('#childrenwearCraft').value = task.craft || '';
+    $('#childrenwearMasterNote').value = task.note || '';
+  }
+  setChildrenwearPreview('#childrenwearRealPreview', '#childrenwearRealEmpty', state.childrenwearReal);
+  setChildrenwearPreview('#childrenwearReferencePreview', '#childrenwearReferenceEmpty', state.childrenwearReference);
+  setChildrenwearPreview('#childrenwearModelReferencePreview', '#childrenwearModelReferenceEmpty', state.childrenwearModelReference);
+  $('#childrenwearRealName').textContent = state.childrenwearReal?.name || '尚未上传';
+  $('#childrenwearReferenceName').textContent = state.childrenwearReference?.name || '尚未上传';
+  $('#childrenwearModelReferenceName').textContent = state.childrenwearModelReference?.name || '尚未上传';
+
+  const hasMaster = Boolean(task?.masterPath && task?.masterUrl);
+  $('#childrenwearMasterResult').hidden = !hasMaster;
+  if (hasMaster) $('#childrenwearMasterImage').src = task.masterUrl;
+  $('#approveChildrenwearMasterButton').textContent = task?.masterApproved ? '已确认正式平铺图' : '确认正式平铺图';
+  $('#approveChildrenwearMasterButton').disabled = Boolean(task?.masterApproved);
+  $('#childrenwearMasterStage').classList.toggle('is-complete', Boolean(task?.masterApproved));
+  $('#childrenwearModelStage').classList.toggle('is-active', Boolean(task?.masterApproved));
+  $('#generateChildrenwearModelButton').disabled = !(task?.masterApproved && state.childrenwearModelReference?.path);
+  if (task?.masterApproved) {
+    $('#childrenwearMasterStatus').textContent = `正式平铺图已确认 · v${Number(task.masterVersion) || 1}`;
+    $('#childrenwearModelStatus').textContent = state.childrenwearModelReference?.path ? '可以生成模特图' : '请上传模特或姿势参考图';
+  }
+  renderChildrenwearModelResults();
+  renderChildrenwearMasterLibrary();
+  renderChildrenwearMasterTasks();
+  renderChildrenwearApprovedMasters();
+}
+
+async function chooseChildrenwearImage(kind) {
+  try {
+    const selected = await window.caishen.chooseImage();
+    if (!selected) return;
+    const value = { path: selected.path, url: selected.url, name: selected.name || selected.path.split(/[\\/]/).at(-1) };
+    if (kind === 'real') {
+      state.childrenwearReal = value;
+      state.childrenwearActiveTask = null;
+    } else if (kind === 'reference') {
+      state.childrenwearReference = value;
+      state.childrenwearActiveTask = null;
+    } else {
+      state.childrenwearModelReference = value;
+    }
+    renderChildrenwear();
+  } catch (error) { toast(errorText(error), true); }
+}
+
+async function runChildrenwearMasterGeneration() {
+  if (!state.childrenwearReal?.path || !state.childrenwearReference?.path) return toast('请先上传实拍图和参考成品图', true);
+  const button = $('#generateChildrenwearMasterButton');
+  button.disabled = true;
+  button.textContent = '正在生成…';
+  try {
+    const payload = {
+      folder: state.childrenwearActiveTask?.folder || '',
+      realPhotoPath: state.childrenwearReal.path,
+      referencePath: state.childrenwearReference.path,
+      category: $('#childrenwearCategory').value,
+      material: $('#childrenwearMaterial').value.trim(),
+      craft: $('#childrenwearCraft').value.trim(),
+      extraInstruction: $('#childrenwearMasterNote').value.trim()
+    };
+    state.childrenwearActiveTask = await window.caishen.generateChildrenwearMaster(payload, progress => {
+      $('#childrenwearMasterStatus').textContent = progress.message || '正在生成平铺图';
+    });
+    await loadChildrenwearTasks();
+    toast('平铺图候选已生成，请人工核对');
+  } catch (error) {
+    $('#childrenwearMasterStatus').textContent = errorText(error);
+    toast(errorText(error), true);
+  } finally {
+    button.disabled = false;
+    button.textContent = '生成平铺图候选';
+    renderChildrenwear();
+  }
+}
+
+async function approveChildrenwearMaster() {
+  const task = state.childrenwearActiveTask;
+  if (!task?.folder) return;
+  try {
+    state.childrenwearActiveTask = await window.caishen.approveChildrenwearOutput({ folder: task.folder, stage: 'master', approved: true });
+    await loadChildrenwearTasks();
+    setChildrenwearProductionTab('model');
+    toast('正式平铺图已确认，可以进入模特图生产');
+  } catch (error) { toast(errorText(error), true); }
+  renderChildrenwear();
+}
+
+async function runChildrenwearModelGeneration() {
+  const task = state.childrenwearActiveTask;
+  if (!task?.masterApproved || !state.childrenwearModelReference?.path) return toast('请先确认平铺图并上传模特参考图', true);
+  const button = $('#generateChildrenwearModelButton');
+  button.disabled = true;
+  button.textContent = '正在生成…';
+  try {
+    state.childrenwearActiveTask = await window.caishen.generateChildrenwearModel({
+      folder: task.folder,
+      modelReferencePath: state.childrenwearModelReference.path,
+      extraInstruction: $('#childrenwearModelNote').value.trim()
+    }, progress => { $('#childrenwearModelStatus').textContent = progress.message || '正在生成模特图'; });
+    await loadChildrenwearTasks();
+    $('#childrenwearModelStatus').textContent = '模特图生成完成，等待成品审核';
+    toast('模特图候选已生成');
+  } catch (error) {
+    $('#childrenwearModelStatus').textContent = errorText(error);
+    toast(errorText(error), true);
+  } finally {
+    button.textContent = '生成模特图';
+    renderChildrenwear();
+  }
+}
+
+async function toggleChildrenwearModelApproval(outputId) {
+  const task = state.childrenwearActiveTask;
+  const output = task?.modelOutputs?.find(item => item.id === outputId);
+  if (!task || !output) return;
+  try {
+    state.childrenwearActiveTask = await window.caishen.approveChildrenwearOutput({
+      folder: task.folder,
+      stage: 'model',
+      outputId,
+      approved: !output.approved
+    });
+    await loadChildrenwearTasks();
+  } catch (error) { toast(errorText(error), true); }
+  renderChildrenwear();
+}
+
+function randomChildrenwearCombination() {
+  const paths = state.childrenwearTasks.filter(task => task.masterApproved && task.masterPath).map(task => task.masterPath);
+  if (paths.length < 2) return toast('至少需要两个已审核平铺图', true);
+  for (let index = paths.length - 1; index > 0; index -= 1) {
+    const swap = Math.floor(Math.random() * (index + 1));
+    [paths[index], paths[swap]] = [paths[swap], paths[index]];
+  }
+  state.childrenwearCombinationSelection = new Set(paths.slice(0, Math.min(4, paths.length)));
+  renderChildrenwearMasterLibrary();
+}
+
+async function runChildrenwearCombination() {
+  const masterPaths = [...state.childrenwearCombinationSelection];
+  if (masterPaths.length < 2 || masterPaths.length > 4) return toast('请选择 2～4 个已审核平铺图', true);
+  const button = $('#generateChildrenwearCombinationButton');
+  button.disabled = true;
+  button.textContent = '正在排版…';
+  try {
+    state.childrenwearCombinationResult = await window.caishen.generateChildrenwearCombination({
+      masterPaths,
+      background: $('#childrenwearCombinationBackground').value,
+      size: 1600
+    }, progress => { $('#childrenwearCombinationStatus').textContent = progress.message || '正在生成组合图'; });
+    $('#childrenwearCombinationResult').hidden = false;
+    $('#childrenwearCombinationImage').src = state.childrenwearCombinationResult.url;
+    $('#childrenwearCombinationStatus').textContent = '组合图已生成';
+    toast('SKU 组合图已生成');
+  } catch (error) {
+    $('#childrenwearCombinationStatus').textContent = errorText(error);
+    toast(errorText(error), true);
+  } finally {
+    button.disabled = false;
+    button.textContent = '生成组合图';
+  }
+}
+
+async function loadChildrenwearTasksLegacy() {
+  try {
+    const activeFolder = state.childrenwearActiveTask?.folder || '';
+    state.childrenwearTasks = await window.caishen.listChildrenwearTasks();
+    if (activeFolder) state.childrenwearActiveTask = state.childrenwearTasks.find(task => task.folder === activeFolder) || state.childrenwearActiveTask;
+    if (!state.childrenwearActiveTask && state.childrenwearTasks.length) state.childrenwearActiveTask = state.childrenwearTasks[0];
+    renderChildrenwear();
+  } catch (error) {
+    $('#childrenwearMasterStatus').textContent = `任务读取失败：${errorText(error)}`;
+  }
+}
+
+function bindChildrenwearEventsLegacy() {
+  $$('[data-childrenwear-production-tab]').forEach(button => {
+    button.onclick = () => setChildrenwearProductionTab(button.dataset.childrenwearProductionTab);
+  });
+  $('#chooseChildrenwearRealButton').onclick = () => chooseChildrenwearImage('real');
+  $('#chooseChildrenwearReferenceButton').onclick = () => chooseChildrenwearImage('reference');
+  $('#chooseChildrenwearModelReferenceButton').onclick = () => chooseChildrenwearImage('model');
+  $('#newChildrenwearMasterTaskButton').onclick = newChildrenwearMasterTask;
+  $('#childrenwearMasterTaskList').onclick = event => {
+    const button = event.target.closest('[data-childrenwear-task-folder]');
+    if (button) selectChildrenwearTask(button.dataset.childrenwearTaskFolder);
+  };
+  $('#childrenwearApprovedMasterList').onclick = event => {
+    const button = event.target.closest('[data-childrenwear-model-task-folder]');
+    if (button) selectChildrenwearTask(button.dataset.childrenwearModelTaskFolder);
+  };
+  $('#childrenwearCategory').onchange = event => { $('#childrenwearMaterial').value = childrenwearCategoryMaterial(event.target.value); };
+  $('#generateChildrenwearMasterButton').onclick = runChildrenwearMasterGeneration;
+  $('#regenerateChildrenwearMasterButton').onclick = runChildrenwearMasterGeneration;
+  $('#approveChildrenwearMasterButton').onclick = approveChildrenwearMaster;
+  $('#openChildrenwearMasterButton').onclick = () => state.childrenwearActiveTask?.masterPath && window.caishen.revealFile(state.childrenwearActiveTask.masterPath);
+  $('#generateChildrenwearModelButton').onclick = runChildrenwearModelGeneration;
+  $('#childrenwearModelResults').onclick = event => {
+    const approval = event.target.closest('[data-approve-childrenwear-model]');
+    if (approval) return toggleChildrenwearModelApproval(approval.dataset.approveChildrenwearModel);
+    const open = event.target.closest('[data-open-childrenwear-model]');
+    if (open) return window.caishen.revealFile(open.dataset.openChildrenwearModel);
+  };
+  $('#childrenwearMasterLibrary').onchange = event => {
+    const input = event.target.closest('[data-childrenwear-master-path]');
+    if (!input) return;
+    if (input.checked) {
+      if (state.childrenwearCombinationSelection.size >= 4) {
+        input.checked = false;
+        return toast('组合图最多选择 4 个平铺图', true);
+      }
+      state.childrenwearCombinationSelection.add(input.dataset.childrenwearMasterPath);
+    } else state.childrenwearCombinationSelection.delete(input.dataset.childrenwearMasterPath);
+    renderChildrenwearMasterLibrary();
+  };
+  $('#randomChildrenwearCombinationButton').onclick = randomChildrenwearCombination;
+  $('#generateChildrenwearCombinationButton').onclick = runChildrenwearCombination;
+  $('#openChildrenwearCombinationButton').onclick = () => state.childrenwearCombinationResult?.outputPath && window.caishen.revealFile(state.childrenwearCombinationResult.outputPath);
+  setChildrenwearProductionTab(state.childrenwearProductionTab);
+  setChildrenwearAssetTab(state.childrenwearAssetTab);
+}
+
+// 多嘻噜卡生产台：永沙式左侧选材 + 右侧任务卡。提示词仅从后台设置读取，生产页不暴露内容。
+const CW_STAGE_META = Object.freeze({
+  master: { queue: '#cwMasterQueue', count: '#cwMasterCount', label: '平铺母版图' },
+  model: { queue: '#cwModelQueue', count: '#cwModelCount', label: '模特上身图' },
+  combination: { queue: '#cwCombinationQueue', count: '#cwCombinationCount', label: '多 SKU 组合图' }
+});
+
+function cwTodayCode() {
+  const now = new Date();
+  return `${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+}
+
+function cwNextTaskCode() {
+  const stamp = cwTodayCode();
+  const codes = [
+    ...state.childrenwearTasks.map(task => task.taskCode),
+    ...state.childrenwearDrafts.master.map(draft => draft.taskCode)
+  ].map(String).filter(code => code.startsWith(`${stamp}-`) && /^\d{4}-\d{3}$/.test(code));
+  const sequence = codes.reduce((max, code) => Math.max(max, Number(code.slice(-3)) || 0), 0) + 1;
+  return `${stamp}-${String(Math.min(999, sequence)).padStart(3, '0')}`;
+}
+
+function cwTaskDisplayName(styleName, taskCode) {
+  const style = String(styleName || '童装款式').trim().replace(/\d{4}-\d{3}\s*$/, '').trim() || '童装款式';
+  return `${style}${taskCode || ''}`;
+}
+
+function cwNewDraft(stage) {
+  const draft = { id: createClientId(), stage, title: '', taskCode: '', styleName: '', selected: true, status: '待补齐素材', progress: '', result: null };
+  if (stage === 'combination') draft.masters = [];
+  state.childrenwearDrafts[stage].push(draft);
+  state.childrenwearActiveDraft[stage] = draft.id;
+  return draft;
+}
+
+function cwDraft(stage) {
+  const drafts = state.childrenwearDrafts[stage];
+  return drafts.find(item => item.id === state.childrenwearActiveDraft[stage]) || drafts.at(-1) || cwNewDraft(stage);
+}
+
+function cwImage(value, fallback = '待选择') {
+  const url = value?.thumbnailUrl || value?.url || '';
+  const preview = value?.previewUrl || value?.url || '';
+  return `<figure class="cw-flow-figure${url ? '' : ' empty'}">${url ? `<img loading="lazy" decoding="async" src="${escapeHtml(url)}" data-preview-src="${escapeHtml(preview)}" alt="${escapeHtml(value.name || fallback)}">` : '<span>+</span>'}<figcaption>${escapeHtml(value?.name || fallback)}</figcaption></figure>`;
+}
+
+function cwDraftReady(draft) {
+  if (draft.stage === 'master') return Boolean(draft.real?.path && draft.reference?.path);
+  if (draft.stage === 'model') return Boolean(draft.master?.path && draft.reference?.path);
+  return Boolean(draft.masters?.length >= 2 && draft.reference?.path);
+}
+
+function cwDraftFlow(draft) {
+  if (draft.stage === 'master') return `${cwImage(draft.real, '实拍产品图')}<i>+</i>${cwImage(draft.reference, '成品参考图')}<i>→</i>${cwImage(draft.result, '平铺母版图')}`;
+  if (draft.stage === 'model') return `${cwImage(draft.master, '已审核平铺图')}<i>+</i>${cwImage(draft.reference, '参考模特图')}<i>→</i>${cwImage(draft.result, '模特上身图')}`;
+  const masters = draft.masters?.length ? draft.masters.map((item, index) => `${index ? '<i>+</i>' : ''}${cwImage(item, `平铺图 ${index + 1}`)}`).join('') : cwImage(null, '选择 2～4 张平铺图');
+  return `${masters}<i>+</i>${cwImage(draft.reference, '组合参考图')}<i>→</i>${cwImage(draft.result, '多 SKU 组合图')}`;
+}
+
+function cwTaskForDraft(draft) {
+  return draft?.taskFolder ? state.childrenwearTasks.find(task => task.folder === draft.taskFolder) : null;
+}
+
+function cwReviewStatus(item) {
+  if (!item) return 'pending';
+  if (item.approved) return 'approved';
+  const value = item.stage === 'master' ? item.task?.masterReviewStatus : item.output?.reviewStatus;
+  return value === 'needs_regeneration' ? 'needs_regeneration' : 'pending';
+}
+
+function cwDraftStatusKey(draft) {
+  if (draft.status === '生成中') return 'running';
+  if (draft.status === '失败') return 'needs_regeneration';
+  const task = cwTaskForDraft(draft);
+  if (task?.masterPath || draft.result?.path) {
+    if (task?.masterApproved) return 'approved';
+    if (task?.masterReviewStatus === 'needs_regeneration') return 'needs_regeneration';
+    return 'pending';
+  }
+  return cwDraftReady(draft) ? 'ready' : 'incomplete';
+}
+
+function cwDraftStatusText(draft) {
+  const status = cwDraftStatusKey(draft);
+  if (status === 'approved') return '审核已通过，已解锁后续步骤';
+  if (status === 'needs_regeneration') return draft.progress || '已标记问题，等待重新生成';
+  if (status === 'pending') return '平铺图已生成，等待当前页面审核';
+  if (status === 'running') return draft.progress || '正在生成';
+  if (status === 'ready') return '素材已齐全，可以生成';
+  return draft.status || '待补齐素材';
+}
+
+function syncCwMasterDraftsFromTasks() {
+  const taskFolders = new Set(state.childrenwearTasks.map(task => String(task.folder || '').toLocaleLowerCase('en-US')));
+  state.childrenwearDrafts.master = state.childrenwearDrafts.master.filter(draft => {
+    if (!draft.taskFolder || draft.status === '生成中') return true;
+    return taskFolders.has(String(draft.taskFolder).toLocaleLowerCase('en-US'));
+  });
+  const drafts = state.childrenwearDrafts.master;
+  for (const task of state.childrenwearTasks) {
+    if (!task.masterPath || !task.masterUrl) continue;
+    let draft = drafts.find(item => item.taskFolder === task.folder);
+    if (!draft) {
+      draft = {
+        id: `saved-master:${task.folder}`,
+        stage: 'master',
+        title: task.taskName || task.category || '平铺母版任务',
+        taskCode: task.taskCode || '',
+        styleName: task.styleName || task.category || '',
+        selected: false,
+        status: '等待成品审核',
+        progress: '',
+        result: null,
+        taskFolder: task.folder
+      };
+      drafts.push(draft);
+    }
+    if (draft.status !== '生成中') {
+      draft.title = task.taskName || draft.title;
+      draft.taskCode = task.taskCode || draft.taskCode;
+      draft.styleName = task.styleName || draft.styleName;
+      draft.real = { path: task.realPhotoPath, url: task.realPhotoUrl, thumbnailUrl: task.realPhotoThumbnailUrl, previewUrl: task.realPhotoPreviewUrl, name: task.realPhotoPath?.split(/[\\/]/).at(-1) || '实拍产品图', folder: task.category || '' };
+      draft.reference = { path: task.referencePath, url: task.referenceUrl, thumbnailUrl: task.referenceThumbnailUrl, previewUrl: task.referencePreviewUrl, name: task.referencePath?.split(/[\\/]/).at(-1) || '成品参考图', folder: '' };
+      draft.result = { path: task.masterPath, url: task.masterUrl, thumbnailUrl: task.masterThumbnailUrl, previewUrl: task.masterPreviewUrl, name: `平铺母版 v${task.masterVersion || 1}` };
+      draft.status = task.masterApproved ? '已通过' : (task.masterReviewStatus === 'needs_regeneration' ? '需重生成' : '等待成品审核');
+      draft.progress = '';
+    }
+  }
+}
+
+function cwFilteredDrafts(stage) {
+  const drafts = state.childrenwearDrafts[stage] || [];
+  const filter = state.childrenwearQueueFilters[stage] || 'all';
+  return stage === 'master' && filter !== 'all' ? drafts.filter(draft => cwDraftStatusKey(draft) === filter) : drafts;
+}
+
+function renderCwQueue(stage) {
+  const meta = CW_STAGE_META[stage];
+  const panel = $(meta.queue);
+  if (!panel) return;
+  const drafts = state.childrenwearDrafts[stage];
+  const filter = state.childrenwearQueueFilters[stage] || 'all';
+  const visibleDrafts = cwFilteredDrafts(stage);
+  $(meta.count).textContent = stage === 'master' && filter !== 'all' ? `${visibleDrafts.length} / ${drafts.length} 项` : `${drafts.length} 项`;
+  panel.innerHTML = visibleDrafts.length ? visibleDrafts.map((draft, index) => {
+    const running = draft.status === '生成中';
+    const ready = cwDraftReady(draft);
+    const reviewItem = stage === 'master' && draft.taskFolder ? cwReviewItems().find(item => item.stage === 'master' && item.folder === draft.taskFolder) : null;
+    const reviewStatus = reviewItem ? cwReviewStatus(reviewItem) : '';
+    const title = draft.title || `${meta.label}任务 ${index + 1}`;
+    return `<article class="cw-task-card${draft.selected ? ' selected' : ''}${draft.id === state.childrenwearActiveDraft[stage] ? ' editing' : ''}${reviewStatus === 'approved' ? ' approved' : ''}${reviewStatus === 'needs_regeneration' ? ' needs-regeneration' : ''}" data-cw-draft="${escapeHtml(draft.id)}" data-stage="${stage}">
+      <header><label><input type="checkbox" data-cw-select-draft="${escapeHtml(draft.id)}"${draft.selected ? ' checked' : ''}><span></span><b title="${escapeHtml(title)}">${escapeHtml(title)}</b></label><div><button class="secondary mini" type="button" data-cw-edit="${escapeHtml(draft.id)}">改名</button><button class="link-danger" type="button" data-cw-remove="${escapeHtml(draft.id)}"${running ? ' disabled' : ''}>删除</button></div></header>
+      <div class="cw-task-flow">${cwDraftFlow(draft)}</div>
+      <footer><span class="cw-task-status${cwDraftStatusKey(draft) === 'needs_regeneration' ? ' error' : ''}">${escapeHtml(stage === 'master' ? cwDraftStatusText(draft) : (draft.progress || (ready ? '素材已齐全，可以生成' : draft.status)))}</span><div class="cw-task-card-actions">${reviewItem ? `<button class="secondary" type="button" data-cw-inline-compare="${escapeHtml(reviewItem.id)}">高清审核</button>${!reviewItem.approved ? `<button class="secondary" type="button" data-cw-inline-approve="${escapeHtml(reviewItem.id)}">通过</button><button class="secondary danger-soft" type="button" data-cw-inline-flag="${escapeHtml(reviewItem.id)}"${reviewStatus === 'needs_regeneration' ? ' disabled' : ''}>${reviewStatus === 'needs_regeneration' ? '已标记问题' : '标记问题'}</button>` : ''}` : ''}<button class="secondary" type="button" data-cw-generate-one="${escapeHtml(draft.id)}"${!ready || running ? ' disabled' : ''}>${draft.result || draft.status === '失败' ? '重新生成' : `生成${escapeHtml(meta.label)}`}</button></div></footer>
+    </article>`;
+  }).join('') : `<div class="cw-task-empty"><b>${drafts.length ? '当前筛选没有任务' : `还没有${escapeHtml(meta.label)}任务`}</b><span>${drafts.length ? '切换其他状态查看任务。' : '点击左侧素材，系统会自动创建并补齐任务卡片。'}</span></div>`;
+}
+
+function cwLibrarySource(stage) {
+  const tab = state.childrenwearSourceTabs[stage];
+  if (tab === 'master-real') return { key: 'childrenwearRealAssetsPath', role: 'real', folders: '#cwMasterSourceFolders', grid: '#cwMasterSourceGrid' };
+  if (tab === 'master-reference') return { key: 'childrenwearReferenceAssetsPath', role: 'reference', folders: '#cwMasterSourceFolders', grid: '#cwMasterSourceGrid' };
+  if (tab === 'model-reference') return { key: 'childrenwearModelAssetsPath', role: 'reference', folders: '#cwModelSourceFolders', grid: '#cwModelSourceGrid' };
+  if (tab === 'combination-reference') return { key: 'childrenwearCombinationAssetsPath', role: 'reference', folders: '#cwCombinationSourceFolders', grid: '#cwCombinationSourceGrid' };
+  if (tab === 'model-master') return { approved: true, role: 'master', folders: '#cwModelSourceFolders', grid: '#cwModelSourceGrid' };
+  return { approved: true, role: 'master', folders: '#cwCombinationSourceFolders', grid: '#cwCombinationSourceGrid' };
+}
+
+function renderCwSource(stage) {
+  const source = cwLibrarySource(stage);
+  const folders = $(source.folders);
+  const grid = $(source.grid);
+  if (!folders || !grid) return;
+  if (source.approved) {
+    const items = state.childrenwearTasks.filter(task => task.masterApproved && task.masterPath && task.masterUrl).map(task => ({ path: task.masterPath, url: task.masterUrl, thumbnailUrl: task.masterThumbnailUrl, previewUrl: task.masterPreviewUrl, name: task.taskName || task.category || '已审核平铺图', folder: task.material || '', taskFolder: task.folder, taskName: task.taskName || task.category || '' }));
+    folders.innerHTML = `<span>已审核平铺图</span><b>${items.length} 张可用</b>`;
+    grid.innerHTML = items.length ? items.map(item => `<button class="cw-source-item" type="button" data-cw-source-path="${escapeHtml(item.path)}" data-cw-source-role="master"><img loading="lazy" decoding="async" src="${escapeHtml(item.thumbnailUrl || item.url)}" data-preview-src="${escapeHtml(item.previewUrl || item.url)}" alt="${escapeHtml(item.name)}"><span><b>${escapeHtml(item.name)}</b><small>${escapeHtml(item.folder)}</small></span></button>`).join('') : '<div class="cw-source-empty">平铺图审核通过后才会显示在这里，可在 02 就地审核或到 05 集中处理。</div>';
+    return;
+  }
+  const active = state.childrenwearLibraryFolder[source.key] || 'root';
+  const libraryFolders = state.childrenwearProductionFolders[source.key] || [];
+  folders.innerHTML = libraryFolders.length ? libraryFolders.map(folder => `<button class="${folder.id === active ? 'active' : ''}" type="button" data-cw-source-folder="${escapeHtml(folder.id)}" data-cw-source-key="${source.key}">${escapeHtml(folder.name)}<small>${Number(folder.count) || 0}</small></button>`).join('') : '<span>暂无文件夹</span>';
+  const items = state.childrenwearProductionLibraries[source.key] || [];
+  grid.innerHTML = items.length ? items.map(item => `<button class="cw-source-item" type="button" data-cw-source-path="${escapeHtml(item.path)}" data-cw-source-role="${source.role}"><img loading="lazy" decoding="async" src="${escapeHtml(item.thumbnailUrl || item.url)}" data-preview-src="${escapeHtml(item.previewUrl || item.url)}" alt="${escapeHtml(item.name)}"><span><b>${escapeHtml(item.name)}</b><small>${escapeHtml(item.folder || '')}</small></span></button>`).join('') : '<div class="cw-source-empty">当前文件夹没有已完成 AI 分析的素材，请先到 01 素材资产完成分析。</div>';
+}
+
+function cwFindSource(stage, role, pathValue) {
+  if (role === 'master') {
+    const task = state.childrenwearTasks.find(item => item.masterPath === pathValue);
+    return task ? { path: task.masterPath, url: task.masterUrl, thumbnailUrl: task.masterThumbnailUrl, previewUrl: task.masterPreviewUrl, name: task.taskName || task.category || '已审核平铺图', folder: task.material || '', taskFolder: task.folder, taskName: task.taskName || task.category || '' } : null;
+  }
+  const source = cwLibrarySource(stage);
+  return (state.childrenwearProductionLibraries[source.key] || []).find(item => item.path === pathValue) || null;
+}
+
+function addCwSource(stage, role, pathValue) {
+  const source = cwFindSource(stage, role, pathValue);
+  if (!source) return;
+  const drafts = state.childrenwearDrafts[stage];
+  let draft;
+  if (stage === 'master') {
+    // 永沙式顺序配对：同类素材每点一次占用一张卡，另一类素材再从第一张空卡开始补齐。
+    draft = drafts.find(item => !item[role]?.path) || cwNewDraft(stage);
+    draft[role] = source;
+  } else if (stage === 'model') {
+    draft = drafts.find(item => !item[role]?.path) || cwNewDraft(stage);
+    draft[role] = source;
+  } else if (role === 'reference') {
+    draft = drafts.find(item => !item.reference?.path) || cwNewDraft(stage);
+    draft.reference = source;
+  } else {
+    draft = cwDraft(stage);
+    const exists = draft.masters.some(item => item.path === source.path);
+    if (exists) draft.masters = draft.masters.filter(item => item.path !== source.path);
+    else if (draft.masters.length < 4) draft.masters.push(source);
+    else {
+      draft = cwNewDraft(stage);
+      draft.masters.push(source);
+    }
+  }
+  if (!draft.title) {
+    if (stage === 'master' && role === 'real') {
+      const style = source.folder && source.folder !== '根目录' ? source.folder : '童装款式';
+      draft.styleName = style;
+      draft.taskCode = draft.taskCode || cwNextTaskCode();
+      draft.title = cwTaskDisplayName(style, draft.taskCode);
+    } else if (role === 'master') {
+      draft.title = source.taskName || source.name || CW_STAGE_META[stage].label;
+    }
+  }
+  if (stage === 'combination' && draft.masters?.length) {
+    const participants = draft.masters.map(item => item.taskName || item.name).filter(Boolean);
+    draft.title = `${participants[0]}｜多组合SKU：${participants.join(' + ')}`;
+  }
+  state.childrenwearActiveDraft[stage] = draft.id;
+  draft.status = cwDraftReady(draft) ? '待生成' : '待补齐素材';
+  draft.selected = true;
+  renderCwQueue(stage);
+}
+
+function setChildrenwearProductionTab(tab) {
+  const next = CW_STAGE_META[tab] ? tab : 'master';
+  state.childrenwearProductionTab = next;
+  $$('[data-childrenwear-production-panel]').forEach(panel => { panel.hidden = panel.dataset.childrenwearProductionPanel !== next; });
+  $$('[data-childrenwear-production-nav]').forEach(button => {
+    const active = currentPage === 'childrenwear' && button.dataset.childrenwearProductionNav === next;
+    button.classList.toggle('active', active);
+    if (active) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current');
+  });
+  renderCwSource(next);
+  renderCwQueue(next);
+}
+
+async function runCwDraft(stage, draft, options = {}) {
+  if (!cwDraftReady(draft) || draft.status === '生成中') return;
+  draft.status = '生成中';
+  draft.progress = '正在提交生成任务…';
+  renderCwQueue(stage);
+  try {
+    if (stage === 'master') {
+      const result = await window.caishen.generateChildrenwearMaster({
+        folder: draft.taskFolder || '', realPhotoPath: draft.real.path, referencePath: draft.reference.path,
+        taskName: draft.title, taskCode: draft.taskCode, category: draft.real.folder || '童装', material: '以实拍图为准', craft: '', extraInstruction: ''
+      }, progress => { draft.progress = progress.message || '正在生成平铺图'; renderCwQueue(stage); });
+      draft.taskFolder = result.folder;
+      draft.taskCode = result.taskCode || draft.taskCode;
+      draft.styleName = result.styleName || draft.styleName;
+      draft.title = result.taskName || cwTaskDisplayName(draft.styleName, draft.taskCode);
+      draft.result = { path: result.masterPath, url: result.masterUrl, thumbnailUrl: result.masterThumbnailUrl, previewUrl: result.masterPreviewUrl, name: `平铺母版 v${result.masterVersion || 1}` };
+    } else if (stage === 'model') {
+      const result = await window.caishen.generateChildrenwearModel({ folder: draft.master.taskFolder, taskName: draft.title, modelReferencePath: draft.reference.path, extraInstruction: '' }, progress => { draft.progress = progress.message || '正在生成模特图'; renderCwQueue(stage); });
+      const output = result.modelOutputs?.at(-1);
+      draft.taskFolder = result.folder;
+      draft.outputId = output?.id;
+      draft.result = output ? { path: output.path, url: output.url, thumbnailUrl: output.thumbnailUrl, previewUrl: output.previewUrl, name: '模特图候选' } : null;
+    } else {
+      const result = await window.caishen.generateChildrenwearCombination({ folder: draft.taskFolder || draft.masters[0]?.taskFolder || '', taskName: draft.title, masterPaths: draft.masters.map(item => item.path), combinationReferencePath: draft.reference.path }, progress => { draft.progress = progress.message || '正在生成组合图'; renderCwQueue(stage); });
+      const output = result.combinationOutputs?.at(-1);
+      draft.taskFolder = result.folder;
+      draft.outputId = output?.id;
+      draft.result = output ? { path: output.path, url: output.url, thumbnailUrl: output.thumbnailUrl, previewUrl: output.previewUrl, name: '组合图候选' } : null;
+    }
+    draft.status = '等待成品审核';
+    draft.progress = stage === 'master' ? '平铺图已生成，请在当前页面高清审核' : '已进入 05 成品审核与下载';
+    if (!options.deferReload) await loadChildrenwearTasks();
+    if (!options.silent) toast(stage === 'master' ? '平铺图生成完成，请在当前页面审核' : `${CW_STAGE_META[stage].label}生成完成，已进入 05 成品审核与下载`);
+    return true;
+  } catch (error) {
+    draft.status = '失败';
+    draft.progress = childrenwearFriendlyError(error);
+    if (!options.silent) toast(childrenwearFriendlyError(error), true);
+    return false;
+  }
+  finally {
+    renderCwQueue(stage);
+  }
+}
+
+function cwBatchGroupKey(stage, draft) {
+  // Multiple model references for the same style may call the image API in
+  // parallel. The backend performs a short atomic merge when each result is
+  // written into the shared style metadata.
+  if (stage === 'model') return `model:${draft.id}`;
+  if (stage === 'combination') return draft.taskFolder || draft.masters?.[0]?.taskFolder || `draft:${draft.id}`;
+  return draft.taskFolder || `draft:${draft.id}`;
+}
+
+async function runCwBatch(stage) {
+  const drafts = cwFilteredDrafts(stage).filter(item => item.selected && cwDraftReady(item) && item.status !== '生成中');
+  if (!drafts.length) return toast('请先选中已补齐素材的任务卡片', true);
+  const grouped = new Map();
+  for (const draft of drafts) {
+    const key = cwBatchGroupKey(stage, draft);
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(draft);
+  }
+  const cwTaskGroups = [...grouped.values()];
+  const cwConcurrency = await apiBatchConcurrencyLimit(cwTaskGroups.length);
+  await runClientConcurrency(cwTaskGroups, cwConcurrency, async group => {
+    // 组合图仍按共享任务目录保护写入；模特图每张卡片独立并发。
+    for (const draft of group) await runCwDraft(stage, draft, { deferReload: true, silent: true });
+  });
+  await loadChildrenwearTasks();
+  const failed = drafts.filter(draft => draft.status === '失败').length;
+  const succeeded = drafts.length - failed;
+  if (failed) return toast(`批量任务完成：成功 ${succeeded} 个，失败 ${failed} 个；失败卡片可单独重新生成`, true);
+  toast(stage === 'master' ? `${succeeded} 个平铺图任务已并发生成，请继续批量审核` : `${succeeded} 个任务已并发生成并进入成品审核与下载`);
+}
+
+function cwFolderKey(value) {
+  return String(value || '').replaceAll('/', '\\').toLocaleLowerCase('en-US');
+}
+
+function cwDraftReferencesFolder(draft, folderKeys) {
+  if (folderKeys.has(cwFolderKey(draft.taskFolder))) return true;
+  if (folderKeys.has(cwFolderKey(draft.master?.taskFolder))) return true;
+  return (draft.masters || []).some(item => folderKeys.has(cwFolderKey(item.taskFolder)));
+}
+
+async function deleteCwDraftCards(stage, drafts) {
+  const removable = (drafts || []).filter(draft => draft && draft.status !== '生成中');
+  if (!removable.length) return toast('没有可以删除的任务卡片', true);
+  const persistentFolders = [...new Set(removable.map(draft => draft.taskFolder).filter(Boolean))];
+  const transientCount = removable.filter(draft => !draft.taskFolder).length;
+  const message = persistentFolders.length
+    ? `确定永久删除 ${persistentFolders.length} 个款式任务吗？对应的平铺图、模特图、组合图、任务素材、生成证据和人工审核记录都会从本地工作区中真实删除。此操作不可撤销。${transientCount ? `\n\n另外会移除 ${transientCount} 个尚未生成的草稿卡片。` : ''}`
+    : `确定删除 ${transientCount} 个尚未生成的任务卡片吗？`;
+  if (!await brandConfirm(message, { title: '永久删除任务', danger: true, confirmText: '永久删除' })) return;
+  try {
+    let deleted = 0;
+    let deletedFolderKeys = new Set();
+    if (persistentFolders.length) {
+      const result = await window.caishen.deleteChildrenwearTasks(persistentFolders);
+      deleted = Number(result?.deleted) || 0;
+      deletedFolderKeys = new Set((result?.folders || persistentFolders).map(cwFolderKey));
+    }
+    const localIds = new Set(removable.filter(draft => !draft.taskFolder).map(draft => draft.id));
+    for (const draftStage of Object.keys(state.childrenwearDrafts)) {
+      state.childrenwearDrafts[draftStage] = state.childrenwearDrafts[draftStage].filter(draft => {
+        if (draftStage === stage && localIds.has(draft.id)) return false;
+        return !cwDraftReferencesFolder(draft, deletedFolderKeys);
+      });
+      state.childrenwearActiveDraft[draftStage] = state.childrenwearDrafts[draftStage].at(-1)?.id || '';
+    }
+    if (state.childrenwearActiveTask && deletedFolderKeys.has(cwFolderKey(state.childrenwearActiveTask.folder))) state.childrenwearActiveTask = null;
+    state.childrenwearTasks = state.childrenwearTasks.filter(task => !deletedFolderKeys.has(cwFolderKey(task.folder)));
+    state.childrenwearReviewSelection.clear();
+    await loadChildrenwearTasks();
+    toast(persistentFolders.length ? `已永久删除 ${deleted} 个款式任务${transientCount ? `，并移除 ${transientCount} 个草稿` : ''}` : `已删除 ${transientCount} 个草稿卡片`);
+  } catch (error) {
+    toast(`删除失败：${childrenwearFriendlyError(error)}`, true);
+  }
+}
+
+function cwReviewItems() {
+  const items = [];
+  for (const task of state.childrenwearTasks) {
+    const currentMasterHistory = (task.masterHistory || []).find(item => item.path === task.masterPath) || (task.masterHistory || []).at(-1) || {};
+    const masterMetrics = Object.keys(task.masterGeneration || {}).length ? task.masterGeneration : currentMasterHistory;
+    if (task.masterPath && task.masterUrl) items.push({ id: `master:${task.folder}`, stage: 'master', stageLabel: '平铺母版图', folder: task.folder, outputId: '', path: task.masterPath, url: task.masterUrl, thumbnailUrl: task.masterThumbnailUrl, previewUrl: task.masterPreviewUrl, approved: Boolean(task.masterApproved), task, output: masterMetrics, createdAt: masterMetrics.completedAt || currentMasterHistory.createdAt || task.createdAt });
+    for (const output of task.modelOutputs || []) items.push({ id: `model:${task.folder}:${output.id}`, stage: 'model', stageLabel: '模特上身图', folder: task.folder, outputId: output.id, path: output.path, url: output.url, thumbnailUrl: output.thumbnailUrl, previewUrl: output.previewUrl, approved: Boolean(output.approved), task, output, createdAt: output.createdAt });
+    for (const output of task.combinationOutputs || []) items.push({ id: `combination:${task.folder}:${output.id}`, stage: 'combination', stageLabel: '多 SKU 组合图', folder: task.folder, outputId: output.id, path: output.path, url: output.url, thumbnailUrl: output.thumbnailUrl, previewUrl: output.previewUrl, approved: Boolean(output.approved), task, output, createdAt: output.createdAt });
+  }
+  return items.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+}
+
+function cwReviewMetrics(item) {
+  const source = item.output || {};
+  return {
+    completedAt: source.completedAt || item.createdAt || '',
+    elapsedMs: Math.max(0, Number(source.elapsedMs) || 0),
+    billingCostMinor: Math.max(0, Number(source.billingCostMinor) || 0),
+    upstreamCostCnyMicro: Math.max(0, Number(source.upstreamCostCnyMicro) || 0),
+    apiRequestCount: Math.max(0, Number(source.apiRequestCount) || 0),
+    modelId: String(source.modelId || ''),
+    relayName: String(source.relayName || '')
+  };
+}
+
+function cwReviewTaskMetrics(items) {
+  const metrics = items.map(item => ({ ...cwReviewMetrics(item), startedAt: item.output?.startedAt || '' }));
+  const intervals = metrics.map(metric => {
+    const end = new Date(metric.completedAt).getTime();
+    let start = new Date(metric.startedAt).getTime();
+    if (!Number.isFinite(start) && Number.isFinite(end) && metric.elapsedMs) start = end - metric.elapsedMs;
+    return Number.isFinite(start) && Number.isFinite(end) && end >= start ? [start, end] : null;
+  }).filter(Boolean).sort((a, b) => a[0] - b[0]);
+  let activeElapsedMs = 0;
+  let current = null;
+  for (const interval of intervals) {
+    if (!current) current = interval.slice();
+    else if (interval[0] <= current[1]) current[1] = Math.max(current[1], interval[1]);
+    else { activeElapsedMs += current[1] - current[0]; current = interval.slice(); }
+  }
+  if (current) activeElapsedMs += current[1] - current[0];
+  if (!activeElapsedMs) activeElapsedMs = metrics.reduce((total, metric) => total + metric.elapsedMs, 0);
+  const completedTimes = metrics.map(metric => new Date(metric.completedAt).getTime()).filter(Number.isFinite);
+  return {
+    outputCount: items.length,
+    apiRequestCount: metrics.reduce((total, metric) => total + metric.apiRequestCount, 0),
+    billingCostMinor: metrics.reduce((total, metric) => total + metric.billingCostMinor, 0),
+    upstreamCostCnyMicro: metrics.reduce((total, metric) => total + metric.upstreamCostCnyMicro, 0),
+    activeElapsedMs,
+    completedAt: completedTimes.length ? new Date(Math.max(...completedTimes)).toISOString() : '',
+    recorded: metrics.some(metric => metric.elapsedMs || metric.apiRequestCount || metric.billingCostMinor || metric.modelId)
+  };
+}
+
+function cwReviewTaskMetricsHtml(items) {
+  const metrics = cwReviewTaskMetrics(items);
+  return `<div class="cw-review-task-summary"><span><i>生成图片</i><b>${metrics.outputCount}</b></span><span title="包含重试在内的实际 API 请求次数"><i>API 请求</i><b>${metrics.apiRequestCount || '未记录'}</b></span><span title="整个款式任务的累计站内扣费"><i>任务扣费</i><b>${metrics.recorded ? escapeHtml(formatMoney(metrics.billingCostMinor)) : '未记录'}</b></span><span title="合并并发重叠时间后的实际生成处理时长，不包含等待人工审核的空闲时间"><i>总耗时</i><b>${metrics.activeElapsedMs ? escapeHtml(formatDurationMs(metrics.activeElapsedMs)) : '未记录'}</b></span>${metrics.completedAt ? `<span><i>最近完成</i><b>${escapeHtml(formatLocalDateTime(metrics.completedAt))}</b></span>` : ''}${isSuperAdmin() && metrics.recorded ? `<span title="整个款式任务的累计上游采购成本"><i>上游成本</i><b>${escapeHtml(formatFinanceCnyMicro(metrics.upstreamCostCnyMicro))}</b></span>` : ''}</div>`;
+}
+
+function cwVisibleReviewItems() {
+  const items = cwReviewItems();
+  if (state.childrenwearReviewFilter === 'pending') return items.filter(item => cwReviewStatus(item) === 'pending');
+  if (state.childrenwearReviewFilter === 'needs_regeneration') return items.filter(item => cwReviewStatus(item) === 'needs_regeneration');
+  if (state.childrenwearReviewFilter === 'approved') return items.filter(item => item.approved);
+  return items;
+}
+
+function cwCompareQueue() {
+  if (state.childrenwearCompareContext === 'review-selection') {
+    return cwVisibleReviewItems().filter(item => state.childrenwearReviewSelection.has(item.id));
+  }
+  if (state.childrenwearCompareContext !== 'master') return cwVisibleReviewItems();
+  let items = cwReviewItems().filter(item => item.stage === 'master');
+  const filter = state.childrenwearQueueFilters.master || 'all';
+  if (filter === 'pending') items = items.filter(item => cwReviewStatus(item) === 'pending');
+  if (filter === 'needs_regeneration') items = items.filter(item => cwReviewStatus(item) === 'needs_regeneration');
+  if (filter === 'approved') items = items.filter(item => item.approved);
+  return items;
+}
+
+function cwCompareSources(item) {
+  const task = item.task || {};
+  const sources = [];
+  const add = (key, label, url, kind = 'source') => { if (url) sources.push({ key, label, url, kind }); };
+  if (item.stage === 'master') {
+    add('real', '实拍产品图', task.realPhotoUrl);
+    add('reference', '成品参考图', task.referenceUrl);
+    (task.masterHistory || []).filter(history => history.url && history.path !== item.path).slice().reverse().forEach(history => add(`history-${history.version}`, `历史平铺图 v${history.version}`, history.url, 'history'));
+    add('result', '生成平铺母版图', item.url, 'result');
+  } else if (item.stage === 'model') {
+    add('real', '实拍产品图', task.realPhotoUrl);
+    add('reference', '成品参考图', task.referenceUrl);
+    add('master', '已审核平铺母版', task.masterUrl);
+    add('model-reference', '参考模特图', item.output?.modelReferenceUrl);
+    add('result', '生成模特上身图', item.url, 'result');
+  } else {
+    (task.masterUrls || []).forEach((url, index) => add(`master-${index}`, `已审核平铺图 ${String.fromCharCode(65 + index)}`, url));
+    add('combination-reference', '组合参考图', task.combinationReferenceUrl);
+    add('result', '生成多 SKU 组合图', item.url, 'result');
+  }
+  return sources;
+}
+
+function orderedCwCompareSources(item) {
+  const sources = cwCompareSources(item);
+  const sourceMap = new Map(sources.map(source => [source.key, source]));
+  const savedOrder = Array.isArray(state.childrenwearCompareOrder[item.stage]) ? state.childrenwearCompareOrder[item.stage] : [];
+  const order = [...savedOrder.filter(key => sourceMap.has(key)), ...sources.map(source => source.key).filter(key => !savedOrder.includes(key))];
+  state.childrenwearCompareOrder[item.stage] = order;
+  return order.map(key => sourceMap.get(key)).filter(Boolean);
+}
+
+function visibleCwCompareKeys(item, sources) {
+  const available = sources.map(source => source.key);
+  const saved = state.childrenwearCompareVisibility[item.stage];
+  if (!Array.isArray(saved)) return sources.filter(source => source.kind !== 'history').map(source => source.key);
+  const visible = saved.filter(key => available.includes(key));
+  return visible.length ? visible : [available[0]].filter(Boolean);
+}
+
+function toggleCwCompareSource(stage, key, checked) {
+  const item = cwReviewItems().find(candidate => candidate.id === state.childrenwearCompareId);
+  if (!item || item.stage !== stage) return;
+  const sources = orderedCwCompareSources(item);
+  const visible = new Set(visibleCwCompareKeys(item, sources));
+  if (checked) visible.add(key);
+  else if (visible.size > 1) visible.delete(key);
+  else {
+    toast('高清审核至少需要保留一张图片');
+    renderCwCompare();
+    return;
+  }
+  state.childrenwearCompareVisibility[stage] = sources.map(source => source.key).filter(sourceKey => visible.has(sourceKey));
+  state.childrenwearComparePan = { x: 0, y: 0 };
+  renderCwCompare();
+}
+
+function reorderCwCompareSource(stage, draggedKey, targetKey) {
+  if (!draggedKey || !targetKey || draggedKey === targetKey) return;
+  const item = cwReviewItems().find(candidate => candidate.id === state.childrenwearCompareId);
+  if (!item || item.stage !== stage) return;
+  const order = orderedCwCompareSources(item).map(source => source.key);
+  const from = order.indexOf(draggedKey);
+  const to = order.indexOf(targetKey);
+  if (from < 0 || to < 0) return;
+  order.splice(to, 0, order.splice(from, 1)[0]);
+  state.childrenwearCompareOrder[stage] = order;
+  renderCwCompare();
+}
+
+function applyCwCompareTransform() {
+  const zoom = Math.max(1, Math.min(8, Number(state.childrenwearCompareZoom) || 1));
+  state.childrenwearCompareZoom = zoom;
+  const primaryFrame = $('#cwComparePanes .cw-compare-pane.result .cw-compare-frame') || $('#cwComparePanes .cw-compare-frame');
+  const maxX = primaryFrame ? primaryFrame.clientWidth * (zoom - 1) / 2 : 0;
+  const maxY = primaryFrame ? primaryFrame.clientHeight * (zoom - 1) / 2 : 0;
+  state.childrenwearComparePan.x = Math.max(-maxX, Math.min(maxX, Number(state.childrenwearComparePan.x) || 0));
+  state.childrenwearComparePan.y = Math.max(-maxY, Math.min(maxY, Number(state.childrenwearComparePan.y) || 0));
+  $$('#cwComparePanes [data-cw-compare-image]').forEach(image => {
+    image.style.transform = `translate3d(${Math.round(state.childrenwearComparePan.x)}px, ${Math.round(state.childrenwearComparePan.y)}px, 0) scale(${zoom})`;
+  });
+  $$('#cwComparePanes .cw-compare-frame').forEach(frame => frame.classList.toggle('zoomed', zoom > 1.01));
+  $('#cwCompareZoomValue').textContent = `${Math.round(zoom * 100)}%`;
+}
+
+function setCwCompareZoom(value, anchor = null) {
+  const previous = state.childrenwearCompareZoom;
+  state.childrenwearCompareZoom = Math.max(1, Math.min(8, Number(value) || 1));
+  if (anchor && previous > 0) {
+    const ratio = state.childrenwearCompareZoom / previous;
+    state.childrenwearComparePan.x = (state.childrenwearComparePan.x - anchor.x) * ratio + anchor.x;
+    state.childrenwearComparePan.y = (state.childrenwearComparePan.y - anchor.y) * ratio + anchor.y;
+  }
+  applyCwCompareTransform();
+}
+
+function resetCwCompareView() {
+  state.childrenwearCompareZoom = 1;
+  state.childrenwearComparePan = { x: 0, y: 0 };
+  applyCwCompareTransform();
+}
+
+function setCwCompareActual(image = null) {
+  const target = image || $('#cwComparePanes .cw-compare-pane.result [data-cw-compare-image]') || $('#cwComparePanes [data-cw-compare-image]');
+  const frame = target?.closest('.cw-compare-frame');
+  if (!target?.naturalWidth || !frame?.clientWidth || !frame?.clientHeight) return;
+  const fitScale = Math.min(frame.clientWidth / target.naturalWidth, frame.clientHeight / target.naturalHeight);
+  state.childrenwearComparePan = { x: 0, y: 0 };
+  setCwCompareZoom(Math.max(1, Math.min(8, 1 / Math.max(.001, fitScale))));
+}
+
+function renderCwCompare() {
+  const modal = $('#cwCompareModal');
+  if (!modal || modal.hidden || !state.childrenwearCompareId) return;
+  const queue = cwCompareQueue();
+  let index = queue.findIndex(item => item.id === state.childrenwearCompareId);
+  if (index < 0) {
+    const fallback = cwReviewItems().find(item => item.id === state.childrenwearCompareId);
+    if (!fallback) return closeCwCompare();
+    index = 0;
+  }
+  const item = queue[index] || cwReviewItems().find(candidate => candidate.id === state.childrenwearCompareId);
+  if (!item) return closeCwCompare();
+  const allSources = orderedCwCompareSources(item);
+  const visibleKeys = visibleCwCompareKeys(item, allSources);
+  const visibleSet = new Set(visibleKeys);
+  const sources = allSources.filter(source => visibleSet.has(source.key));
+  const taskName = item.task.taskName || item.task.category || '未命名款式';
+  $('#cwCompareTitle').textContent = taskName;
+  $('#cwCompareStage').textContent = `${item.stageLabel} · ${item.approved ? '已通过' : '待审核'}`;
+  $('#cwCompareCounter').textContent = queue.length ? `${index + 1} / ${queue.length}` : '1 / 1';
+  $('#cwComparePrevious').disabled = state.childrenwearCompareBusy || index <= 0;
+  $('#cwCompareNext').disabled = state.childrenwearCompareBusy || index < 0 || index >= queue.length - 1;
+  $('#cwCompareApprove').disabled = state.childrenwearCompareBusy || item.approved;
+  $('#cwCompareApprove').textContent = item.approved ? '审核已通过' : '审核通过并查看下一张';
+  $('#cwCompareRegenerate').disabled = state.childrenwearCompareBusy;
+  $('#cwCompareSourcePicker').innerHTML = `<strong>对比图片</strong><div>${allSources.map(source => `<label class="${visibleSet.has(source.key) ? 'selected' : ''}"><input type="checkbox" data-cw-compare-toggle="${escapeHtml(source.key)}" data-stage="${escapeHtml(item.stage)}" ${visibleSet.has(source.key) ? 'checked' : ''}><span>${escapeHtml(source.label)}</span></label>`).join('')}</div><small>勾选显示，拖动下方标题调整顺序</small>`;
+  const panes = $('#cwComparePanes');
+  panes.style.setProperty('--cw-compare-count', String(sources.length));
+  panes.style.setProperty('--cw-compare-column-width', `${(92 / Math.min(3, Math.max(1, sources.length))).toFixed(3)}vw`);
+  panes.innerHTML = sources.map((source, sourceIndex) => `<figure class="cw-compare-pane ${source.kind === 'result' ? 'result' : ''}" data-cw-source-key="${escapeHtml(source.key)}"><figcaption draggable="true" title="按住拖动调整对比顺序"><i aria-hidden="true">⠿</i><span>${String(sourceIndex + 1).padStart(2, '0')}</span><b>${escapeHtml(source.label)}</b>${source.kind === 'result' ? '<em>生成结果</em>' : source.kind === 'history' ? '<em>历史版本</em>' : '<em>参考依据</em>'}</figcaption><div class="cw-compare-frame"><img draggable="false" src="${escapeHtml(source.url)}" data-cw-compare-image alt="${escapeHtml(source.label)}原始高清图"></div></figure>`).join('');
+  applyCwCompareTransform();
+}
+
+function openCwCompare(id, context = 'review') {
+  const item = cwReviewItems().find(candidate => candidate.id === id);
+  if (!item) return;
+  state.childrenwearCompareId = id;
+  state.childrenwearCompareContext = context;
+  state.childrenwearCompareBusy = false;
+  state.childrenwearCompareZoom = 1;
+  state.childrenwearComparePan = { x: 0, y: 0 };
+  $('#cwCompareModal').hidden = false;
+  document.body.classList.add('cw-compare-open');
+  renderCwCompare();
+}
+
+function closeCwCompare() {
+  const modal = $('#cwCompareModal');
+  if (modal) modal.hidden = true;
+  state.childrenwearCompareId = '';
+  state.childrenwearCompareContext = 'review';
+  state.childrenwearCompareBusy = false;
+  document.body.classList.remove('cw-compare-open');
+}
+
+function navigateCwCompare(step) {
+  const queue = cwCompareQueue();
+  const index = queue.findIndex(item => item.id === state.childrenwearCompareId);
+  const next = queue[index + step];
+  if (!next) return;
+  state.childrenwearCompareId = next.id;
+  state.childrenwearCompareZoom = 1;
+  state.childrenwearComparePan = { x: 0, y: 0 };
+  renderCwCompare();
+}
+
+async function approveCurrentCwCompare() {
+  const item = cwReviewItems().find(candidate => candidate.id === state.childrenwearCompareId);
+  if (!item || item.approved || state.childrenwearCompareBusy) return;
+  const queue = cwCompareQueue();
+  const index = queue.findIndex(candidate => candidate.id === item.id);
+  const nextId = queue[index + 1]?.id || queue[index - 1]?.id || '';
+  state.childrenwearCompareBusy = true;
+  renderCwCompare();
+  try {
+    await approveCwReviewItem(item);
+    await loadChildrenwearTasks();
+    if (nextId && cwReviewItems().some(candidate => candidate.id === nextId)) {
+      state.childrenwearCompareId = nextId;
+      state.childrenwearCompareBusy = false;
+      resetCwCompareView();
+      renderCwCompare();
+    } else closeCwCompare();
+    toast('审核已通过，已切换到下一张');
+  } catch (error) {
+    state.childrenwearCompareBusy = false;
+    renderCwCompare();
+    toast(childrenwearFriendlyError(error), true);
+  }
+}
+
+async function flagCurrentCwCompare() {
+  const item = cwReviewItems().find(candidate => candidate.id === state.childrenwearCompareId);
+  if (!item || item.approved || state.childrenwearCompareBusy) return;
+  const queue = cwCompareQueue();
+  const index = queue.findIndex(candidate => candidate.id === item.id);
+  const nextId = queue[index + 1]?.id || queue[index - 1]?.id || '';
+  state.childrenwearCompareBusy = true;
+  renderCwCompare();
+  try {
+    await markCwReviewItemNeedsRegeneration(item);
+    await loadChildrenwearTasks();
+    if (nextId && cwReviewItems().some(candidate => candidate.id === nextId)) {
+      state.childrenwearCompareId = nextId;
+      state.childrenwearCompareBusy = false;
+      resetCwCompareView();
+      renderCwCompare();
+    } else closeCwCompare();
+    toast('已标记为需重生成，并切换到下一张');
+  } catch (error) {
+    state.childrenwearCompareBusy = false;
+    renderCwCompare();
+    toast(childrenwearFriendlyError(error), true);
+  }
+}
+
+async function regenerateCurrentCwCompare() {
+  const item = cwReviewItems().find(candidate => candidate.id === state.childrenwearCompareId);
+  if (!item || state.childrenwearCompareBusy) return;
+  state.childrenwearCompareBusy = true;
+  renderCwCompare();
+  try {
+    await regenerateCwReviewItem(item);
+    await loadChildrenwearTasks();
+    const newest = cwReviewItems().find(candidate => candidate.folder === item.folder && candidate.stage === item.stage);
+    if (newest) state.childrenwearCompareId = newest.id;
+    state.childrenwearCompareBusy = false;
+    resetCwCompareView();
+    renderCwCompare();
+    toast('已重新生成并加载最新结果');
+  } catch (error) {
+    state.childrenwearCompareBusy = false;
+    renderCwCompare();
+    toast(childrenwearFriendlyError(error), true);
+  }
+}
+
+function renderCwReview() {
+  const grid = $('#cwReviewGrid');
+  if (!grid) return;
+  let items = cwReviewItems();
+  if (state.childrenwearReviewFilter === 'pending') items = items.filter(item => cwReviewStatus(item) === 'pending');
+  if (state.childrenwearReviewFilter === 'needs_regeneration') items = items.filter(item => cwReviewStatus(item) === 'needs_regeneration');
+  if (state.childrenwearReviewFilter === 'approved') items = items.filter(item => item.approved);
+  const availableIds = new Set(items.map(item => item.id));
+  for (const id of [...state.childrenwearReviewSelection]) if (!availableIds.has(id)) state.childrenwearReviewSelection.delete(id);
+  const groups = new Map();
+  for (const item of items) {
+    if (!groups.has(item.folder)) groups.set(item.folder, []);
+    groups.get(item.folder).push(item);
+  }
+  $('#cwReviewCount').textContent = `${groups.size} 个款式 · ${items.length} 张图片${state.childrenwearReviewSelection.size ? ` · 已选 ${state.childrenwearReviewSelection.size}` : ''}`;
+  const hasSelection = state.childrenwearReviewSelection.size > 0;
+  $('#cwReviewCompareSelected').disabled = !hasSelection;
+  $('#cwReviewApproveSelected').disabled = !hasSelection;
+  $('#cwReviewRegenerateSelected').disabled = !hasSelection;
+  $('#cwReviewDownloadSelected').disabled = !hasSelection;
+  const card = item => {
+    const status = cwReviewStatus(item);
+    return `<article class="cw-review-card${item.approved ? ' approved' : ''}${status === 'needs_regeneration' ? ' needs-regeneration' : ''}${state.childrenwearReviewSelection.has(item.id) ? ' selected' : ''}" data-cw-review-id="${escapeHtml(item.id)}"><label><input type="checkbox" data-cw-review-select="${escapeHtml(item.id)}"${state.childrenwearReviewSelection.has(item.id) ? ' checked' : ''}><span></span><b>${escapeHtml(item.stageLabel)}</b><em>${status === 'approved' ? '已通过' : status === 'needs_regeneration' ? '需重生成' : '待审核'}</em></label><button class="cw-review-image-button" type="button" data-cw-review-compare="${escapeHtml(item.id)}" title="点击进入高清对比审核"><img loading="lazy" decoding="async" src="${escapeHtml(item.thumbnailUrl || item.url)}" data-preview-src="${escapeHtml(item.previewUrl || item.url)}" alt="${escapeHtml(item.stageLabel)}"></button></article>`;
+  };
+  grid.innerHTML = groups.size ? [...groups.entries()].map(([folder, groupItems]) => {
+    const task = groupItems[0].task;
+    const taskItems = cwReviewItems().filter(item => item.folder === folder);
+    const groupName = task.taskName || task.category || String(folder).split(/[\\/]/).at(-1) || '未命名款式';
+    const totals = ['master', 'model', 'combination'].map(stage => `${CW_STAGE_META[stage].label} ${taskItems.filter(item => item.stage === stage).length}`).join(' · ');
+    const limit = Math.max(24, Number(state.childrenwearReviewGroupLimits.get(folder)) || 48);
+    const visibleItems = groupItems.slice(0, limit);
+    const remaining = Math.max(0, groupItems.length - visibleItems.length);
+    return `<section class="cw-review-group" data-cw-review-folder="${escapeHtml(folder)}"><header class="cw-review-group-head"><div><span>款式任务</span><h3>${escapeHtml(groupName)}</h3><small>${escapeHtml(totals)}</small></div><div><button class="secondary mini" type="button" data-cw-review-rename-folder="${escapeHtml(folder)}">改名</button><button class="primary mini" type="button" data-cw-review-download-folder="${escapeHtml(folder)}">下载款式文件夹</button></div></header>${cwReviewTaskMetricsHtml(taskItems)}<div class="cw-review-group-items">${visibleItems.map(card).join('')}</div>${remaining ? `<button class="cw-review-load-more" type="button" data-cw-review-more="${escapeHtml(folder)}">继续显示 ${Math.min(48, remaining)} 张（剩余 ${remaining} 张）</button>` : ''}</section>`;
+  }).join('') : '<div class="cw-task-empty"><b>当前没有需要审核的图片</b><span>02、03、04 生成完成后会自动进入这里。</span></div>';
+}
+
+async function approveCwReviewItem(item) {
+  await window.caishen.approveChildrenwearOutput({ folder: item.folder, stage: item.stage, outputId: item.outputId, approved: true });
+}
+
+async function markCwReviewItemNeedsRegeneration(item) {
+  await window.caishen.approveChildrenwearOutput({ folder: item.folder, stage: item.stage, outputId: item.outputId, approved: false, reviewStatus: 'needs_regeneration' });
+}
+
+async function regenerateCwReviewItem(item) {
+  if (item.stage === 'master') return window.caishen.generateChildrenwearMaster({ folder: item.folder, taskName: item.task.taskName, realPhotoPath: item.task.realPhotoPath, referencePath: item.task.referencePath, category: item.task.category, material: item.task.material, craft: item.task.craft, extraInstruction: '' });
+  if (item.stage === 'model') return window.caishen.generateChildrenwearModel({ folder: item.folder, taskName: item.task.taskName, modelReferencePath: item.output.modelReferencePath, extraInstruction: '' });
+  return window.caishen.generateChildrenwearCombination({ folder: item.folder, taskName: item.task.taskName, masterPaths: item.task.masterPaths, combinationReferencePath: item.task.combinationReferencePath });
+}
+
+function renderChildrenwear() {
+  for (const stage of Object.keys(CW_STAGE_META)) {
+    renderCwSource(stage);
+    renderCwQueue(stage);
+  }
+  renderCwReview();
+}
+
+async function loadChildrenwearTasks() {
+  try {
+    state.childrenwearTasks = await window.caishen.listChildrenwearTasks();
+    syncCwMasterDraftsFromTasks();
+    renderChildrenwear();
+    if (!$('#cwCompareModal')?.hidden) renderCwCompare();
+  } catch (error) { toast(`任务读取失败：${errorText(error)}`, true); }
+}
+
+function bindChildrenwearEvents() {
+  let compareDrag = null;
+  $$('.cw-source-tabs [data-cw-source-tab]').forEach(button => button.onclick = async () => {
+    const stage = button.dataset.cwSourceTab.split('-')[0];
+    state.childrenwearSourceTabs[stage] = button.dataset.cwSourceTab;
+    button.parentElement.querySelectorAll('button').forEach(item => item.classList.toggle('active', item === button));
+    const source = cwLibrarySource(stage);
+    if (source.key) await loadChildrenwearLibrary(source.key);
+    renderCwSource(stage);
+  });
+  $$('.cw-source-column').forEach(column => column.onclick = async event => {
+    const folder = event.target.closest('[data-cw-source-folder]');
+    if (folder) {
+      await selectChildrenwearLibraryFolder(folder.dataset.cwSourceKey, folder.dataset.cwSourceFolder);
+      return renderCwSource(state.childrenwearProductionTab);
+    }
+    const asset = event.target.closest('[data-cw-source-path]');
+    if (asset) addCwSource(state.childrenwearProductionTab, asset.dataset.cwSourceRole, asset.dataset.cwSourcePath);
+  });
+  $$('.cw-task-column').forEach(column => {
+    column.onchange = event => {
+      const input = event.target.closest('[data-cw-select-draft]');
+      if (!input) return;
+      const stage = input.closest('[data-stage]').dataset.stage;
+      const draft = state.childrenwearDrafts[stage].find(item => item.id === input.dataset.cwSelectDraft);
+      if (draft) draft.selected = input.checked;
+      renderCwQueue(stage);
+    };
+    column.onclick = async event => {
+      const card = event.target.closest('[data-cw-draft]');
+      const stage = card?.dataset.stage;
+      const id = card?.dataset.cwDraft;
+      if (!stage || !id) return;
+      const inlineCompare = event.target.closest('[data-cw-inline-compare]');
+      if (inlineCompare) return openCwCompare(inlineCompare.dataset.cwInlineCompare, stage === 'master' ? 'master' : 'review');
+      const inlineApprove = event.target.closest('[data-cw-inline-approve]');
+      const inlineFlag = event.target.closest('[data-cw-inline-flag]');
+      if (inlineApprove || inlineFlag) {
+        const reviewId = inlineApprove?.dataset.cwInlineApprove || inlineFlag?.dataset.cwInlineFlag;
+        const item = cwReviewItems().find(candidate => candidate.id === reviewId);
+        if (!item) return;
+        try {
+          if (inlineApprove) await approveCwReviewItem(item); else await markCwReviewItemNeedsRegeneration(item);
+          await loadChildrenwearTasks();
+          return toast(inlineApprove ? '平铺图已通过，已解锁 03、04 后续步骤' : '已标记为需重生成');
+        } catch (error) { return toast(childrenwearFriendlyError(error), true); }
+      }
+      if (event.target.closest('[data-cw-edit]')) {
+        const draft = state.childrenwearDrafts[stage].find(item => item.id === id);
+        if (!draft) return;
+        state.childrenwearActiveDraft[stage] = id;
+        const value = await brandPrompt('修改任务名称', draft.title || `${CW_STAGE_META[stage].label}任务`, { message: '同一款式的平铺图、模特图和组合图会以这个名称集中显示在 05 成品审核与下载。', inputLabel: '任务/款式名称' });
+        if (value === null) return renderCwQueue(stage);
+        if (!String(value).trim()) return toast('任务名称不能为空', true);
+        const requestedName = String(value).trim().slice(0, 80);
+        draft.styleName = stage === 'master' ? requestedName : draft.styleName;
+        draft.title = stage === 'master' && draft.taskCode ? cwTaskDisplayName(requestedName, draft.taskCode) : requestedName;
+        try {
+          if (draft.taskFolder) {
+            const renamed = await window.caishen.renameChildrenwearTask({ folder: draft.taskFolder, taskName: requestedName });
+            draft.title = renamed.taskName || draft.title;
+            draft.styleName = renamed.styleName || draft.styleName;
+            draft.taskCode = renamed.taskCode || draft.taskCode;
+          }
+          await loadChildrenwearTasks();
+        } catch (error) { return toast(childrenwearFriendlyError(error), true); }
+        return renderCwQueue(stage);
+      }
+      if (event.target.closest('[data-cw-remove]')) {
+        const draft = state.childrenwearDrafts[stage].find(item => item.id === id);
+        return deleteCwDraftCards(stage, [draft]);
+      }
+      if (event.target.closest('[data-cw-generate-one]')) return runCwDraft(stage, state.childrenwearDrafts[stage].find(item => item.id === id));
+      if (!event.target.closest('button,input,label')) { state.childrenwearActiveDraft[stage] = id; renderCwQueue(stage); }
+    };
+  });
+  $$('[data-cw-batch]').forEach(button => button.onclick = async () => {
+    const stage = button.dataset.stage;
+    const action = button.dataset.cwBatch;
+    if (action === 'generate') return runCwBatch(stage);
+    if (action === 'approve' || action === 'mark-issue') {
+      const items = cwFilteredDrafts(stage)
+        .filter(draft => draft.selected && draft.taskFolder)
+        .map(draft => cwReviewItems().find(item => item.stage === stage && item.folder === draft.taskFolder))
+        .filter(item => item && !item.approved);
+      if (!items.length) return toast('请先勾选已生成且未通过的平铺图任务', true);
+      try {
+        for (const item of items) {
+          if (action === 'approve') await approveCwReviewItem(item); else await markCwReviewItemNeedsRegeneration(item);
+        }
+        state.childrenwearDrafts[stage].forEach(draft => { if (draft.selected) draft.selected = false; });
+        await loadChildrenwearTasks();
+        return toast(action === 'approve' ? `已批量通过 ${items.length} 张平铺图` : `已标记 ${items.length} 个需重生成任务`);
+      } catch (error) { return toast(childrenwearFriendlyError(error), true); }
+    }
+    if (action === 'select-all') cwFilteredDrafts(stage).forEach(item => { item.selected = true; });
+    if (action === 'clear') cwFilteredDrafts(stage).forEach(item => { item.selected = false; });
+    if (action === 'delete') {
+      const selected = cwFilteredDrafts(stage).filter(item => item.selected && item.status !== '生成中');
+      return deleteCwDraftCards(stage, selected);
+    }
+    renderCwQueue(stage);
+  });
+  $$('.cw-queue-filters [data-cw-queue-filter]').forEach(button => button.onclick = () => {
+    state.childrenwearQueueFilters.master = button.dataset.cwQueueFilter;
+    button.parentElement.querySelectorAll('button').forEach(item => item.classList.toggle('active', item === button));
+    renderCwQueue('master');
+  });
+  $('#cwReviewGrid').onchange = event => {
+    const input = event.target.closest('[data-cw-review-select]');
+    if (!input) return;
+    if (input.checked) state.childrenwearReviewSelection.add(input.dataset.cwReviewSelect); else state.childrenwearReviewSelection.delete(input.dataset.cwReviewSelect);
+    renderCwReview();
+  };
+  $('#cwReviewGrid').onclick = async event => {
+    const more = event.target.closest('[data-cw-review-more]');
+    if (more) {
+      const folder = more.dataset.cwReviewMore;
+      state.childrenwearReviewGroupLimits.set(folder, (Number(state.childrenwearReviewGroupLimits.get(folder)) || 48) + 48);
+      return renderCwReview();
+    }
+    const compare = event.target.closest('[data-cw-review-compare]');
+    if (compare) return openCwCompare(compare.dataset.cwReviewCompare);
+    const downloadFolder = event.target.closest('[data-cw-review-download-folder]');
+    if (downloadFolder) {
+      await window.caishen.downloadFolder(downloadFolder.dataset.cwReviewDownloadFolder);
+      return toast('已开始打包下载整个款式文件夹');
+    }
+    const renameFolder = event.target.closest('[data-cw-review-rename-folder]');
+    if (renameFolder) {
+      const folder = renameFolder.dataset.cwReviewRenameFolder;
+      const task = state.childrenwearTasks.find(item => item.folder === folder);
+      const value = await brandPrompt('修改款式任务名称', task?.styleName || task?.category || task?.taskName || '', { message: `只需填写款式名称，任务编号 ${task?.taskCode || ''} 会自动保留，并同步用于审核分组和整包下载文件名。`, inputLabel: '款式名称' });
+      if (value === null) return;
+      if (!String(value).trim()) return toast('任务名称不能为空', true);
+      try {
+        await window.caishen.renameChildrenwearTask({ folder, taskName: String(value).trim() });
+        await loadChildrenwearTasks();
+        return toast('款式任务名称已修改');
+      } catch (error) { return toast(childrenwearFriendlyError(error), true); }
+    }
+  };
+  $$('.cw-review-filters [data-cw-review-filter]').forEach(button => button.onclick = () => {
+    state.childrenwearReviewFilter = button.dataset.cwReviewFilter;
+    state.childrenwearReviewGroupLimits.clear();
+    button.parentElement.querySelectorAll('button').forEach(item => item.classList.toggle('active', item === button));
+    renderCwReview();
+  });
+  $('#cwReviewSelectAll').onclick = () => { cwVisibleReviewItems().forEach(item => state.childrenwearReviewSelection.add(item.id)); renderCwReview(); };
+  $('#cwReviewClear').onclick = () => { state.childrenwearReviewSelection.clear(); renderCwReview(); };
+  $('#cwReviewCompareSelected').onclick = () => {
+    const first = cwVisibleReviewItems().find(item => state.childrenwearReviewSelection.has(item.id));
+    if (!first) return toast('请先勾选需要审核的图片', true);
+    openCwCompare(first.id, 'review-selection');
+  };
+  $('#cwReviewApproveSelected').onclick = async () => {
+    const items = cwReviewItems().filter(item => state.childrenwearReviewSelection.has(item.id) && !item.approved);
+    for (const item of items) await approveCwReviewItem(item);
+    state.childrenwearReviewSelection.clear(); await loadChildrenwearTasks(); toast(`已通过 ${items.length} 张图片`);
+  };
+  $('#cwReviewRegenerateSelected').onclick = async () => {
+    const items = cwReviewItems().filter(item => state.childrenwearReviewSelection.has(item.id));
+    for (const item of items) await regenerateCwReviewItem(item);
+    state.childrenwearReviewSelection.clear(); await loadChildrenwearTasks(); toast(`已重新生成 ${items.length} 张图片`);
+  };
+  $('#cwReviewDownloadSelected').onclick = async () => {
+    const folders = [...new Set(cwReviewItems().filter(item => state.childrenwearReviewSelection.has(item.id)).map(item => item.folder))];
+    if (!folders.length) return toast('请先勾选需要下载的任务卡片', true);
+    try {
+      await window.caishen.downloadFolders(folders);
+      toast(`已开始打包下载 ${folders.length} 个款式任务`);
+    } catch (error) { toast(childrenwearFriendlyError(error), true); }
+  };
+  $('#cwCompareClose').onclick = closeCwCompare;
+  $('#cwComparePrevious').onclick = () => navigateCwCompare(-1);
+  $('#cwCompareNext').onclick = () => navigateCwCompare(1);
+  $('#cwCompareFit').onclick = resetCwCompareView;
+  $('#cwCompareActual').onclick = () => setCwCompareActual();
+  $('#cwCompareZoomOut').onclick = () => setCwCompareZoom(state.childrenwearCompareZoom - .25);
+  $('#cwCompareZoomIn').onclick = () => setCwCompareZoom(state.childrenwearCompareZoom + .25);
+  $('#cwCompareApprove').onclick = approveCurrentCwCompare;
+  $('#cwCompareRegenerate').onclick = regenerateCurrentCwCompare;
+  $('#cwCompareSourcePicker').onchange = event => {
+    const input = event.target.closest('[data-cw-compare-toggle]');
+    if (!input) return;
+    toggleCwCompareSource(input.dataset.stage, input.dataset.cwCompareToggle, input.checked);
+  };
+  $('#cwCompareModal').onclick = event => { if (event.target === $('#cwCompareModal')) closeCwCompare(); };
+  $('#cwComparePanes').addEventListener('wheel', event => {
+    if ($('#cwCompareModal').hidden) return;
+    event.preventDefault();
+    const frame = event.target.closest('.cw-compare-frame');
+    const rect = frame?.getBoundingClientRect();
+    const anchor = rect ? { x: event.clientX - rect.left - rect.width / 2, y: event.clientY - rect.top - rect.height / 2 } : null;
+    setCwCompareZoom(state.childrenwearCompareZoom + (event.deltaY < 0 ? .2 : -.2), anchor);
+  }, { passive: false });
+  $('#cwComparePanes').ondblclick = event => {
+    const image = event.target.closest('[data-cw-compare-image]');
+    if (!image) return;
+    if (state.childrenwearCompareZoom > 1.05) resetCwCompareView(); else setCwCompareActual(image);
+  };
+  $('#cwComparePanes').ondragstart = event => {
+    const caption = event.target.closest('.cw-compare-pane figcaption');
+    const pane = caption?.closest('[data-cw-source-key]');
+    if (!pane || !event.dataTransfer) return event.preventDefault();
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', pane.dataset.cwSourceKey);
+    pane.classList.add('reordering');
+  };
+  $('#cwComparePanes').ondragover = event => {
+    const pane = event.target.closest('[data-cw-source-key]');
+    if (!pane) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    $$('#cwComparePanes .cw-compare-pane').forEach(candidate => candidate.classList.toggle('drop-target', candidate === pane));
+  };
+  $('#cwComparePanes').ondrop = event => {
+    const pane = event.target.closest('[data-cw-source-key]');
+    if (!pane) return;
+    event.preventDefault();
+    const draggedKey = event.dataTransfer?.getData('text/plain');
+    const item = cwReviewItems().find(candidate => candidate.id === state.childrenwearCompareId);
+    reorderCwCompareSource(item?.stage, draggedKey, pane.dataset.cwSourceKey);
+  };
+  $('#cwComparePanes').ondragend = () => $$('#cwComparePanes .cw-compare-pane').forEach(pane => pane.classList.remove('reordering', 'drop-target'));
+  $('#cwComparePanes').onpointerdown = event => {
+    if (!event.target.closest('.cw-compare-frame') || event.button !== 0) return;
+    compareDrag = { startX: event.clientX, startY: event.clientY, panX: state.childrenwearComparePan.x, panY: state.childrenwearComparePan.y };
+    $('#cwComparePanes').classList.add('dragging');
+    event.preventDefault();
+  };
+  $('#cwCompareModal').onpointermove = event => {
+    if (!compareDrag) return;
+    state.childrenwearComparePan.x = compareDrag.panX + event.clientX - compareDrag.startX;
+    state.childrenwearComparePan.y = compareDrag.panY + event.clientY - compareDrag.startY;
+    applyCwCompareTransform();
+  };
+  const stopCompareDrag = () => { compareDrag = null; $('#cwComparePanes').classList.remove('dragging'); };
+  $('#cwCompareModal').onpointerup = stopCompareDrag;
+  $('#cwCompareModal').onpointercancel = stopCompareDrag;
+  document.addEventListener('keydown', event => {
+    if ($('#cwCompareModal').hidden || event.target.closest('input,textarea,select')) return;
+    if (event.key === 'Escape') closeCwCompare();
+    else if (event.key === 'ArrowLeft') navigateCwCompare(-1);
+    else if (event.key === 'ArrowRight') navigateCwCompare(1);
+    else if (event.key === '+' || event.key === '=') setCwCompareZoom(state.childrenwearCompareZoom + .25);
+    else if (event.key === '-') setCwCompareZoom(state.childrenwearCompareZoom - .25);
+    else if (event.key.toLowerCase() === 'r') regenerateCurrentCwCompare();
+  });
+  setChildrenwearProductionTab(state.childrenwearProductionTab);
+  setChildrenwearAssetTab(state.childrenwearAssetTab);
+}
+
 function bindEvents() {
+  bindChildrenwearLibraryEvents();
+  bindChildrenwearEvents();
   $('#logoutButton').onclick = logout;
   $('#changePasswordButton').onclick = openChangePasswordModal;
   $('#closeChangePasswordButton').onclick = closeChangePasswordModal;
@@ -5002,7 +7535,7 @@ function bindEvents() {
   $('#sidebarToggleButton').onclick = () => applySidebarCollapsed(!$('#appShell').classList.contains('sidebar-collapsed'));
   $('.topbar').onclick = event => {
     if ($('#appShell').classList.contains('sidebar-collapsed')) return;
-    if (event.target.closest('button, .nav, .sidebar-finance, .brand')) return;
+    if (event.target.closest('button, input, label, .nav, .sidebar-finance, .brand')) return;
     applySidebarCollapsed(true);
   };
   $('#createUserForm').onsubmit = createTeamUser;
@@ -5020,8 +7553,13 @@ function bindEvents() {
   };
   $('#requireAllPasswordChangesButton').onclick = requireAllTeamPasswordChanges;
   $('#teamTransferButton').onclick = transferTeamBalance;
-  $$('.nav-item').forEach(button => button.onclick = () => setPage(button.dataset.page));
+  $$('.nav-item').forEach(button => {
+    button.onclick = () => button.dataset.childrenwearProductionNav
+      ? openChildrenwearProduction(button.dataset.childrenwearProductionNav)
+      : setPage(button.dataset.page);
+  });
   $$('[data-page-link]').forEach(button => button.onclick = () => setPage(button.dataset.pageLink));
+  $$('[data-open-childrenwear-production]').forEach(button => button.onclick = () => openChildrenwearProduction(button.dataset.openChildrenwearProduction));
   $$('.template-source-tabs [data-template-source-tab]').forEach(button => button.onclick = () => setTaskSourceTab(button.dataset.templateSourceTab));
   $$('[data-choose]').forEach(button => button.onclick = () => chooseFolder(button.dataset.choose));
   $$('[data-stage-asset]').forEach(button => button.onclick = () => stageAssetFolder(button.dataset.stageAsset));
@@ -5228,7 +7766,7 @@ function bindEvents() {
   $('#deleteSelectedReviewsButton').onclick = async () => {
     const folders = [...state.selectedReviewFolders];
     if (!folders.length) return toast('请先选择要删除的任务', true);
-    if (!window.confirm(`确定删除 ${folders.length} 个任务？母版图、套图和审核记录会一起删除。`)) return;
+    if (!await brandConfirm(`确定删除 ${folders.length} 个任务？母版图、套图和审核记录会一起删除。`, { title: '删除生产任务', danger: true, confirmText: '删除任务' })) return;
     try {
       const deleted = await window.caishen.deleteReviews(folders);
       if (deleted) { state.selectedReviewFolders.clear(); await loadReviews(); toast(`已删除 ${deleted} 个任务`); }
@@ -5258,8 +7796,26 @@ function bindEvents() {
   $('#saveSettingsButton').onclick = saveSettings;
   $('#resetSettingsButton').onclick = resetSettings;
   $('#openBillingDetailButton').onclick = openBillingDetail;
+  $('#openAlipayButton').onclick = openAlipay;
+  $('#closeAlipayButton').onclick = closeAlipay;
+  $('#alipayModal').onclick = event => { if (event.target === $('#alipayModal')) closeAlipay(); };
+  $('#alipayAmountUsd').oninput = updateAlipayPaymentAmount;
+  $('#submitAlipayRechargeButton').onclick = submitAlipayRecharge;
+  $('#refreshAlipayHistoryButton').onclick = loadAlipayHistory;
+  $('#saveAlipaySettingsButton').onclick = saveAlipaySettings;
+  $('#uploadAlipayQrButton').onclick = uploadAlipayQr;
+  $('#refreshAlipayReviewButton').onclick = loadAlipayAdmin;
+  $('#alipayReviewList').onclick = handleAlipayReviewClick;
   $('#closeBillingDetailButton').onclick = closeBillingDetail;
-  $('#refreshBillingDetailButton').onclick = loadBillingSummary;
+  $('#refreshBillingDetailButton').onclick = () => loadBillingDetail(state.billingDetailRelayId, state.billingDetailUserId);
+  $('#billingDetailUserFilter').onchange = event => loadBillingDetail(state.billingDetailRelayId, event.target.value);
+  $('#billingDetailRelayFilter').onchange = event => loadBillingDetail(event.target.value, state.billingDetailUserId);
+  $('#billingDetailRangeFilter').onchange = event => {
+    state.billingDetailRange = String(event.target.value || 'today');
+    if (state.billingDetailRange === 'custom') { state.billingDetailStartDate ||= chinaDateToday(); state.billingDetailEndDate ||= chinaDateToday(); }
+    loadBillingDetail(state.billingDetailRelayId, state.billingDetailUserId);
+  };
+  $('#applyBillingDetailDateButton').onclick = () => { state.billingDetailStartDate = $('#billingDetailStartDate').value; state.billingDetailEndDate = $('#billingDetailEndDate').value; loadBillingDetail(state.billingDetailRelayId, state.billingDetailUserId); };
   $('#billingDetailModal').onclick = event => { if (event.target === $('#billingDetailModal')) closeBillingDetail(); };
   $('#saveBillingRulesButton').onclick = saveBillingRules;
   $('#refreshBillingButton').onclick = loadBillingAdmin;
@@ -5503,6 +8059,9 @@ async function start() {
   state.config = await window.caishen.getConfig();
   await sanitizeConfigWorkspacePaths();
   renderConfig();
+  renderChildrenwear();
+  await loadChildrenwearLibraries();
+  scheduleChildrenwearAutoAnalysis();
   renderSettingsTabs();
   await loadTemplateFolders();
   const adminLoads = [
@@ -5510,7 +8069,7 @@ async function start() {
     ...(isTeamAdmin() ? [loadRelayChoices()] : []),
     ...(isSuperAdmin() ? [loadApiSettings()] : [])
   ];
-  await Promise.all([loadTemplatePreparation(), loadBillingSummary(), ...adminLoads]);
+  await Promise.all([loadTemplatePreparation(), loadBillingSummary(), loadChildrenwearTasks(), loadAlipayEntry(), ...adminLoads]);
   await Promise.all([loadAssets('categoriesPath'), loadAssets('printsPath')]);
   renderQueue();
 }

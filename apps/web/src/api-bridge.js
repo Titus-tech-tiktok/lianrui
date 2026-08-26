@@ -1,9 +1,33 @@
+function networkFailure(error) {
+  return error instanceof TypeError || /failed to fetch|networkerror|load failed|network request failed/i.test(String(error?.message || error || ''));
+}
+
+function localServiceError(error) {
+  if (!networkFailure(error)) return error;
+  const friendly = new Error('暂时无法连接本机服务，系统已自动重试，请稍后再试');
+  friendly.cause = error;
+  return friendly;
+}
+
+async function fetchWithRecovery(url, options = {}, retries = 2) {
+  let lastError;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try { return await fetch(url, options); }
+    catch (error) {
+      lastError = error;
+      if (!networkFailure(error) || attempt >= retries) throw localServiceError(error);
+      await sleep(250 * (attempt + 1));
+    }
+  }
+  throw localServiceError(lastError);
+}
+
 function rpc(method, ...args) {
-  return fetch('/api/rpc', {
+  return fetchWithRecovery('/api/rpc', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ method, args })
-  }).then(async response => {
+  }, 0).then(async response => {
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(body.error || `请求失败：HTTP ${response.status}`);
     return body.data;
@@ -11,10 +35,13 @@ function rpc(method, ...args) {
 }
 
 async function authRequest(url, options = {}) {
-  const response = await fetch(url, {
-    ...options,
-    headers: options.body ? { 'Content-Type': 'application/json', ...(options.headers || {}) } : options.headers
-  });
+  const { retryNetwork = false, ...requestOptions } = options;
+  const method = String(requestOptions.method || 'GET').toUpperCase();
+  const retries = retryNetwork || ['GET', 'HEAD'].includes(method) ? 2 : 0;
+  const response = await fetchWithRecovery(url, {
+    ...requestOptions,
+    headers: requestOptions.body ? { 'Content-Type': 'application/json', ...(requestOptions.headers || {}) } : requestOptions.headers
+  }, retries);
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.error || `请求失败：HTTP ${response.status}`);
   return body.data;
@@ -39,11 +66,12 @@ function createClientId() {
 }
 
 async function runJob(method, args = [], clientKey = '', onProgress = () => {}) {
-  const response = await fetch('/api/jobs', {
+  const effectiveClientKey = clientKey || createClientId();
+  const response = await fetchWithRecovery('/api/jobs', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ method, args, clientKey })
-  });
+    body: JSON.stringify({ method, args, clientKey: effectiveClientKey })
+  }, 2);
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.error || `任务提交失败：HTTP ${response.status}`);
   const jobId = body.data?.id;
@@ -51,7 +79,15 @@ async function runJob(method, args = [], clientKey = '', onProgress = () => {}) 
   onProgress(body.data?.progress || {}, body.data || {});
   const deadline = Date.now() + 30 * 60 * 1000;
   while (Date.now() < deadline) {
-    const currentResponse = await fetch(`/api/jobs/${encodeURIComponent(jobId)}`, { cache: 'no-store' });
+    let currentResponse;
+    try {
+      currentResponse = await fetchWithRecovery(`/api/jobs/${encodeURIComponent(jobId)}`, { cache: 'no-store' }, 2);
+    } catch (error) {
+      if (!networkFailure(error?.cause || error)) throw error;
+      onProgress({ phase: 'reconnecting', message: '本机服务短暂断开，正在重连…' }, { id: jobId, status: 'running' });
+      await sleep(1200);
+      continue;
+    }
     const currentBody = await currentResponse.json().catch(() => ({}));
     if (!currentResponse.ok) throw new Error(currentBody.error || `任务查询失败：HTTP ${currentResponse.status}`);
     const job = currentBody.data;
@@ -104,6 +140,32 @@ function assetFileEntry(file, relativePath = '') {
   return { file, relativePath: String(relativePath || file?.webkitRelativePath || file?.name || '').replaceAll('\\', '/') };
 }
 
+async function readDirectoryHandle(directoryHandle, parent = '') {
+  const entries = [];
+  for await (const handle of directoryHandle.values()) {
+    if (handle.kind === 'file') {
+      const file = await handle.getFile();
+      entries.push(assetFileEntry(file, `${parent}${file.name}`));
+      continue;
+    }
+    if (handle.kind === 'directory') entries.push(...await readDirectoryHandle(handle, `${parent}${handle.name}/`));
+  }
+  return entries;
+}
+
+async function chooseDirectoryEntries() {
+  if (typeof window.showDirectoryPicker === 'function' && window.isSecureContext) {
+    try {
+      const directory = await window.showDirectoryPicker({ mode: 'read' });
+      return readDirectoryHandle(directory, `${directory.name}/`);
+    } catch (error) {
+      if (error?.name === 'AbortError') return [];
+      throw error;
+    }
+  }
+  return (await pickFiles({ accept: 'image/*', directory: true, multiple: true })).map(file => assetFileEntry(file));
+}
+
 async function readDroppedEntry(entry, parent = '') {
   if (!entry) return [];
   if (entry.isFile) {
@@ -135,12 +197,18 @@ async function chooseAssetFiles() {
   return (await pickFiles({ accept: 'image/*', multiple: true })).map(file => assetFileEntry(file));
 }
 
+async function chooseAssetFolder() {
+  return (await chooseDirectoryEntries())
+    .filter(entry => supportedImagePattern.test(entry.file?.name || entry.relativePath || ''));
+}
+
 async function addAssetFiles(key, root, entries = []) {
   const valid = entries.filter(item => item?.file && supportedImagePattern.test(item.file.name || item.relativePath));
   if (!valid.length) throw new Error('请选择支持的图片文件');
   let currentRoot = root || '';
   let added = 0;
   let skipped = 0;
+  const paths = [];
   const batchSize = 200;
   for (let start = 0; start < valid.length; start += batchSize) {
     const batch = valid.slice(start, start + batchSize);
@@ -152,8 +220,9 @@ async function addAssetFiles(key, root, entries = []) {
     currentRoot = result.root;
     added += Number(result.added) || 0;
     skipped += Number(result.skipped) || 0;
+    paths.push(...(Array.isArray(result.paths) ? result.paths : []));
   }
-  return { root: currentRoot, added, skipped };
+  return { root: currentRoot, added, skipped, paths };
 }
 
 async function deleteAssetFiles(key, root, paths) {
@@ -168,24 +237,40 @@ const stagedAssetFolders = new Map();
 const supportedImagePattern = /\.(jpe?g|png|webp|bmp|gif|tiff?)$/i;
 
 function assetKindFromKey(key) {
-  return key === 'categoriesPath' ? 'product' : key === 'printsPath' ? 'print' : 'template';
+  return ({
+    categoriesPath: 'product',
+    printsPath: 'print',
+    detailSetsPath: 'template',
+    childrenwearRealAssetsPath: 'childrenwear-real',
+    childrenwearReferenceAssetsPath: 'childrenwear-reference',
+    childrenwearModelAssetsPath: 'childrenwear-model',
+    childrenwearCombinationAssetsPath: 'childrenwear-combination'
+  })[key] || 'template';
 }
 
-function stagedRelativePath(file, rootName) {
-  const value = String(file.webkitRelativePath || file.name || '').replaceAll('\\', '/');
+async function renameAssetFolder(key, root, folder, name) {
+  return responseJson(await fetch(`/api/assets/folders/${assetKindFromKey(key)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ root, folder, name })
+  }), '修改文件夹名称失败');
+}
+
+function stagedRelativePath(entry, rootName) {
+  const value = String(entry.relativePath || entry.file?.webkitRelativePath || entry.file?.name || '').replaceAll('\\', '/');
   const parts = value.split('/').filter(Boolean);
   if (parts[0] === rootName) parts.shift();
-  return parts.join('/') || file.name;
+  return parts.join('/') || entry.file?.name || '';
 }
 
 async function stageAssetFolder(key) {
-  const selected = await pickFiles({ accept: 'image/*', directory: true, multiple: true });
+  const selected = await chooseDirectoryEntries();
   if (!selected.length) return null;
-  const firstPath = String(selected[0].webkitRelativePath || selected[0].name).replaceAll('\\', '/');
+  const firstPath = String(selected[0].relativePath || selected[0].file?.name || '').replaceAll('\\', '/');
   const rootName = firstPath.split('/').filter(Boolean)[0] || '素材';
   const files = selected
-    .filter(file => supportedImagePattern.test(file.name))
-    .map(file => ({ file, relativePath: stagedRelativePath(file, rootName) }))
+    .filter(entry => supportedImagePattern.test(entry.file?.name || entry.relativePath || ''))
+    .map(entry => ({ file: entry.file, relativePath: stagedRelativePath(entry, rootName) }))
     .filter(item => key !== 'printsPath' || !item.relativePath.includes('/'));
   if (!files.length) throw new Error('选择的文件夹里没有支持的图片');
   const stage = {
@@ -245,11 +330,11 @@ async function syncAssetFolder(key, currentRoot, onProgress = () => {}) {
 }
 
 async function uploadFolder(kind) {
-  const files = await pickFiles({ directory: true, multiple: true });
-  if (!files.length) return '';
+  const entries = await chooseDirectoryEntries();
+  if (!entries.length) return '';
   const form = new FormData();
-  for (const file of files) form.append('files', file, file.name);
-  form.append('relativePaths', JSON.stringify(files.map(file => file.webkitRelativePath || file.name)));
+  for (const entry of entries) form.append('files', entry.file, entry.file.name);
+  form.append('relativePaths', JSON.stringify(entries.map(entry => entry.relativePath || entry.file.name)));
   const response = await fetch(`/api/upload/folder/${kind}`, { method: 'POST', body: form });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.error || `上传失败：HTTP ${response.status}`);
@@ -295,6 +380,38 @@ async function downloadWorkspaceFolder(target) {
   downloadFrom(url);
 }
 
+function responseDownloadName(response, fallback) {
+  const disposition = String(response.headers.get('Content-Disposition') || '');
+  const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  if (encoded) {
+    try { return decodeURIComponent(encoded); } catch {}
+  }
+  return fallback;
+}
+
+async function downloadChildrenwearFolders(targets) {
+  const folders = [...new Set((targets || []).map(String).filter(Boolean))];
+  if (!folders.length) throw new Error('请先选择需要下载的款式任务');
+  const response = await fetch('/api/zip/childrenwear-batch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ folders })
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.error || `批量下载失败：HTTP ${response.status}`);
+  }
+  const objectUrl = URL.createObjectURL(await response.blob());
+  const anchor = document.createElement('a');
+  anchor.href = objectUrl;
+  anchor.download = responseDownloadName(response, `童装任务-${folders.length}款.zip`);
+  anchor.rel = 'noopener';
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+}
+
 async function copyText(text) {
   const value = String(text || '');
   if (navigator.clipboard?.writeText) {
@@ -323,7 +440,11 @@ window.caishen = {
   bootstrapAccount: payload => authRequest('/api/auth/bootstrap', { method: 'POST', body: JSON.stringify(payload) }),
   login: payload => authRequest('/api/auth/login', { method: 'POST', body: JSON.stringify(payload) }),
   logout: () => authRequest('/api/auth/logout', { method: 'POST' }),
-  changePassword: payload => authRequest('/api/auth/password', { method: 'POST', body: JSON.stringify(payload) }),
+  changePassword: payload => authRequest('/api/auth/password', {
+    method: 'POST',
+    body: JSON.stringify({ ...payload, requestId: payload?.requestId || createClientId() }),
+    retryNetwork: true
+  }),
   listUsers: () => authRequest('/api/auth/users'),
   createUser: payload => authRequest('/api/auth/users', { method: 'POST', body: JSON.stringify(payload) }),
   setUserActive: (id, active) => authRequest(`/api/auth/users/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ active }) }),
@@ -333,7 +454,29 @@ window.caishen = {
   requireAllPasswordChanges: () => authRequest('/api/auth/password-policy/require-all', { method: 'POST' }),
   deleteUser: id => authRequest(`/api/auth/users/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   getBillingSummary: (days, relayId = '') => authRequest(`/api/billing/me?days=${encodeURIComponent(Math.max(1, Math.trunc(Number(days) || 30)))}${relayId ? `&relayId=${encodeURIComponent(relayId)}` : ''}`),
+  getBillingDetail: (options = {}) => {
+    const query = new URLSearchParams({ range: String(options.range || 'today'), relayId: String(options.relayId || 'all'), userId: String(options.userId || '') });
+    if (options.startDate) query.set('startDate', String(options.startDate));
+    if (options.endDate) query.set('endDate', String(options.endDate));
+    return authRequest(`/api/billing/detail?${query.toString()}`);
+  },
   getBillingAdmin: () => authRequest('/api/billing/admin'),
+  getAlipayConfig: () => authRequest('/api/alipay/config'),
+  getAlipayRecharges: () => authRequest('/api/alipay/recharges'),
+  submitAlipayRecharge: payload => authRequest('/api/alipay/recharges', { method: 'POST', body: JSON.stringify(payload) }),
+  getAlipaySettings: () => authRequest('/api/alipay/settings'),
+  saveAlipaySettings: payload => authRequest('/api/alipay/settings', { method: 'PUT', body: JSON.stringify(payload) }),
+  uploadAlipayQr: async file => {
+    const form = new FormData();
+    form.append('qr', file);
+    const response = await fetchWithRecovery('/api/alipay/settings/qr', { method: 'POST', body: form }, 0);
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.error || `请求失败：HTTP ${response.status}`);
+    return body.data;
+  },
+  getAlipayReview: () => authRequest('/api/alipay/review'),
+  approveAlipayRecharge: (id, actualAmountUsd) => authRequest(`/api/alipay/recharges/${encodeURIComponent(id)}/approve`, { method: 'POST', body: JSON.stringify({ actualAmountUsd }) }),
+  rejectAlipayRecharge: (id, reason) => authRequest(`/api/alipay/recharges/${encodeURIComponent(id)}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
   getBillingAccounting: (options = {}) => {
     const query = new URLSearchParams();
     query.set('range', options.range || 'month');
@@ -369,9 +512,11 @@ window.caishen = {
   stageAssetFolder,
   syncAssetFolder,
   chooseAssetFiles,
+  chooseAssetFolder,
   filesFromDrop,
   addAssetFiles,
   deleteAssetFiles,
+  renameAssetFolder,
   chooseFolder: async (currentPath, key) => {
     if (key === 'outputPath') return currentPath || (await rpc('getConfig')).outputPath;
     const kind = key === 'categoriesPath' ? 'product' : key === 'printsPath' ? 'print' : 'template';
@@ -379,6 +524,19 @@ window.caishen = {
   },
   chooseImage: async () => uploadSingle('/api/upload/image', 'image/*'),
   listImages: (root, query) => rpc('listImages', root, query),
+  listImageLibrary: (root, options) => rpc('listImageLibrary', root, options || {}),
+  analyzeChildrenwearAssets: (payload, onProgress) => runJob(
+    'analyzeChildrenwearAssets',
+    [payload],
+    `childrenwear-analysis:${payload?.role || 'unknown'}:${Date.now()}:${createClientId()}`,
+    onProgress
+  ),
+  scanPendingChildrenwearAnalysis: (payload, onProgress) => runJob(
+    'scanPendingChildrenwearAnalysis',
+    [payload || {}],
+    `childrenwear-analysis-scan:${Date.now()}:${createClientId()}`,
+    onProgress
+  ),
   listTemplateFolders: () => rpc('listTemplateFolders'),
   deleteTemplateFolder: folder => rpc('deleteTemplateFolder', folder),
   generateTask: (task, onProgress) => runJob('generateTask', [task], `${task?.id || createClientId()}:${task?.runAttempt || 1}`, onProgress),
@@ -388,6 +546,28 @@ window.caishen = {
   prepareTemplates: folder => runJob('prepareTemplates', [folder]),
   saveTemplateRegions: payload => rpc('saveTemplateRegions', payload),
   generateFree: payload => runJob('generateFree', [payload]),
+  generateChildrenwearMaster: (payload, onProgress) => runJob(
+    'generateChildrenwearMaster',
+    [payload],
+    `childrenwear-master:${payload?.folder || payload?.realPhotoPath || createClientId()}:${Date.now()}`,
+    onProgress
+  ),
+  approveChildrenwearOutput: payload => rpc('approveChildrenwearOutput', payload),
+  generateChildrenwearModel: (payload, onProgress) => runJob(
+    'generateChildrenwearModel',
+    [payload],
+    `childrenwear-model:${payload?.folder || createClientId()}:${Date.now()}`,
+    onProgress
+  ),
+  generateChildrenwearCombination: (payload, onProgress) => runJob(
+    'generateChildrenwearCombination',
+    [payload],
+    `childrenwear-combination:${Date.now()}:${createClientId()}`,
+    onProgress
+  ),
+  listChildrenwearTasks: () => rpc('listChildrenwearTasks'),
+  renameChildrenwearTask: payload => rpc('renameChildrenwearTask', payload),
+  deleteChildrenwearTasks: folders => rpc('deleteChildrenwearTasks', folders),
   listReviews: () => rpc('listReviews'),
   approveReview: folder => rpc('approveReview', folder),
   setReviewStatus: payload => rpc('setReviewStatus', payload),
@@ -398,5 +578,6 @@ window.caishen = {
   revealFile: file => openWorkspacePath(file, 'file'),
   openFolder: folder => openWorkspacePath(folder, 'folder'),
   downloadFolder: folder => downloadWorkspaceFolder(folder),
+  downloadFolders: folders => downloadChildrenwearFolders(folders),
   copyText
 };

@@ -210,10 +210,12 @@ function createAuthService(dataRoot) {
     });
   }
 
-  function changeOwnPassword(id, currentPassword, newPassword) {
+  function changeOwnPassword(id, currentPassword, newPassword, requestId = '') {
     return mutateUsers(async users => {
       const user = users.find(item => item.id === String(id) && item.active !== false);
       if (!user) throw new Error('账号不存在');
+      const normalizedRequestId = String(requestId || '').trim().slice(0, 120);
+      if (normalizedRequestId && user.lastPasswordChangeRequestId === normalizedRequestId) return publicUser(user);
       if (!passwordMatches(user, currentPassword)) throw new Error('当前密码不正确');
       const password = validatePassword(newPassword);
       const salt = crypto.randomBytes(24).toString('hex');
@@ -222,6 +224,7 @@ function createAuthService(dataRoot) {
       user.passwordVault = await encryptRecordedPassword(password);
       user.passwordChangeRequired = false;
       user.passwordChangedAt = new Date().toISOString();
+      user.lastPasswordChangeRequestId = normalizedRequestId;
       return publicUser(user);
     });
   }

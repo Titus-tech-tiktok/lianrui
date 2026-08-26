@@ -10,7 +10,8 @@ function relay(overrides = {}) {
     baseUrl: 'https://api.change2pro.com',
     imageApiKey: 'image-private-key', imageModel: 'gpt-image-custom',
     imagePriceMinMinor: 300000, imagePriceMaxMinor: 300000,
-    customerCnyPerUsd: 7, upstreamImageCostCnyMicro: 20000,
+    llmPriceMinMinor: 5000, llmPriceMaxMinor: 7000,
+    customerCnyPerUsd: 7, upstreamImageCostCnyMicro: 20000, upstreamAnalysisCostCnyMicro: 10000,
     ...overrides
   };
 }
@@ -41,7 +42,7 @@ async function withRuntime(name, worker) {
   }
 }
 
-test('API settings migrate to image-only relays and keep credentials private', async () => {
+test('API settings keep shared relay credentials private and configure an analysis model', async () => {
   await withRuntime('relay-settings', async (runtime, temp) => {
     const initial = await runtime.loadApiSettings();
     assert.equal(initial.version, 4);
@@ -58,6 +59,9 @@ test('API settings migrate to image-only relays and keep credentials private', a
     assert.equal(saved.relays[0].imageKeyConfigured, true);
     assert.equal(saved.relays[0].customerCnyPerUsd, 7);
     assert.equal(saved.relays[0].upstreamImageCostCnyMicro, 20000);
+    assert.equal(saved.relays[0].llmPriceMinMinor, 5000);
+    assert.equal(saved.relays[0].llmPriceMaxMinor, 7000);
+    assert.equal(saved.relays[0].upstreamAnalysisCostCnyMicro, 10000);
     assert.equal(saved.configured, true);
     assert.equal(saved.imageMaxConcurrency, 21);
 
@@ -83,7 +87,8 @@ test('API settings migrate to image-only relays and keep credentials private', a
     const privateValue = JSON.parse(await fs.readFile(path.join(temp, 'system', 'api-settings.json'), 'utf8'));
     assert.equal(privateValue.version, 4);
     assert.equal(privateValue.relays[0].imageKey, 'image-private-key');
-    for (const field of ['analysisKey', 'analysisBaseUrl', 'analysisModel', 'analysisWireApi', 'analysisPriceMinMinor']) {
+    assert.equal(privateValue.relays[0].analysisModel, 'gpt-5-6');
+    for (const field of ['analysisKey', 'analysisBaseUrl', 'analysisWireApi', 'analysisPriceMinMinor']) {
       assert.equal(Object.hasOwn(privateValue.relays[0], field), false);
     }
     assert.equal(Object.hasOwn(privateValue, 'modelPackages'), false);

@@ -79,3 +79,31 @@ test('task ZIP includes its generated master image as 白底图/白底图.jpg', 
   assert.deepEqual([...masterEntry.data.subarray(0, 3)], [0xff, 0xd8, 0xff]);
 });
 
+test('童装任务 ZIP 只交付生成图并使用短文件名', async t => {
+  const fixtureRoot = path.join(runtime.WORKSPACE_ROOT, '.tests');
+  await fs.mkdir(fixtureRoot, { recursive: true });
+  const root = await fs.mkdtemp(path.join(fixtureRoot, 'childrenwear-delivery-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+
+  const master = path.join(root, '平铺图', '平铺母版-v1.png');
+  const model = path.join(root, '模特图', 'model-long-id.png');
+  const combo = path.join(root, '组合图', 'combination-long-id.png');
+  for (const file of [master, model, combo]) {
+    await fs.mkdir(path.dirname(file), { recursive: true });
+    await sharp({ create: { width: 8, height: 8, channels: 3, background: '#eeeeee' } }).png().toFile(file);
+  }
+  await fs.mkdir(path.join(root, '.evidence', 'master-v1'), { recursive: true });
+  await fs.writeFile(path.join(root, '.evidence', 'master-v1', 'prompt.txt'), 'internal prompt');
+  await fs.mkdir(path.join(root, '素材', '实拍图'), { recursive: true });
+  await fs.writeFile(path.join(root, '素材', '实拍图', 'real.jpg'), Buffer.from('source'));
+  await fs.writeFile(path.join(root, 'childrenwear-task.json'), JSON.stringify({
+    taskName: '纯棉梭织裤0824-001', taskCode: '0824-001', masterPath: master,
+    modelOutputs: [{ id: 'model-1', path: model }], combinationOutputs: [{ id: 'combo-1', path: combo }]
+  }), 'utf8');
+
+  assert.equal(await buildZipDownloadName(root), '纯棉梭织裤0824-001');
+  const names = zipLocalEntries(await createFolderZip(root)).map(entry => entry.name);
+  assert.deepEqual(names, ['平铺图/平铺图01.png', '模特图/模特图01.png', '多组合SKU图/多组合SKU01.png']);
+  assert.equal(names.some(name => name.startsWith('.evidence/') || name.startsWith('素材/') || name.endsWith('.json')), false);
+});
+

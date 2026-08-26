@@ -32,7 +32,7 @@ test('素材库支持追加同名文件并只删除当前素材库内的选中�
   const runtimePath = require.resolve('../src/runtime');
   delete require.cache[serverPath];
   delete require.cache[runtimePath];
-  const { addAssetFiles, createAssetThumbnail, deleteAssetFiles, normalizedThumbnailWidth } = require('../src/server');
+  const { addAssetFiles, createAssetThumbnail, deleteAssetFiles, normalizedThumbnailWidth, renameAssetFolder } = require('../src/server');
 
   const firstUpload = path.join(temp, 'upload-1');
   await fs.writeFile(firstUpload, 'first');
@@ -45,6 +45,40 @@ test('素材库支持追加同名文件并只删除当前素材库内的选中�
   const second = await addAssetFiles('print', first.root, [{ path: secondUpload, originalname: 'flower.png' }], ['flower.png']);
   assert.equal(second.added, 1);
   assert.equal(await fs.readFile(path.join(first.root, 'flower (2).png'), 'utf8'), 'second');
+
+  let childrenwearRealLibrary;
+  for (const kind of ['childrenwear-real', 'childrenwear-reference', 'childrenwear-model', 'childrenwear-combination']) {
+    const upload = path.join(temp, `upload-${kind}`);
+    await fs.writeFile(upload, kind);
+    const relativePath = path.join('纯棉', '长裤', `${kind}.jpg`);
+    const library = await addAssetFiles(kind, '', [{ path: upload, originalname: `${kind}.jpg` }], [relativePath]);
+    assert.equal(library.added, 1);
+    assert.equal(library.root.includes(kind), true);
+    assert.equal(await fs.readFile(path.join(library.root, relativePath), 'utf8'), kind);
+    if (kind === 'childrenwear-real') childrenwearRealLibrary = library;
+  }
+
+  const pagedUploads = [];
+  for (let index = 0; index < 13; index += 1) {
+    const upload = path.join(temp, `paged-${index}`);
+    await fs.writeFile(upload, `paged-${index}`);
+    pagedUploads.push({ path: upload, originalname: `单图-${index}.jpg` });
+  }
+  await addAssetFiles('childrenwear-real', childrenwearRealLibrary.root, pagedUploads, pagedUploads.map(item => item.originalname));
+  const runtime = require('../src/runtime');
+  const nestedPage = await runtime.scanImageLibraryPage(childrenwearRealLibrary.root, { folder: 'folder:纯棉', page: 1, pageSize: 12 });
+  assert.equal(nestedPage.total, 1);
+  assert.equal(nestedPage.items[0].folder, path.join('纯棉', '长裤'));
+  const renamed = await renameAssetFolder('childrenwear-real', childrenwearRealLibrary.root, 'folder:纯棉', '纯棉梭织裤实拍');
+  assert.equal(renamed.folder, 'folder:纯棉');
+  const renamedPage = await runtime.scanImageLibraryPage(childrenwearRealLibrary.root, { folder: 'folder:纯棉', page: 1, pageSize: 12 });
+  assert.equal(renamedPage.folders.find(folder => folder.id === 'folder:纯棉').name, '纯棉梭织裤实拍');
+  assert.equal(renamedPage.items[0].path, nestedPage.items[0].path);
+  await assert.rejects(() => renameAssetFolder('childrenwear-real', childrenwearRealLibrary.root, 'root', '根目录改名'), /未分类文件不能重命名/);
+  const rootPage = await runtime.scanImageLibraryPage(childrenwearRealLibrary.root, { folder: 'root', page: 2, pageSize: 12 });
+  assert.equal(rootPage.total, 13);
+  assert.equal(rootPage.totalPages, 2);
+  assert.equal(rootPage.items.length, 1);
 
   const originalRm = fs.rm;
   let simulatedLock = true;

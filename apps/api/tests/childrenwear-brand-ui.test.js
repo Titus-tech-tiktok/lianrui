@@ -1,0 +1,179 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+const path = require('node:path');
+
+const root = path.resolve(__dirname, '../../..');
+
+test('多嘻噜卡使用永沙式资产管理、左右任务台和五段生产导航', async () => {
+  const [index, renderer, bridge, styles, server, logo] = await Promise.all([
+    fs.readFile(path.join(root, 'apps/web/index.html'), 'utf8'),
+    fs.readFile(path.join(root, 'apps/web/src/renderer.js'), 'utf8'),
+    fs.readFile(path.join(root, 'apps/web/src/api-bridge.js'), 'utf8'),
+    fs.readFile(path.join(root, 'apps/web/src/styles.css'), 'utf8'),
+    fs.readFile(path.join(root, 'apps/api/src/server.js'), 'utf8'),
+    fs.stat(path.join(root, 'apps/web/public/duoxiluka-logo.png'))
+  ]);
+  assert.match(index, /<title>多嘻噜卡科技<\/title>/);
+  assert.match(index, /src="\/duoxiluka-logo\.png"/);
+  assert.match(index, /data-index="01"[^>]+data-page="assets"[^>]*>素材资产<\/button>/);
+  for (const [indexNumber, tab, label] of [['02', 'master', '生成平铺图'], ['03', 'model', '生成模特图'], ['04', 'combination', '组合多SKU图']]) {
+    assert.match(index, new RegExp(`data-index="${indexNumber}"[^>]+data-page="childrenwear"[^>]+data-childrenwear-production-nav="${tab}"[^>]*>${label}<`));
+    assert.match(index, new RegExp(`data-childrenwear-production-panel="${tab}"`));
+  }
+  for (const [key, label] of [
+    ['childrenwearRealAssetsPath', '实拍产品图'],
+    ['childrenwearReferenceAssetsPath', '成品参考图'],
+    ['childrenwearModelAssetsPath', '参考模特图'],
+    ['childrenwearCombinationAssetsPath', '组合图']
+  ]) {
+    assert.match(index, new RegExp(`data-childrenwear-library-tab="${key}"`));
+    assert.match(index, new RegExp(`data-childrenwear-library="${key}"`));
+    assert.match(index, new RegExp(`data-childrenwear-library-folder="${key}"`));
+    assert.match(index, new RegExp(`data-childrenwear-folder-list="${key}"`));
+    assert.match(index, new RegExp(`data-childrenwear-pagination="${key}"`));
+    assert.match(index, new RegExp(`data-select-all-childrenwear-library="${key}"`));
+    assert.match(index, new RegExp(`data-analyze-childrenwear-library="${key}"`));
+    assert.match(index, new RegExp(`data-delete-childrenwear-library="${key}"`));
+    assert.match(index, new RegExp(label));
+    assert.match(renderer, new RegExp(`${key}:`));
+    assert.match(bridge, new RegExp(`${key}:`));
+  }
+  assert.match(index, /data-index="05"[^>]+data-page="childrenwear-review"[^>]*>成品审核与下载</);
+  assert.match(index, /id="cwMasterSourceGrid"/);
+  assert.match(index, /id="cwMasterQueue"/);
+  assert.match(index, /data-cw-queue-filter="needs_regeneration"/);
+  assert.match(index, /data-cw-batch="approve" data-stage="master"/);
+  assert.match(index, /data-cw-batch="mark-issue" data-stage="master"/);
+  assert.doesNotMatch(index, /id="cwCompareFlag"/);
+  assert.doesNotMatch(index, /id="cwReviewFlagSelected"/);
+  assert.match(index, /id="cwReviewCompareSelected"/);
+  assert.match(index, /id="cwModelQueue"/);
+  assert.match(index, /id="cwCombinationQueue"/);
+  assert.match(index, /id="cwReviewGrid"/);
+  assert.match(index, /实拍产品图 \+ 成品参考图 → 平铺母版图/);
+  assert.match(index, /平铺图 A \+ B \+ C… \+ 组合参考图 → 多 SKU 组合图/);
+  assert.doesNotMatch(index, /childrenwearMasterNote|childrenwearModelNote|补充要求/);
+  assert.match(index, /id="childrenwearAssetPickerModal"/);
+  assert.doesNotMatch(index, /class="sidebar-preview-control"/);
+  assert.ok((index.match(/data-image-preview-size/g) || []).length >= 4);
+  assert.doesNotMatch(index, /data-open-childrenwear-library=/);
+  assert.doesNotMatch(index, /childrenwear-hero/);
+  assert.match(renderer, /function setChildrenwearAssetTab/);
+  assert.match(renderer, /function setChildrenwearProductionTab/);
+  assert.match(renderer, /function toggleAllChildrenwearLibraryItems/);
+  assert.match(renderer, /function prepareChildrenwearFolderUpload/);
+  assert.match(renderer, /function parseChildrenwearStylePackage/);
+  assert.match(renderer, /function importChildrenwearStylePackage/);
+  assert.equal((index.match(/data-import-childrenwear-style-package/g) || []).length, 4);
+  assert.equal((index.match(/>按用途文件夹导入<\/button>/g) || []).length, 4);
+  assert.doesNotMatch(index, /data-open-childrenwear-production="master">进入生成平铺图/);
+  for (const folderName of ['实拍图', '成品图', '模特图', '组合图']) assert.match(renderer, new RegExp(`${folderName}:`));
+  assert.match(renderer, /function renameChildrenwearLibraryFolder/);
+  assert.match(renderer, /避免素材被合并/);
+  assert.match(renderer, /function renderCwQueue/);
+  assert.match(renderer, /function syncCwMasterDraftsFromTasks/);
+  assert.match(renderer, /function cwFilteredDrafts/);
+  assert.match(renderer, /function markCwReviewItemNeedsRegeneration/);
+  assert.match(renderer, /function cwCompareQueue/);
+  assert.match(renderer, /task\.masterThumbnailUrl/);
+  assert.match(renderer, /item\.thumbnailUrl \|\| item\.url/);
+  assert.match(renderer, /function runCwBatch/);
+  assert.match(renderer, /function cwBatchGroupKey/);
+  assert.match(renderer, /if \(stage === 'model'\) return `model:\$\{draft\.id\}`/);
+  assert.match(renderer, /runClientConcurrency\(cwTaskGroups, cwConcurrency/);
+  assert.match(renderer, /deferReload: true, silent: true/);
+  assert.doesNotMatch(renderer, /for \(const draft of drafts\) await runCwDraft\(stage, draft\)/);
+  assert.match(renderer, /function regenerateCwReviewItem/);
+  assert.match(renderer, /function cwCompareSources/);
+  assert.match(renderer, /function toggleCwCompareSource/);
+  assert.match(renderer, /function reorderCwCompareSource/);
+  assert.match(renderer, /data-cw-compare-toggle/);
+  assert.match(renderer, /ondragstart/);
+  assert.match(renderer, /function openCwCompare/);
+  assert.match(renderer, /function setCwCompareActual/);
+  assert.match(renderer, /高清审核/);
+  assert.doesNotMatch(renderer, /data-cw-review-open=/);
+  assert.doesNotMatch(renderer, /data-cw-review-flag=/);
+  assert.doesNotMatch(renderer, /class="cw-review-card-actions"/);
+  assert.match(renderer, /renameChildrenwearTask/);
+  assert.match(renderer, /function deleteCwDraftCards/);
+  assert.match(renderer, /deleteChildrenwearTasks\(persistentFolders\)/);
+  assert.match(renderer, /永久删除任务/);
+  assert.match(renderer, /平铺图、模特图、组合图、任务素材、生成证据和人工审核记录/);
+  assert.match(renderer, /taskFolders\.has/);
+  assert.match(bridge, /deleteChildrenwearTasks/);
+  assert.match(server, /deleteChildrenwearTasks/);
+  assert.match(bridge, /analyzeChildrenwearAssets/);
+  assert.match(server, /'analyzeChildrenwearAssets'/);
+  assert.match(index, /id="childrenwearAutoAnalysisEnabled"/);
+  assert.match(index, /id="childrenwearAutoAnalysisInterval"/);
+  assert.match(index, /id="runChildrenwearAnalysisScanButton"/);
+  assert.match(renderer, /scanPendingChildrenwearAnalysis/);
+  assert.match(renderer, /intervalInput\.disabled = false/);
+  assert.doesNotMatch(renderer, /intervalInput\.disabled = !enabled/);
+  assert.match(bridge, /scanPendingChildrenwearAnalysis/);
+  assert.match(server, /'scanPendingChildrenwearAnalysis'/);
+  assert.match(renderer, /llmPriceMinMinor/);
+  assert.match(renderer, /upstreamAnalysisCostCnyMicro/);
+  assert.match(renderer, /下载整个款式文件夹/);
+  assert.match(renderer, /function cwNextTaskCode/);
+  assert.match(index, /批量下载选中款式/);
+  assert.match(renderer, /downloadFolders/);
+  assert.match(bridge, /downloadChildrenwearFolders/);
+  assert.match(renderer, /chooseAssetFolder/);
+  assert.match(renderer, /listImageLibrary/);
+  assert.match(renderer, /function setImagePreviewSize/);
+  assert.match(index, /id="imageHoverPreviewViewport"/);
+  assert.match(index, /id="imageHoverLens"/);
+  assert.match(index, /id="brandDialogModal"/);
+  assert.match(index, /<b>多嘻噜卡科技<\/b>/);
+  assert.match(renderer, /const updateMagnifiedPreview/);
+  assert.match(renderer, /const zoomFactor = 1\.7/);
+  assert.match(renderer, /const sizeMagnifierPane/);
+  assert.match(renderer, /--image-preview-width/);
+  assert.match(renderer, /--image-preview-height/);
+  assert.match(renderer, /data-preview-src=/);
+  assert.match(renderer, /function brandConfirm/);
+  assert.match(renderer, /function brandPrompt/);
+  assert.doesNotMatch(renderer, /window\.(?:alert|confirm|prompt)\s*\(/);
+  assert.match(bridge, /async function chooseAssetFolder/);
+  assert.match(bridge, /window\.showDirectoryPicker/);
+  assert.match(bridge, /async function readDirectoryHandle/);
+  assert.match(bridge, /listImageLibrary:/);
+  assert.match(bridge, /renameAssetFolder/);
+  assert.match(styles, /\.cw-production-panel/);
+  assert.match(styles, /\.cw-task-card/);
+  assert.match(styles, /\.cw-review-card/);
+  assert.match(styles, /\.cw-review-group/);
+  assert.match(styles, /\.cw-task-card \{[^}]*content-visibility:\s*auto/);
+  assert.match(styles, /\.cw-review-group \{[^}]*content-visibility:\s*auto/);
+  assert.match(styles, /\.cw-review-card \{[^}]*content-visibility:\s*auto/);
+  assert.match(styles, /grid-template-columns: repeat\(auto-fill, minmax\(168px, 1fr\)\)/);
+  assert.match(renderer, /function cwReviewTaskMetricsHtml/);
+  assert.match(renderer, /合并并发重叠时间后的实际生成处理时长/);
+  assert.match(renderer, /childrenwearReviewGroupLimits/);
+  assert.match(renderer, /data-cw-review-more/);
+  assert.match(server, /runtime\.isWorkspacePath\(source\) \|\| runtime\.isOutputPath\(source\)/);
+  assert.match(server, /realPhotoPath:\s*managedPath/);
+  assert.match(server, /referencePath:\s*managedPath/);
+  assert.match(server, /modelReferencePath:\s*managedPath/);
+  assert.match(renderer, /task\.realPhotoPath/);
+  assert.match(styles, /\.childrenwear-review-page\.active\s*\{\s*display:\s*grid/);
+  assert.match(styles, /\.childrenwear-review-page\s*\{[^}]*grid-template-rows:\s*auto auto minmax\(0, 1fr\)[^}]*overflow:\s*hidden/);
+  assert.match(styles, /\.cw-review-grid\s*\{[^}]*min-height:\s*0[^}]*overflow:\s*auto/);
+  assert.match(styles, /\.cw-compare-dialog/);
+  assert.match(styles, /\.cw-compare-panes/);
+  assert.match(styles, /\.cw-compare-source-picker/);
+  assert.match(styles, /\.cw-compare-pane\.drop-target/);
+  assert.match(styles, /\.childrenwear-picker-modal/);
+  assert.match(styles, /\.childrenwear-folder-rename/);
+  assert.match(styles, /grid-template-columns: 220px minmax\(0, 1fr\)/);
+  assert.match(styles, /\.childrenwear-library-items \{ grid-template-columns: repeat\(auto-fill, 146px\)/);
+  assert.match(styles, /\.topbar \{[\s\S]*?background: var\(--navy\)/);
+  assert.match(styles, /width: min\(var\(--image-preview-width, 38vw\), 50vw\)/);
+  assert.match(styles, /max-height: 76vh/);
+  assert.match(styles, /\.image-hover-lens/);
+  assert.match(styles, /\.brand-dialog-modal/);
+  assert.ok(logo.size > 1000);
+});

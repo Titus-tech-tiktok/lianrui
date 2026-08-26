@@ -11,23 +11,62 @@ const multer = require('multer');
 const sharp = require('sharp');
 const runtime = require('./runtime');
 const { createAuthService } = require('./auth');
+const { createAlipayRechargeService } = require('./alipay-recharge');
 const { metadataPaths, normalizeSourceMetadata } = require('./core/review-engine');
 const { isSameOrChildPath } = require('./core/path-utils');
 
 const PORT = Math.max(1, Number(process.env.PORT || 8788));
 const HOST = String(process.env.CAISHEN_HOST || '127.0.0.1');
 const auth = createAuthService(runtime.DATA_ROOT);
+const alipayRecharge = createAlipayRechargeService(runtime.DATA_ROOT, runtime.billing);
 const tempRoot = () => path.join(runtime.WORKSPACE_ROOT, 'tmp');
 const assetRoot = () => path.join(runtime.WORKSPACE_ROOT, 'assets');
 const jobRoot = () => path.join(runtime.WORKSPACE_ROOT, 'jobs');
 const thumbnailRoot = () => path.join(runtime.WORKSPACE_ROOT, '.cache', 'thumbnails');
 const LONG_JOB_METHODS = new Set([
   'prepareTemplates', 'generateFree', 'generateTask', 'generateTemplateMaster',
-  'generateTemplates', 'regenerateTemplate'
+  'generateTemplates', 'regenerateTemplate',
+  'analyzeChildrenwearAssets', 'scanPendingChildrenwearAnalysis',
+  'generateChildrenwearMaster', 'generateChildrenwearModel', 'generateChildrenwearCombination'
 ]);
 const SUPERADMIN_RPC_METHODS = new Set([
   'getApiSettings', 'saveApiSettings', 'testApiSettings', 'testRelayHealth', 'savePromptSetting', 'resetPromptSetting'
 ]);
+const childrenwearAutoAnalysisLastRuns = new Map();
+let childrenwearAutoAnalysisSweepRunning = false;
+
+async function runChildrenwearAutoAnalysisSweep() {
+  if (childrenwearAutoAnalysisSweepRunning) return;
+  childrenwearAutoAnalysisSweepRunning = true;
+  try {
+    const users = await auth.listUsers();
+    const byWorkspace = new Map();
+    for (const user of users) {
+      if (user?.active === false || !user?.workspaceId) continue;
+      const current = byWorkspace.get(user.workspaceId);
+      if (!current || (current.role === 'superadmin' && user.role !== 'superadmin')) byWorkspace.set(user.workspaceId, user);
+    }
+    for (const user of byWorkspace.values()) {
+      await runtime.runWithWorkspace(user.workspaceId, async () => {
+        const config = await runtime.loadConfig();
+        if (config.childrenwearAutoAnalysisEnabled !== true) return;
+        const intervalMinutes = [1, 5, 10, 30, 60].includes(Number(config.childrenwearAutoAnalysisIntervalMinutes))
+          ? Number(config.childrenwearAutoAnalysisIntervalMinutes)
+          : 5;
+        const now = Date.now();
+        const lastRun = childrenwearAutoAnalysisLastRuns.get(user.workspaceId) || 0;
+        if (now - lastRun < intervalMinutes * 60 * 1000) return;
+        childrenwearAutoAnalysisLastRuns.set(user.workspaceId, now);
+        const result = await runtime.scanPendingChildrenwearAnalysis({ includeFailed: false });
+        if (result.total) console.log(`[childrenwear-analysis:${user.workspaceId}] 已并发分析 ${result.analyzed}/${result.total} 张素材`);
+      }, { userRole: user.role || 'member', userId: user.id || '' }).catch(error => {
+        console.warn(`[childrenwear-analysis:${user.workspaceId}] ${error?.message || error}`);
+      });
+    }
+  } finally {
+    childrenwearAutoAnalysisSweepRunning = false;
+  }
+}
 
 function canAccessRpc(user, method) {
   const name = String(method || '');
@@ -214,6 +253,10 @@ function sameTemplateSource(left, right) {
 }
 
 async function buildZipDownloadName(folder) {
+  try {
+    const task = JSON.parse(await fsp.readFile(path.join(folder, 'childrenwear-task.json'), 'utf8'));
+    if (String(task?.taskName || '').trim()) return safeSegment(String(task.taskName).trim(), '童装款式');
+  } catch {}
   const source = await readZipSourceMetadata(folder);
   const templateFolderPath = source.templateFolderPath;
   const templateName = safeSegment(templateFolderPath ? path.basename(templateFolderPath) : path.basename(folder), 'task');
@@ -240,6 +283,34 @@ async function buildZipDownloadName(folder) {
   return `${templateName}-${stamp}-${String(sequence).padStart(2, '0')}`;
 }
 
+function numberedZipImageName(folderName, prefix, index, file) {
+  const extension = path.extname(String(file || '')).toLowerCase() || '.png';
+  return `${folderName}/${prefix}${String(index + 1).padStart(2, '0')}${extension}`;
+}
+
+async function collectChildrenwearDeliveryEntries(root, task) {
+  const candidates = [];
+  if (task.masterPath) candidates.push({ file: task.masterPath, name: numberedZipImageName('平铺图', '平铺图', 0, task.masterPath) });
+  (Array.isArray(task.modelOutputs) ? task.modelOutputs : []).forEach((output, index) => {
+    if (output?.path) candidates.push({ file: output.path, name: numberedZipImageName('模特图', '模特图', index, output.path) });
+  });
+  (Array.isArray(task.combinationOutputs) ? task.combinationOutputs : []).forEach((output, index) => {
+    if (output?.path) candidates.push({ file: output.path, name: numberedZipImageName('多组合SKU图', '多组合SKU', index, output.path) });
+  });
+  const entries = [];
+  const seen = new Set();
+  for (const candidate of candidates) {
+    const file = path.resolve(String(candidate.file || ''));
+    const comparable = normalizedComparablePath(file);
+    if (seen.has(comparable) || !isWithin(root, file)) continue;
+    const stat = await fsp.stat(file).catch(() => null);
+    if (!stat?.isFile()) continue;
+    seen.add(comparable);
+    entries.push({ file, name: candidate.name });
+  }
+  return entries;
+}
+
 async function collectZipEntries(root, folder = root, entries = []) {
   const children = await fsp.readdir(folder, { withFileTypes: true });
   for (const child of children.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN', { numeric: true }))) {
@@ -252,6 +323,10 @@ async function collectZipEntries(root, folder = root, entries = []) {
 
 async function collectZipDownloadEntries(folder) {
   const root = path.resolve(folder);
+  const childrenwearTask = await fsp.readFile(path.join(root, 'childrenwear-task.json'), 'utf8')
+    .then(text => { try { return JSON.parse(text); } catch { return null; } })
+    .catch(() => null);
+  if (childrenwearTask) return collectChildrenwearDeliveryEntries(root, childrenwearTask);
   const files = await collectZipEntries(root);
   let entries = files.map(file => ({
     file,
@@ -287,12 +362,10 @@ async function readZipEntrySource(entry) {
     .toBuffer();
 }
 
-async function createFolderZip(folder) {
-  const root = path.resolve(folder);
+async function createZipFromEntries(entries) {
   const localParts = [];
   const centralParts = [];
   let offset = 0;
-  const entries = await collectZipDownloadEntries(root);
   for (const entry of entries) {
     const file = entry.file;
     const stat = await fsp.stat(file);
@@ -351,6 +424,22 @@ async function createFolderZip(folder) {
   return Buffer.concat([...localParts, ...centralParts, end]);
 }
 
+async function createFolderZip(folder) {
+  return createZipFromEntries(await collectZipDownloadEntries(path.resolve(folder)));
+}
+
+async function createChildrenwearBatchZip(folders) {
+  const unique = [...new Set((folders || []).map(value => path.resolve(String(value || ''))))].slice(0, 30);
+  const entries = [];
+  for (const folder of unique) {
+    const prefix = safeSegment(await buildZipDownloadName(folder), '童装任务');
+    const taskEntries = await collectZipDownloadEntries(folder);
+    taskEntries.forEach(entry => entries.push({ ...entry, name: `${prefix}/${entry.name}` }));
+  }
+  if (!entries.length) throw new Error('选中的任务没有可下载的生成图片');
+  return createZipFromEntries(entries);
+}
+
 function normalizedThumbnailWidth(value) {
   return Math.max(1, Number(value) || 0) <= 480 ? 480 : 1200;
 }
@@ -369,7 +458,7 @@ async function withThumbnailSlot(worker) {
 
 async function createAssetThumbnail(file, requestedWidth = 480) {
   const source = path.resolve(String(file || ''));
-  if (!runtime.isWorkspacePath(source) || !SUPPORTED_IMAGE_EXTENSIONS.has(path.extname(source).toLowerCase())) {
+  if (!(runtime.isWorkspacePath(source) || runtime.isOutputPath(source)) || !SUPPORTED_IMAGE_EXTENSIONS.has(path.extname(source).toLowerCase())) {
     throw new Error('不支持生成此文件的预览图');
   }
   const stat = await fsp.stat(source).catch(() => null);
@@ -469,6 +558,10 @@ function safeConfig(config = {}) {
     categoriesPath: workspacePath(config.categoriesPath, { allowEmpty: true }),
     printsPath: workspacePath(config.printsPath, { allowEmpty: true }),
     detailSetsPath: workspacePath(config.detailSetsPath, { allowEmpty: true }),
+    childrenwearRealAssetsPath: workspacePath(config.childrenwearRealAssetsPath, { allowEmpty: true }),
+    childrenwearReferenceAssetsPath: workspacePath(config.childrenwearReferenceAssetsPath, { allowEmpty: true }),
+    childrenwearModelAssetsPath: workspacePath(config.childrenwearModelAssetsPath, { allowEmpty: true }),
+    childrenwearCombinationAssetsPath: workspacePath(config.childrenwearCombinationAssetsPath, { allowEmpty: true }),
     outputPath
   };
 }
@@ -719,7 +812,15 @@ async function handleFolderUpload(req, res) {
   return res.json({ root: collectionRoot, count: files.length, name: commonRoot || '素材' });
 }
 
-const ASSET_KIND_MAP = Object.freeze({ product: 'product', print: 'print', template: 'template' });
+const ASSET_KIND_MAP = Object.freeze({
+  product: 'product',
+  print: 'print',
+  template: 'template',
+  'childrenwear-real': 'childrenwear-real',
+  'childrenwear-reference': 'childrenwear-reference',
+  'childrenwear-model': 'childrenwear-model',
+  'childrenwear-combination': 'childrenwear-combination'
+});
 const SUPPORTED_IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif', '.tif', '.tiff']);
 
 function assetKind(value) {
@@ -902,6 +1003,7 @@ async function addAssetFiles(kindValue, requestedRoot, files = [], relativePaths
     added.push(await moveAssetFileWithoutOverwrite(file.path, library.root, relativePath));
   }
   if (!added.length) throw new Error('没有可添加的图片文件');
+  runtime.invalidateImageLibraryIndex(library.root);
   return { root: library.root, added: added.length, skipped, paths: added };
 }
 
@@ -941,17 +1043,60 @@ async function deleteAssetFiles(kindValue, requestedRoot, paths = []) {
   if (!Array.isArray(paths) || !paths.length) throw new Error('请先选择需要删除的素材');
   if (paths.length > 500) throw new Error('单次最多删除 500 张图片');
   const library = await assetLibraryRoot(kindValue, requestedRoot);
-  let deleted = 0;
+  const analysisRoleByKind = {
+    'childrenwear-real': 'product',
+    'childrenwear-reference': 'flat_reference',
+    'childrenwear-model': 'model_reference',
+    'childrenwear-combination': 'combination_reference'
+  };
+  const files = [];
   for (const value of [...new Set(paths.map(item => String(item || '').trim()).filter(Boolean))]) {
     const file = path.resolve(value);
     if (!isWithin(library.root, file) || !isWithin(library.kindRoot, file)) throw new Error('存在不属于当前素材库的文件');
     const stat = await fsp.stat(file).catch(() => null);
     if (!stat?.isFile() || !SUPPORTED_IMAGE_EXTENSIONS.has(path.extname(file).toLowerCase())) continue;
+    files.push(file);
+  }
+  if (analysisRoleByKind[library.kind]) {
+    await runtime.invalidateChildrenwearAnalysisPaths(files, analysisRoleByKind[library.kind]);
+  }
+  let deleted = 0;
+  for (const file of files) {
     await removeFileWithRetry(file);
     await removeEmptyAssetParents(path.dirname(file), library.root);
     deleted += 1;
   }
+  runtime.invalidateImageLibraryIndex(library.root);
   return { root: library.root, deleted };
+}
+
+function normalizedAssetFolderName(value) {
+  const name = String(value || '').trim();
+  if (!name) throw new Error('文件夹名称不能为空');
+  if (name === '.' || name === '..' || /[\\/:*?"<>|]/.test(name) || /[. ]$/.test(name)) throw new Error('文件夹名称包含无效字符');
+  if (name.length > 80) throw new Error('文件夹名称最多 80 个字符');
+  return name;
+}
+
+async function renameAssetFolder(kindValue, requestedRoot, folderId, nextNameValue) {
+  const library = await assetLibraryRoot(kindValue, requestedRoot);
+  const id = String(folderId || '');
+  if (!id.startsWith('folder:')) throw new Error('未分类文件不能重命名');
+  const currentName = id.slice('folder:'.length).trim();
+  if (!currentName || currentName.includes('/') || currentName.includes('\\')) throw new Error('文件夹标识无效');
+  const nextName = normalizedAssetFolderName(nextNameValue);
+  const source = path.resolve(library.root, currentName);
+  if (!isWithin(library.root, source)) throw new Error('文件夹不属于当前素材库');
+  const sourceStat = await fsp.stat(source).catch(() => null);
+  if (!sourceStat?.isDirectory()) throw new Error('原文件夹不存在，请刷新后重试');
+  const labelsFile = path.join(library.root, '.caishen-folder-labels.json');
+  const labels = await fsp.readFile(labelsFile, 'utf8')
+    .then(text => { try { return JSON.parse(text); } catch { return {}; } })
+    .catch(() => ({}));
+  labels[id] = nextName;
+  await fsp.writeFile(labelsFile, JSON.stringify(labels, null, 2), 'utf8');
+  runtime.invalidateImageLibraryIndex(library.root);
+  return { root: library.root, folder: id, name: nextName };
 }
 
 const rpc = {
@@ -971,6 +1116,12 @@ const rpc = {
   savePromptSetting: ([id, value]) => runtime.savePromptSetting(id, value),
   resetPromptSetting: ([id]) => runtime.resetPromptSetting(id),
   listImages: ([root, query]) => runtime.scanImages(workspacePath(root, { allowEmpty: true }), String(query || '')),
+  listImageLibrary: ([root, options]) => runtime.scanImageLibraryPage(workspacePath(root, { allowEmpty: true }), options || {}),
+  analyzeChildrenwearAssets: ([payload], context) => runtime.analyzeChildrenwearAssets({
+    ...(payload || {}),
+    paths: [...new Set((payload?.paths || []).map(value => workspacePath(value, { message: '童装素材不属于当前工作区' })))]
+  }, context || {}),
+  scanPendingChildrenwearAnalysis: ([payload], context) => runtime.scanPendingChildrenwearAnalysis(payload || {}, context || {}),
   listTemplateFolders: () => runtime.listTemplateFolders(),
   deleteTemplateFolder: ([folder]) => runtime.deleteTemplateFolder(workspacePath(folder)),
   generateTask: ([task], context) => runtime.generateTask(safeTask(task || {}), context || {}),
@@ -980,6 +1131,35 @@ const rpc = {
   prepareTemplates: ([folder]) => runtime.prepareTemplateFolder(workspacePath(folder)),
   saveTemplateRegions: ([payload]) => runtime.saveTemplateRegions({ ...(payload || {}), folder: workspacePath(payload?.folder) }),
   generateFree: ([payload], context) => runtime.generateFree({ ...(payload || {}), sourcePath: workspacePath(payload?.sourcePath) }, context || {}),
+  generateChildrenwearMaster: ([payload], context) => runtime.generateChildrenwearMaster({
+    ...(payload || {}),
+    folder: payload?.folder ? managedPath(payload.folder) : '',
+    realPhotoPath: managedPath(payload?.realPhotoPath, { message: '实拍图不属于当前工作区或任务目录' }),
+    referencePath: managedPath(payload?.referencePath, { message: '参考成品图不属于当前工作区或任务目录' })
+  }, context || {}),
+  generateChildrenwearModel: ([payload], context) => runtime.generateChildrenwearModel({
+    ...(payload || {}),
+    folder: managedPath(payload?.folder, { message: '童装任务不属于当前输出目录' }),
+    modelReferencePath: managedPath(payload?.modelReferencePath, { message: '模特参考图不属于当前工作区或任务目录' })
+  }, context || {}),
+  generateChildrenwearCombination: ([payload], context) => runtime.generateChildrenwearCombination({
+    ...(payload || {}),
+    folder: payload?.folder ? managedPath(payload.folder, { message: '组合图任务不属于当前输出目录' }) : '',
+    combinationReferencePath: managedPath(payload?.combinationReferencePath, { message: '组合参考图不属于当前工作区或任务目录' }),
+    masterPaths: [...new Set((payload?.masterPaths || []).map(value => managedPath(value, { message: '母版图不属于当前输出目录' })))]
+  }, context || {}),
+  listChildrenwearTasks: () => runtime.listChildrenwearTasks(),
+  renameChildrenwearTask: ([payload]) => runtime.renameChildrenwearTask({
+    ...(payload || {}),
+    folder: managedPath(payload?.folder, { message: '款式任务不属于当前输出目录' })
+  }),
+  deleteChildrenwearTasks: ([folders]) => runtime.deleteChildrenwearTasks(
+    [...new Set((folders || []).map(value => managedPath(value, { message: '款式任务不属于当前输出目录' })))]
+  ),
+  approveChildrenwearOutput: ([payload]) => runtime.approveChildrenwearOutput({
+    ...(payload || {}),
+    folder: managedPath(payload?.folder, { message: '童装任务不属于当前输出目录' })
+  }),
   listReviews: () => runtime.reviewFolders(),
   approveReview: ([folder]) => runtime.approveReviewFolder(managedPath(folder)),
   setReviewStatus: ([payload]) => runtime.setTemplateManualStatus({ ...(payload || {}), folder: managedPath(payload?.folder) }),
@@ -1083,7 +1263,7 @@ async function startServer() {
 
   app.post('/api/auth/password', async (req, res) => {
     try {
-      const user = await auth.changeOwnPassword(req.user.id, req.body?.currentPassword, req.body?.newPassword);
+      const user = await auth.changeOwnPassword(req.user.id, req.body?.currentPassword, req.body?.newPassword, req.body?.requestId);
       return res.json({ data: user });
     } catch (error) {
       return res.status(400).json({ error: error?.message || String(error) });
@@ -1160,6 +1340,77 @@ async function startServer() {
     } catch (error) {
       return res.status(400).json({ error: error?.message || String(error) });
     }
+  });
+
+  app.get('/api/alipay/config', async (req, res) => {
+    if (req.user.role !== 'admin' && !isSuperAdmin(req.user)) return res.status(403).json({ error: '当前账号不能使用 Alipay' });
+    try {
+      const [settings, relayChoices] = await Promise.all([alipayRecharge.getSettings(), runtime.loadRelayChoices(true)]);
+      return res.json({ data: { ...settings, qrUrl: settings.qrAvailable ? '/api/alipay/qr' : '', activeServiceId: relayChoices.activeRelayId, services: relayChoices.relays.map(relay => ({ id: relay.id, name: relay.name, description: relay.description })) } });
+    } catch (error) { return res.status(400).json({ error: error?.message || String(error) }); }
+  });
+
+  app.get('/api/alipay/qr', async (_req, res) => {
+    const settings = await alipayRecharge.getSettings();
+    if (!settings.qrAvailable) return res.status(404).json({ error: '收款码尚未配置' });
+    return res.sendFile(alipayRecharge.qrFile);
+  });
+
+  app.get('/api/alipay/recharges', async (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: '当前账号不能提交充值核验' });
+    return res.json({ data: await alipayRecharge.listMine(req.user.id) });
+  });
+
+  app.post('/api/alipay/recharges', async (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ error: '当前账号不能提交充值核验' });
+    try {
+      const relayChoices = await runtime.loadRelayChoices(true);
+      const relay = relayChoices.relays.find(item => item.id === String(req.body?.serviceId || '').trim());
+      if (!req.body?.serviceId) throw new Error('请选择充值到账账户');
+      if (!relay) throw new Error('当前服务暂不可用');
+      const order = await alipayRecharge.createOrder(req.body || {}, { userId: req.user.id, workspaceId: req.user.workspaceId, username: req.user.username, displayName: req.user.displayName, relayId: relay.id, relayName: relay.name });
+      return res.status(201).json({ data: order });
+    } catch (error) { return res.status(400).json({ error: error?.message || String(error) }); }
+  });
+
+  app.get('/api/alipay/settings', async (req, res) => {
+    if (!isSuperAdmin(req.user)) return res.status(403).json({ error: '无权查看 Alipay 配置' });
+    return res.json({ data: await alipayRecharge.getSettings() });
+  });
+  app.put('/api/alipay/settings', async (req, res) => {
+    if (!isSuperAdmin(req.user)) return res.status(403).json({ error: '无权修改 Alipay 配置' });
+    try { return res.json({ data: await alipayRecharge.saveSettings(req.body || {}) }); }
+    catch (error) { return res.status(400).json({ error: error?.message || String(error) }); }
+  });
+  app.post('/api/alipay/settings/qr', (req, res, next) => {
+    if (!isSuperAdmin(req.user)) return res.status(403).json({ error: '无权修改 Alipay 配置' });
+    return next();
+  }, upload.single('qr'), async (req, res) => {
+    if (!req.file?.path) return res.status(400).json({ error: '请选择支付宝收款码图片' });
+    const temporary = `${alipayRecharge.qrFile}.${process.pid}.tmp.png`;
+    try {
+      await fsp.mkdir(path.dirname(alipayRecharge.qrFile), { recursive: true });
+      await sharp(req.file.path, { failOn: 'error', limitInputPixels: 40_000_000 }).rotate().resize({ width: 1400, height: 1400, fit: 'inside', withoutEnlargement: true }).png().toFile(temporary);
+      await fsp.rename(temporary, alipayRecharge.qrFile);
+      return res.json({ data: await alipayRecharge.getSettings() });
+    } catch {
+      await fsp.rm(temporary, { force: true }).catch(() => {});
+      return res.status(400).json({ error: '收款码图片无法识别，请使用 JPG、PNG 或 WebP 图片' });
+    } finally { await fsp.rm(req.file.path, { force: true }).catch(() => {}); }
+  });
+  app.get('/api/alipay/review', async (req, res) => {
+    if (!isSuperAdmin(req.user)) return res.status(403).json({ error: '无权查看充值核验记录' });
+    return res.json({ data: await alipayRecharge.listReview() });
+  });
+  app.post('/api/alipay/recharges/:id/approve', async (req, res) => {
+    if (!isSuperAdmin(req.user)) return res.status(403).json({ error: '无权处理充值核验' });
+    try { return res.json({ data: await alipayRecharge.approve(req.params.id, req.body || {}, req.user.id) }); }
+    catch (error) { return res.status(400).json({ error: error?.message || String(error) }); }
+  });
+  app.post('/api/alipay/recharges/:id/reject', async (req, res) => {
+    if (!isSuperAdmin(req.user)) return res.status(403).json({ error: '无权处理充值核验' });
+    try { return res.json({ data: await alipayRecharge.reject(req.params.id, req.body?.reason) }); }
+    catch (error) { return res.status(400).json({ error: error?.message || String(error) }); }
   });
 
   app.get('/api/billing/me', async (req, res) => {
@@ -1521,6 +1772,32 @@ async function startServer() {
     } catch (error) { next(error); }
   });
 
+  app.get('/api/billing/detail', async (req, res) => {
+    try {
+      const allUsers = await auth.listUsers();
+      const visibleUsers = isTeamAdmin(req.user) ? billingVisibleUsersForActor(allUsers, req.user) : allUsers.filter(user => user.id === req.user.id);
+      const requestedUserId = String(req.query.userId || (isTeamAdmin(req.user) ? 'team' : req.user.id));
+      const teamView = requestedUserId === 'team';
+      if (teamView && !isTeamAdmin(req.user)) return res.status(403).json({ error: '不能查看全团队费用明细' });
+      const target = teamView ? null : visibleUsers.find(user => user.id === requestedUserId);
+      if (!teamView && !target) return res.status(403).json({ error: '不能查看该账号的费用明细' });
+      const relayChoices = await runtime.loadRelayChoices(true);
+      const requestedRelayId = String(req.query.relayId || 'all');
+      const relay = relayChoices.relays.find(item => item.id === requestedRelayId);
+      if (requestedRelayId !== 'all' && !relay) return res.status(400).json({ error: '服务账户不存在或不可用' });
+      const reportUsers = teamView ? visibleUsers : [target];
+      const report = await runtime.billing.getLedgerReport(new Map(reportUsers.map(user => [user.workspaceId, user])), { relayId: requestedRelayId === 'all' ? '' : requestedRelayId, range: String(req.query.range || 'today'), startDate: req.query.startDate, endDate: req.query.endDate, limit: 500 });
+      const data = { ...report, transactions: report.transactions.map(({ operatorUserId, onceKey, ...entry }) => entry), relays: relayChoices.relays, activeRelayId: relayChoices.activeRelayId, relayId: requestedRelayId, viewedUser: teamView ? { id: 'team', username: '', displayName: '全团队', role: 'team' } : { id: target.id, username: target.username, displayName: target.displayName, role: target.role }, users: visibleUsers.map(user => ({ id: user.id, username: user.username, displayName: user.displayName, role: user.role, workspaceId: user.workspaceId })) };
+      return res.json({ data });
+    } catch (error) { return res.status(400).json({ error: error?.message || String(error) }); }
+  });
+
+  app.patch('/api/assets/folders/:kind', async (req, res, next) => {
+    try {
+      return res.json({ data: await renameAssetFolder(req.params.kind, req.body?.root, req.body?.folder, req.body?.name) });
+    } catch (error) { next(error); }
+  });
+
   app.post('/api/upload/folder/:kind', upload.array('files', 10000), (req, res, next) => {
     handleFolderUpload(req, res).catch(next);
   });
@@ -1569,6 +1846,25 @@ async function startServer() {
     }
   });
 
+  app.post('/api/zip/childrenwear-batch', async (req, res, next) => {
+    try {
+      const requested = Array.isArray(req.body?.folders) ? req.body.folders : [];
+      if (!requested.length) return res.status(400).json({ error: '请先选择需要下载的款式任务' });
+      if (requested.length > 30) return res.status(400).json({ error: '单次最多批量下载 30 个款式任务' });
+      const folders = [...new Set(requested.map(folder => managedPath(folder, { message: '存在不属于当前输出目录的任务' })))];
+      const archive = await createChildrenwearBatchZip(folders);
+      const stamp = zipDateStamp('', new Date());
+      res.set({
+        'Content-Type': 'application/zip',
+        'Content-Disposition': zipAttachmentName(`童装任务${stamp}-${String(folders.length).padStart(3, '0')}款`),
+        'Cache-Control': 'private, no-cache'
+      });
+      return res.send(archive);
+    } catch (error) {
+      return next(error);
+    }
+  });
+
   app.get('/api/thumbnails/:token', async (req, res) => {
     const file = decodeFileToken(req.params.token);
     const stat = file ? await fsp.stat(file).catch(() => null) : null;
@@ -1600,7 +1896,7 @@ async function startServer() {
       const href = entry.isDirectory() ? `/api/browse?path=${token}` : `${fileUrl(target)}?download=1`;
       return `<li><a href="${href}">${entry.isDirectory() ? '文件夹' : '文件'} · ${escape(entry.name)}</a></li>`;
     }).join('');
-    res.type('html').send(`<!doctype html><meta charset="utf-8"><title>任务文件</title><style>body{font:16px system-ui;max-width:900px;margin:48px auto;padding:0 24px}li{margin:12px 0}a{color:#174b3a}</style><h1>${escape(path.basename(folder))}</h1><ul>${items}</ul>`);
+    res.type('html').send(`<!doctype html><meta charset="utf-8"><title>多嘻噜卡科技</title><style>body{font:16px system-ui;max-width:900px;margin:48px auto;padding:0 24px}li{margin:12px 0}a{color:#174b3a}</style><p>多嘻噜卡科技</p><h1>${escape(path.basename(folder))}</h1><ul>${items}</ul>`);
   });
 
   const webDist = path.resolve(__dirname, '../../web/dist');
@@ -1618,12 +1914,15 @@ async function startServer() {
   });
 
   const server = app.listen(PORT, HOST, () => {
-    console.log(`财神测款机 Web 已启动：http://${HOST}:${PORT}`);
+    console.log(`多嘻噜卡科技 Web 已启动：http://${HOST}:${PORT}`);
     for (const user of existingUsers) {
       void runtime.runWithWorkspace(user.workspaceId, () => pruneThumbnailCache())
         .catch(error => console.warn(`[thumbnail-cache] ${error?.message || error}`));
     }
   });
+  const analysisSweepTimer = setInterval(() => { void runChildrenwearAutoAnalysisSweep(); }, 30_000);
+  analysisSweepTimer.unref?.();
+  server.once('close', () => clearInterval(analysisSweepTimer));
   return server;
 }
 
@@ -1637,12 +1936,14 @@ module.exports = {
   buildZipDownloadName,
   canAccessRpc,
   collectZipDownloadEntries,
+  createChildrenwearBatchZip,
   createFolderZip,
   createAssetThumbnail,
   decodeFileToken,
   deleteAssetFiles,
   isWithin,
   normalizedThumbnailWidth,
+  renameAssetFolder,
   safeRelative,
   startServer,
   UPLOAD_FILE_LIMIT_MB,

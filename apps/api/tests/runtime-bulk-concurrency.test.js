@@ -16,3 +16,18 @@ test('all image generation uses the shared global concurrency settings', () => {
     minStartIntervalMs: 125
   });
 });
+
+test('AI asset analysis follows initial concurrency and caps at 500 files', () => {
+  assert.equal(runtime.childrenwearAnalysisConcurrencyLimit(900, {
+    imageInitialConcurrency: 80,
+    imageMaxConcurrency: 20000
+  }), 80);
+  assert.equal(runtime.childrenwearAnalysisConcurrencyLimit(900, {
+    imageInitialConcurrency: 800,
+    imageMaxConcurrency: 20000
+  }), 500);
+  assert.equal(runtime.childrenwearAnalysisConcurrencyLimit(37, {
+    imageInitialConcurrency: 500,
+    imageMaxConcurrency: 20000
+  }), 37);
+});

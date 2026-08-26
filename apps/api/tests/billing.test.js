@@ -278,12 +278,17 @@ test('reseller accounting recognizes image revenue and relay-specific upstream c
     ['super-workspace', { role: 'superadmin', username: 'root' }]
   ]);
   await billing.saveRules({ enabled: true });
-  await billing.adjustBalance('member-workspace', RELAY_ID, 14_286);
+  await billing.adjustBalance('member-workspace', RELAY_ID, 21_429);
   await billing.adjustBalance('super-workspace', RELAY_ID, 14_286);
   await billing.commit(await billing.reserve('member-workspace', 'image', {
     relayId: RELAY_ID,
     amountMinor: 14_286,
     description: '客户成功生图'
+  }));
+  await billing.commit(await billing.reserve('member-workspace', 'llm', {
+    relayId: RELAY_ID,
+    amountMinor: 7_143,
+    description: '客户素材 AI 分析'
   }));
   await billing.commit(await billing.reserve('super-workspace', 'image', {
     relayId: RELAY_ID,
@@ -295,18 +300,23 @@ test('reseller accounting recognizes image revenue and relay-specific upstream c
     id: RELAY_ID,
     name: '一号站',
     customerCnyPerUsd: 7,
-    upstreamImageCostCnyMicro: 20_000
+    upstreamImageCostCnyMicro: 20_000,
+    upstreamAnalysisCostCnyMicro: 10_000
   }], users);
 
   assert.equal(report.complete, true);
   assert.equal(report.relays[0].successfulImages, 1);
-  assert.equal(report.relays[0].customerRechargeCnyMinor, 10);
+  assert.equal(report.relays[0].successfulAnalyses, 1);
+  assert.equal(report.relays[0].customerRechargeCnyMinor, 15);
   assert.equal(report.relays[0].customerBalanceCnyMinor, 0);
-  assert.equal(report.relays[0].customerTopupCnyMinor, 10);
-  assert.equal(report.relays[0].confirmedRevenueCnyMinor, 10);
-  assert.equal(report.relays[0].upstreamCostCnyMinor, 2);
-  assert.equal(report.relays[0].grossProfitCnyMinor, 8);
-  assert.equal(report.totals.grossProfitCnyMinor, 8);
+  assert.equal(report.relays[0].customerTopupCnyMinor, 15);
+  assert.equal(report.relays[0].confirmedRevenueCnyMinor, 15);
+  assert.equal(report.relays[0].upstreamImageCostCnyMinor, 2);
+  assert.equal(report.relays[0].upstreamAnalysisCostCnyMinor, 1);
+  assert.equal(report.relays[0].upstreamCostCnyMinor, 3);
+  assert.equal(report.relays[0].grossProfitCnyMinor, 12);
+  assert.equal(report.totals.successfulAnalyses, 1);
+  assert.equal(report.totals.grossProfitCnyMinor, 12);
 });
 
 test('reseller accounting applies one Beijing date range and relay filter to revenue and cost', async t => {
@@ -338,6 +348,32 @@ test('reseller accounting applies one Beijing date range and relay filter to rev
   assert.equal(report.totals.confirmedRevenueCnyMinor, 10);
   assert.equal(report.totals.upstreamCostCnyMinor, 2);
   assert.deepEqual(report.daily.map(point => [point.date, point.relayId]), [['2026-08-10', RELAY_ID]]);
+});
+
+test('zero-priced AI analysis still records configured upstream cost', async t => {
+  const { root, billing } = await fixture();
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const users = new Map([['member-workspace', { role: 'member', username: 'seller' }]]);
+  await billing.saveRules({ enabled: true });
+  const reservation = await billing.reserve('member-workspace', 'llm', {
+    relayId: RELAY_ID,
+    amountMinMinor: 0,
+    amountMaxMinor: 0,
+    recordUsage: true,
+    description: '免费素材 AI 分析'
+  });
+  await billing.commit(reservation);
+  const report = await billing.getAccountingReport([{
+    id: RELAY_ID,
+    name: '一号站',
+    customerCnyPerUsd: 7,
+    upstreamImageCostCnyMicro: 20_000,
+    upstreamAnalysisCostCnyMicro: 10_000
+  }], users);
+  assert.equal(report.relays[0].successfulAnalyses, 1);
+  assert.equal(report.relays[0].confirmedRevenueCnyMinor, 0);
+  assert.equal(report.relays[0].upstreamAnalysisCostCnyMinor, 1);
+  assert.equal(report.relays[0].grossProfitCnyMinor, -1);
 });
 
 test('global stats current month excludes entries before Beijing month start', async t => {

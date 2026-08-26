@@ -45,9 +45,12 @@ const {
 const {
   definitionById: promptDefinitionById,
   normalizePromptValue,
-  publicPromptSettings,
-  renderPromptTemplate
+  publicPromptSettings
 } = require('./core/prompt-settings');
+const {
+  TEMPLATE_MASTER_PROMPT,
+  TEMPLATE_PRINT_PROMPT
+} = require('./core/prompts');
 const { isSameOrChildPath } = require('./core/path-utils');
 const {
   AdaptiveImageScheduler,
@@ -56,6 +59,21 @@ const {
   parseRetryAfterMs
 } = require('./core/adaptive-image-scheduler');
 const { createImageReferenceCache } = require('./core/image-reference-cache');
+const {
+  buildChildrenwearCombinationPrompt,
+  buildChildrenwearMasterPrompt,
+  buildChildrenwearModelPrompt,
+  childrenwearPieceCount,
+  createChildrenwearCombination,
+  createChildrenwearEvidence
+} = require('./core/childrenwear');
+const {
+  ANALYSIS_SCHEMA_VERSION,
+  ROLE_BY_LIBRARY_KEY,
+  buildChildrenwearAssetAnalysisPrompt,
+  normalizeAnalysisRole,
+  normalizeChildrenwearAssetAnalysis
+} = require('./core/childrenwear-analysis');
 const {
   createTemplateEditMask,
   createTemplateRegionAnnotation,
@@ -76,6 +94,8 @@ const DEFAULT_WORKSPACE_ID = String(process.env.CAISHEN_WORKSPACE_ID || 'local')
 const workspaceContext = new AsyncLocalStorage();
 const configuredOutputRoots = new Map();
 const templateRegenerationQueues = new Map();
+const childrenwearAnalysisBatchQueues = new Map();
+const childrenwearTaskUpdateQueues = new Map();
 
 function waitForTemplateRegenerationTurn(previous, signal) {
   if (!signal) return previous;
@@ -168,6 +188,7 @@ const ENV_API = Object.freeze({
   key: String(process.env.CAISHEN_API_KEY || '').trim(),
   imageKey: String(process.env.CAISHEN_IMAGE_API_KEY || process.env.CAISHEN_API_KEY || '').trim(),
   imageModel: String(process.env.CAISHEN_IMAGE_MODEL || 'gpt-image-2').trim(),
+  analysisModel: String(process.env.CAISHEN_ANALYSIS_MODEL || 'gpt-5-6').trim(),
   responseFormat: String(process.env.CAISHEN_IMAGE_RESPONSE_FORMAT || 'url').trim(),
   requestTimeoutSeconds: Number(process.env.CAISHEN_API_TIMEOUT_SECONDS || 300)
 });
@@ -232,6 +253,9 @@ function getImageSchedulerSnapshot() {
 let mainWindow;
 let promptSettingsWriteChain = Promise.resolve();
 let apiSettingsWriteChain = Promise.resolve();
+const childrenwearAnalysisIndexWriteChains = new Map();
+const childrenwearAnalysisInFlight = new Map();
+const childrenwearAnalysisPathEpochs = new Map();
 
 function localDateParts(date = new Date()) {
   const pad = value => String(value).padStart(2, '0');
@@ -265,6 +289,18 @@ function promptSettingsFile() {
 
 function apiSettingsFile() {
   return path.join(SYSTEM_STATE_ROOT, 'api-settings.json');
+}
+
+function childrenwearAnalysisRoot() {
+  return path.join(currentUserDataRoot(), 'childrenwear-analysis');
+}
+
+function childrenwearAnalysisIndexFile() {
+  return path.join(childrenwearAnalysisRoot(), 'asset-index.json');
+}
+
+function childrenwearAnalysisCacheFile(role, contentHash) {
+  return path.join(childrenwearAnalysisRoot(), 'cache', `${role}-${contentHash}.json`);
 }
 
 function legacyAdminSettingFile(name) {
@@ -346,6 +382,14 @@ function apiConcurrencyLimit(total = Infinity) {
   const count = Number(total);
   if (!Number.isFinite(count)) return max;
   return Math.min(max, Math.max(1, Math.trunc(count)));
+}
+
+function childrenwearAnalysisConcurrencyLimit(total = Infinity, settings = currentApiSettings()) {
+  const normalized = normalizeImageConcurrencySettings(settings);
+  const configured = Math.min(500, Math.max(1, normalized.imageInitialConcurrency || DEFAULT_IMAGE_API_INITIAL_CONCURRENCY));
+  const count = Number(total);
+  if (!Number.isFinite(count)) return configured;
+  return Math.min(configured, Math.max(1, Math.trunc(count)));
 }
 
 
@@ -438,6 +482,7 @@ function legacyRelayFromSettings(saved = {}) {
     baseUrl,
     imageKey,
     imageModel: saved.imageModel || legacyPackage.modelId || ENV_API.imageModel,
+    analysisModel: saved.analysisModel || ENV_API.analysisModel,
     imagePriceMinMinor: legacyPackage.imagePriceMinMinor ?? legacyPackage.imagePriceMinor,
     imagePriceMaxMinor: legacyPackage.imagePriceMaxMinor ?? legacyPackage.imagePriceMinor
   };
@@ -456,6 +501,7 @@ function normalizeRelays(value, currentSettings = {}) {
     const imageKeyInput = String(item?.imageApiKey ?? item?.imageKey ?? item?.apiKey ?? '').trim();
     const baseUrl = normalizeApiBaseUrl(item?.baseUrl || current.baseUrl || '');
     const imageRange = relayMinorRange(item, current, 'image');
+    const llmRange = relayMinorRange(item, current, 'llm');
     return [{
       id,
       name: normalizeRelayText(item?.name, current.name || `中转站 ${index + 1}`, 48),
@@ -464,12 +510,16 @@ function normalizeRelays(value, currentSettings = {}) {
       baseUrl,
       imageKey: item?.clearImageKey === true ? '' : imageKeyInput || current.imageKey || '',
       imageModel: normalizeOptionalModelName(item?.imageModel ?? current.imageModel ?? ''),
+      analysisModel: normalizeOptionalModelName(item?.analysisModel ?? current.analysisModel ?? ENV_API.analysisModel),
       healthPath: normalizeRelayPath(item?.healthPath || current.healthPath, '/models'),
       modelsPath: normalizeRelayPath(item?.modelsPath || current.modelsPath, '/models'),
       imagePriceMinMinor: imageRange.min,
       imagePriceMaxMinor: imageRange.max,
+      llmPriceMinMinor: llmRange.min,
+      llmPriceMaxMinor: llmRange.max,
       customerCnyPerUsd: normalizeRelayExchangeRate(item?.customerCnyPerUsd, current.customerCnyPerUsd ?? 7),
-      upstreamImageCostCnyMicro: normalizeRelayMinor(item?.upstreamImageCostCnyMicro, current.upstreamImageCostCnyMicro ?? 0)
+      upstreamImageCostCnyMicro: normalizeRelayMinor(item?.upstreamImageCostCnyMicro, current.upstreamImageCostCnyMicro ?? 0),
+      upstreamAnalysisCostCnyMicro: normalizeRelayMinor(item?.upstreamAnalysisCostCnyMicro, current.upstreamAnalysisCostCnyMicro ?? 0)
     }];
   });
 }
@@ -490,7 +540,8 @@ function publicRelayChoice(item) {
     description: item.description,
     enabled: item.enabled !== false,
     imagePriceMinMinor: item.imagePriceMinMinor,
-    imagePriceMaxMinor: item.imagePriceMaxMinor
+    imagePriceMaxMinor: item.imagePriceMaxMinor,
+    analysisModel: item.analysisModel
   };
 }
 
@@ -509,7 +560,8 @@ function withActiveRelay(settings = {}) {
     activeRelay,
     baseUrl: activeRelay?.baseUrl || '',
     imageKey: activeRelay?.imageKey || '',
-    imageModel: activeRelay?.imageModel || ''
+    imageModel: activeRelay?.imageModel || '',
+    analysisModel: activeRelay?.analysisModel || ENV_API.analysisModel
   };
 }
 
@@ -657,6 +709,7 @@ async function activeApiConfig() {
     baseUrl: relay.baseUrl,
     imageKey: relay.imageKey,
     imageModel: relay.imageModel,
+    analysisModel: relay.analysisModel || ENV_API.analysisModel,
     activeRelay: relay
   };
   if (!api.baseUrl) throw new Error('请先配置生图 API 地址');
@@ -668,9 +721,8 @@ function applyRelayPrompt(prompt) {
   return String(prompt || '');
 }
 
-function relayBillingRange(relay) {
+function relayBillingRange(relay, prefix = 'image') {
   if (!relay) return {};
-  const prefix = 'image';
   if (relay[`${prefix}PriceMinMinor`] == null && relay[`${prefix}PriceMaxMinor`] == null) return {};
   const min = normalizeRelayMinor(relay[`${prefix}PriceMinMinor`], 0);
   const max = normalizeRelayMinor(relay[`${prefix}PriceMaxMinor`], min);
@@ -1016,11 +1068,33 @@ async function canAdminViewPromptSettings() {
   return (await readPrivateApiSettings()).allowAdminPromptView === true;
 }
 
-async function getPromptValue(id) {
+async function buildConfiguredChildrenwearPrompt(id, dynamicContract) {
   const settings = await loadPromptSettings();
   const prompt = settings.prompts.find(item => item.id === id);
   if (!prompt) throw new Error(`未知提示词：${id}`);
-  return prompt.value;
+  const administratorGuidance = prompt.customized ? String(prompt.value || '').trim() : '';
+  return [
+    administratorGuidance ? `ADMINISTRATOR_CONFIGURED_GUIDANCE\n${administratorGuidance}` : '',
+    'SYSTEM_DYNAMIC_EXECUTION_CONTRACT\nThe following task-specific image roles, product facts, counts and reference indices are mandatory and override any conflicting administrator guidance.',
+    String(dynamicContract || '').trim()
+  ].filter(Boolean).join('\n\n');
+}
+
+const CHILDRENWEAR_ANALYSIS_PROMPT_ID_BY_ROLE = Object.freeze({
+  product: 'childrenwearProductAnalysis',
+  flat_reference: 'childrenwearFlatReferenceAnalysis',
+  model_reference: 'childrenwearModelReferenceAnalysis',
+  combination_reference: 'childrenwearCombinationReferenceAnalysis'
+});
+
+async function configuredChildrenwearAnalysisPrompt(roleValue) {
+  const role = normalizeAnalysisRole(roleValue);
+  const id = CHILDRENWEAR_ANALYSIS_PROMPT_ID_BY_ROLE[role];
+  const settings = await loadPromptSettings();
+  const prompt = settings.prompts.find(item => item.id === id);
+  const value = String(prompt?.value || '').trim();
+  if (!value) throw new Error(`“${prompt?.title || id}”提示词不能为空`);
+  return value;
 }
 
 async function savePromptSetting(id, value) {
@@ -1064,6 +1138,12 @@ function defaultConfig() {
     categoriesPath: '',
     printsPath: '',
     detailSetsPath: '',
+    childrenwearRealAssetsPath: '',
+    childrenwearReferenceAssetsPath: '',
+    childrenwearModelAssetsPath: '',
+    childrenwearCombinationAssetsPath: '',
+    childrenwearAutoAnalysisEnabled: false,
+    childrenwearAutoAnalysisIntervalMinutes: 5,
     outputPath: currentDefaultOutputRoot(),
     imageSize: '1024x1024',
     imageQuality: 'auto',
@@ -1090,6 +1170,14 @@ async function saveConfig(next) {
     categoriesPath: String(next.categoriesPath || '').trim(),
     printsPath: String(next.printsPath || '').trim(),
     detailSetsPath: String(next.detailSetsPath || '').trim(),
+    childrenwearRealAssetsPath: String(next.childrenwearRealAssetsPath || '').trim(),
+    childrenwearReferenceAssetsPath: String(next.childrenwearReferenceAssetsPath || '').trim(),
+    childrenwearModelAssetsPath: String(next.childrenwearModelAssetsPath || '').trim(),
+    childrenwearCombinationAssetsPath: String(next.childrenwearCombinationAssetsPath || '').trim(),
+    childrenwearAutoAnalysisEnabled: next.childrenwearAutoAnalysisEnabled === true,
+    childrenwearAutoAnalysisIntervalMinutes: [1, 5, 10, 30, 60].includes(Number(next.childrenwearAutoAnalysisIntervalMinutes))
+      ? Number(next.childrenwearAutoAnalysisIntervalMinutes)
+      : 5,
     outputPath: String(next.outputPath || currentDefaultOutputRoot()).trim(),
     imageSize: String(next.imageSize || '1024x1024'),
     imageQuality: String(next.imageQuality || 'auto'),
@@ -1183,6 +1271,105 @@ async function scanImages(root, query = '', limit = 10000) {
   return files;
 }
 
+const imageLibraryIndexCache = new Map();
+
+function invalidateImageLibraryIndex(root) {
+  if (!root) return;
+  imageLibraryIndexCache.delete(path.resolve(root).toLocaleLowerCase('en-US'));
+}
+
+async function imageLibraryIndex(root) {
+  const resolvedRoot = path.resolve(root);
+  const cacheKey = resolvedRoot.toLocaleLowerCase('en-US');
+  const cached = imageLibraryIndexCache.get(cacheKey);
+  if (cached && Date.now() - cached.createdAt < 30_000) return cached.items;
+  const items = [];
+
+  async function walk(directory, depth) {
+    if (depth > 24) return;
+    const entries = await fsp.readdir(directory, { withFileTypes: true }).catch(() => []);
+    entries.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN', { numeric: true }));
+    for (const entry of entries) {
+      if (entry.name.startsWith('.')) continue;
+      const fullPath = path.join(directory, entry.name);
+      if (entry.isDirectory()) await walk(fullPath, depth + 1);
+      else if (entry.isFile() && isImagePath(fullPath)) {
+        const relativeFolder = path.relative(resolvedRoot, directory);
+        const topFolder = relativeFolder ? relativeFolder.split(path.sep)[0] : '';
+        items.push({
+          path: fullPath,
+          name: entry.name,
+          folder: relativeFolder || '根目录',
+          groupId: topFolder ? `folder:${topFolder}` : 'root',
+          groupName: topFolder || '未分类文件'
+        });
+      }
+    }
+  }
+
+  await walk(resolvedRoot, 0);
+  imageLibraryIndexCache.set(cacheKey, { createdAt: Date.now(), items });
+  return items;
+}
+
+async function scanImageLibraryPage(root, options = {}) {
+  if (!root) return { items: [], folders: [], folder: 'root', total: 0, page: 1, pageSize: 48, totalPages: 0 };
+  const rootStat = await fsp.stat(root).catch(() => null);
+  if (!rootStat?.isDirectory()) return { items: [], folders: [], folder: 'root', total: 0, page: 1, pageSize: 48, totalPages: 0 };
+  const pageSize = Math.max(12, Math.min(120, Math.trunc(Number(options.pageSize) || 48)));
+  const requestedPage = Math.max(1, Math.trunc(Number(options.page) || 1));
+  const requestedGroupId = String(options.folder || 'auto');
+  const query = String(options.query || '').trim().toLocaleLowerCase('zh-CN');
+  let indexed = await imageLibraryIndex(root);
+  const analysisRole = options.analysisRole ? normalizeAnalysisRole(options.analysisRole) : '';
+  const analysisIndex = analysisRole ? await readChildrenwearAnalysisIndex() : null;
+  if (analysisRole && options.analysisOnly === true) {
+    const checked = await Promise.all(indexed.map(async item => ({
+      item,
+      status: await childrenwearAnalysisStatusForPath(item.path, analysisRole, analysisIndex)
+    })));
+    indexed = checked.filter(entry => entry.status.analyzed).map(entry => entry.item);
+  }
+  const folderLabels = await fsp.readFile(path.join(root, '.caishen-folder-labels.json'), 'utf8')
+    .then(text => { try { return JSON.parse(text); } catch { return {}; } })
+    .catch(() => ({}));
+  const counts = new Map();
+  for (const item of indexed) counts.set(item.groupId, (counts.get(item.groupId) || 0) + 1);
+  const folders = [...counts.entries()].map(([id, count]) => {
+    const source = indexed.find(item => item.groupId === id);
+    return { id, name: String(folderLabels[id] || source?.groupName || id), count };
+  }).sort((left, right) => {
+    if (left.id === 'root') return -1;
+    if (right.id === 'root') return 1;
+    return left.name.localeCompare(right.name, 'zh-CN', { numeric: true });
+  });
+  const groupId = options.strictFolder === true && requestedGroupId && requestedGroupId !== 'auto'
+    ? requestedGroupId
+    : counts.has(requestedGroupId)
+    ? requestedGroupId
+    : (counts.has('root') ? 'root' : folders[0]?.id || 'root');
+  const filtered = indexed.filter(item => item.groupId === groupId
+    && (!query || `${item.folder}/${item.name}`.toLocaleLowerCase('zh-CN').includes(query)));
+  const total = filtered.length;
+  const totalPages = total ? Math.ceil(total / pageSize) : 0;
+  const page = totalPages ? Math.min(requestedPage, totalPages) : 1;
+  const selected = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const items = await Promise.all(selected.map(async item => {
+    const stat = await fsp.stat(item.path).catch(() => null);
+    const version = stat ? `${Math.trunc(stat.mtimeMs)}-${stat.size}` : '1';
+    return {
+      path: item.path,
+      name: item.name,
+      folder: item.folder,
+      url: `${imageUrl(item.path)}?v=${version}`,
+      thumbnailUrl: thumbnailUrl(item.path, 480, version),
+      previewUrl: thumbnailUrl(item.path, 1200, version),
+      ...(analysisRole ? { analysis: await childrenwearAnalysisStatusForPath(item.path, analysisRole, analysisIndex) } : {})
+    };
+  }));
+  return { items, folders, folder: groupId, total, page, pageSize, totalPages };
+}
+
 function imageMimeType(file) {
   const extension = path.extname(file).toLowerCase();
   return extension === '.jpg' || extension === '.jpeg' ? 'image/jpeg'
@@ -1209,10 +1396,431 @@ async function imageAsAnalysisDataUrl(file) {
   return `data:image/jpeg;base64,${bytes.toString('base64')}`;
 }
 
+function childrenwearAnalysisPathKey(file) {
+  return path.resolve(String(file || '')).toLocaleLowerCase('en-US');
+}
+
+function childrenwearAnalysisEpochKey(file, workspaceId = currentWorkspaceId()) {
+  return `${workspaceId}\u0000${childrenwearAnalysisPathKey(file)}`;
+}
+
+function childrenwearAnalysisPathEpoch(file, workspaceId = currentWorkspaceId()) {
+  return childrenwearAnalysisPathEpochs.get(childrenwearAnalysisEpochKey(file, workspaceId)) || 0;
+}
+
+function invalidateChildrenwearAnalysisPathEpoch(file, workspaceId = currentWorkspaceId()) {
+  const key = childrenwearAnalysisEpochKey(file, workspaceId);
+  const next = (childrenwearAnalysisPathEpochs.get(key) || 0) + 1;
+  childrenwearAnalysisPathEpochs.set(key, next);
+  return next;
+}
+
+async function childrenwearFileFingerprint(file) {
+  const resolved = path.resolve(String(file || ''));
+  const stat = await fsp.stat(resolved).catch(() => null);
+  if (!stat?.isFile() || !isImagePath(resolved)) throw new Error('素材图片不存在或格式不支持');
+  const hash = crypto.createHash('sha256');
+  await new Promise((resolve, reject) => {
+    const stream = fs.createReadStream(resolved);
+    stream.on('data', chunk => hash.update(chunk));
+    stream.once('error', reject);
+    stream.once('end', resolve);
+  });
+  return { path: resolved, size: stat.size, mtimeMs: Math.trunc(stat.mtimeMs), contentHash: hash.digest('hex') };
+}
+
+async function readChildrenwearAnalysisIndex() {
+  const value = await readJsonFile(childrenwearAnalysisIndexFile(), {});
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
+
+async function updateChildrenwearAnalysisIndex(updater) {
+  const workspaceId = currentWorkspaceId();
+  const previous = childrenwearAnalysisIndexWriteChains.get(workspaceId) || Promise.resolve();
+  const operation = previous.then(async () => {
+    const index = await readChildrenwearAnalysisIndex();
+    const result = await updater(index);
+    await writeJsonFile(childrenwearAnalysisIndexFile(), index);
+    return result;
+  });
+  childrenwearAnalysisIndexWriteChains.set(workspaceId, operation.catch(() => {}));
+  return operation;
+}
+
+function childrenwearAnalysisCacheMatches(cached, role, contentHash) {
+  return cached?.schemaVersion === ANALYSIS_SCHEMA_VERSION
+    && cached?.role === role
+    && cached?.contentHash === contentHash
+    && cached?.analysis
+    && typeof cached.analysis === 'object';
+}
+
+async function childrenwearAnalysisFingerprintStillCurrent(expected, epoch, workspaceId = currentWorkspaceId()) {
+  if (childrenwearAnalysisPathEpoch(expected.path, workspaceId) !== epoch) return false;
+  const current = await childrenwearFileFingerprint(expected.path).catch(() => null);
+  return Boolean(current
+    && current.size === expected.size
+    && current.mtimeMs === expected.mtimeMs
+    && current.contentHash === expected.contentHash);
+}
+
+async function invalidateChildrenwearAnalysisPaths(paths = [], roleValue = '') {
+  const workspaceId = currentWorkspaceId();
+  const role = roleValue ? normalizeAnalysisRole(roleValue) : '';
+  const resolvedPaths = [...new Set((paths || [])
+    .map(value => String(value || '').trim())
+    .filter(Boolean)
+    .map(value => path.resolve(value)))];
+  if (!resolvedPaths.length) return { invalidated: 0, cacheDeleted: 0 };
+
+  // Bump the lifecycle first so an already-running request can never write its
+  // result back after the user deletes or replaces this asset.
+  for (const file of resolvedPaths) invalidateChildrenwearAnalysisPathEpoch(file, workspaceId);
+
+  const fingerprints = new Map();
+  await Promise.all(resolvedPaths.map(async file => {
+    const fingerprint = await childrenwearFileFingerprint(file).catch(() => null);
+    if (fingerprint) fingerprints.set(childrenwearAnalysisPathKey(file), fingerprint);
+  }));
+
+  const cacheCandidates = new Map();
+  await updateChildrenwearAnalysisIndex(index => {
+    for (const file of resolvedPaths) {
+      const pathKey = childrenwearAnalysisPathKey(file);
+      const record = index[pathKey];
+      const candidateRole = record?.role || role;
+      const candidateHash = record?.contentHash || fingerprints.get(pathKey)?.contentHash || '';
+      if (candidateRole && candidateHash) cacheCandidates.set(`${candidateRole}\u0000${candidateHash}`, { role: candidateRole, contentHash: candidateHash });
+      delete index[pathKey];
+    }
+  });
+
+  let cacheDeleted = 0;
+  for (const candidate of cacheCandidates.values()) {
+    const cacheFile = childrenwearAnalysisCacheFile(candidate.role, candidate.contentHash);
+    const existed = await fsp.stat(cacheFile).then(stat => stat.isFile()).catch(() => false);
+    await fsp.rm(cacheFile, { force: true }).catch(() => {});
+    if (existed) cacheDeleted += 1;
+  }
+  return { invalidated: resolvedPaths.length, cacheDeleted };
+}
+
+async function removeChildrenwearAnalysisCacheIfUnreferenced(role, contentHash) {
+  const index = await readChildrenwearAnalysisIndex();
+  const referenced = Object.values(index).some(record => record?.role === role && record?.contentHash === contentHash);
+  if (!referenced) await fsp.rm(childrenwearAnalysisCacheFile(role, contentHash), { force: true }).catch(() => {});
+}
+
+function publicChildrenwearAnalysisRecord(record = null) {
+  if (!record) return { status: 'pending', analyzed: false, error: '', analyzedAt: '', summary: '' };
+  return {
+    status: ['analyzing', 'analyzed', 'failed'].includes(record.status) ? record.status : 'pending',
+    analyzed: record.status === 'analyzed',
+    error: String(record.error || ''),
+    analyzedAt: String(record.analyzedAt || ''),
+    summary: String(record.summary || '')
+  };
+}
+
+async function childrenwearAnalysisStatusForPath(file, roleValue, index = null) {
+  const role = normalizeAnalysisRole(roleValue);
+  const resolved = path.resolve(String(file || ''));
+  const stat = await fsp.stat(resolved).catch(() => null);
+  if (!stat?.isFile()) return { status: 'failed', analyzed: false, error: '素材文件不存在', analyzedAt: '', summary: '' };
+  const source = index || await readChildrenwearAnalysisIndex();
+  const record = source[childrenwearAnalysisPathKey(resolved)];
+  if (!record || record.role !== role || Number(record.size) !== stat.size || Number(record.mtimeMs) !== Math.trunc(stat.mtimeMs) || record.schemaVersion !== ANALYSIS_SCHEMA_VERSION) {
+    return { status: 'pending', analyzed: false, error: '', analyzedAt: '', summary: '' };
+  }
+  if (record.status === 'analyzed') {
+    const cached = await readJsonFile(childrenwearAnalysisCacheFile(role, record.contentHash), null);
+    if (!childrenwearAnalysisCacheMatches(cached, role, record.contentHash)) {
+      return { status: 'pending', analyzed: false, error: '', analyzedAt: '', summary: '' };
+    }
+  }
+  return publicChildrenwearAnalysisRecord(record);
+}
+
+function childrenwearAnalysisText(body) {
+  const content = body?.choices?.[0]?.message?.content ?? body?.output_text ?? body?.output?.[0]?.content?.[0]?.text;
+  if (Array.isArray(content)) return content.map(item => item?.text || item?.content || '').join('\n');
+  return String(content || '');
+}
+
+async function requestChildrenwearAssetAnalysis(file, role, options = {}) {
+  const api = await activeApiConfig();
+  const model = String(api.analysisModel || ENV_API.analysisModel).trim();
+  if (!model) throw new Error('请先配置素材分析模型');
+  const reservation = currentActorRole() === 'superadmin' ? null : await billing.reserve(currentWorkspaceId(), 'llm', {
+    relayId: api.activeRelay?.id,
+    relayName: api.activeRelay?.name,
+    modelId: model,
+    ...relayBillingRange(api.activeRelay, 'llm'),
+    ...(relayBillingRange(api.activeRelay, 'llm').amountMinMinor == null ? { amountMinMinor: 0, amountMaxMinor: 0 } : {}),
+    description: '童装素材 AI 分析',
+    reference: path.basename(file),
+    recordUsage: true,
+    onceKey: billingOnceKey('llm:childrenwear-analysis', currentWorkspaceId(), role, options.contentHash || '')
+  });
+  try {
+    const dataUrl = await imageAsAnalysisDataUrl(file);
+    const body = await apiJson(apiEndpoint(api.baseUrl, '/chat/completions'), {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${api.imageKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: String(options.analysisPrompt || buildChildrenwearAssetAnalysisPrompt(role)) },
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Analyze this image now. Return the required JSON object only.' },
+              { type: 'image_url', image_url: { url: dataUrl, detail: 'high' } }
+            ]
+          }
+        ]
+      }),
+      signal: options.signal
+    }, Math.max(60_000, Number(api.requestTimeoutSeconds || 300) * 1000));
+    const analysis = normalizeChildrenwearAssetAnalysis(role, childrenwearAnalysisText(body));
+    if (reservation) await billing.commit(reservation);
+    return { analysis, model, usage: body?.usage || null };
+  } catch (error) {
+    if (reservation) await billing.release(reservation).catch(() => {});
+    throw error;
+  }
+}
+
+async function analyzeChildrenwearAsset(file, roleValue, options = {}) {
+  const role = normalizeAnalysisRole(roleValue);
+  const fingerprint = await childrenwearFileFingerprint(file);
+  const workspaceId = currentWorkspaceId();
+  const lifecycleEpoch = childrenwearAnalysisPathEpoch(fingerprint.path, workspaceId);
+  const cacheFile = childrenwearAnalysisCacheFile(role, fingerprint.contentHash);
+  if (!options.force) {
+    const cached = await readJsonFile(cacheFile, null);
+    if (childrenwearAnalysisCacheMatches(cached, role, fingerprint.contentHash)) {
+      if (!await childrenwearAnalysisFingerprintStillCurrent(fingerprint, lifecycleEpoch, workspaceId)) {
+        throw new Error('素材已删除或替换，本次分析结果已作废');
+      }
+      const recorded = await updateChildrenwearAnalysisIndex(index => {
+        if (childrenwearAnalysisPathEpoch(fingerprint.path, workspaceId) !== lifecycleEpoch) return false;
+        index[childrenwearAnalysisPathKey(fingerprint.path)] = {
+          ...fingerprint,
+          role,
+          status: 'analyzed',
+          schemaVersion: ANALYSIS_SCHEMA_VERSION,
+          model: cached.model || '',
+          summary: String(cached.analysis.summary || '').slice(0, 1000),
+          analyzedAt: cached.analyzedAt || new Date().toISOString(),
+          error: ''
+        };
+        return true;
+      });
+      if (!recorded) throw new Error('素材已删除或替换，本次分析结果已作废');
+      return { path: fingerprint.path, role, reused: true, analysis: cached.analysis };
+    }
+  }
+  const inFlightKey = `${workspaceId}:${role}:${childrenwearAnalysisPathKey(fingerprint.path)}:${lifecycleEpoch}:${fingerprint.contentHash}`;
+  if (childrenwearAnalysisInFlight.has(inFlightKey)) return childrenwearAnalysisInFlight.get(inFlightKey);
+  const operation = (async () => {
+    const markedAnalyzing = await updateChildrenwearAnalysisIndex(index => {
+      if (childrenwearAnalysisPathEpoch(fingerprint.path, workspaceId) !== lifecycleEpoch) return false;
+      index[childrenwearAnalysisPathKey(fingerprint.path)] = {
+        ...fingerprint,
+        role,
+        status: 'analyzing',
+        schemaVersion: ANALYSIS_SCHEMA_VERSION,
+        analyzedAt: '',
+        error: ''
+      };
+      return true;
+    });
+    if (!markedAnalyzing) throw new Error('素材已删除或替换，本次分析任务已取消');
+    try {
+      const result = await requestChildrenwearAssetAnalysis(fingerprint.path, role, { ...options, contentHash: fingerprint.contentHash });
+      if (!await childrenwearAnalysisFingerprintStillCurrent(fingerprint, lifecycleEpoch, workspaceId)) {
+        throw new Error('素材已删除或替换，本次分析结果已作废');
+      }
+      const analyzedAt = new Date().toISOString();
+      await writeJsonFile(cacheFile, {
+        schemaVersion: ANALYSIS_SCHEMA_VERSION,
+        role,
+        contentHash: fingerprint.contentHash,
+        model: result.model,
+        analyzedAt,
+        analysis: result.analysis
+      });
+      if (!await childrenwearAnalysisFingerprintStillCurrent(fingerprint, lifecycleEpoch, workspaceId)) {
+        await removeChildrenwearAnalysisCacheIfUnreferenced(role, fingerprint.contentHash);
+        throw new Error('素材已删除或替换，本次分析结果已作废');
+      }
+      const recorded = await updateChildrenwearAnalysisIndex(index => {
+        if (childrenwearAnalysisPathEpoch(fingerprint.path, workspaceId) !== lifecycleEpoch) return false;
+        index[childrenwearAnalysisPathKey(fingerprint.path)] = {
+          ...fingerprint,
+          role,
+          status: 'analyzed',
+          schemaVersion: ANALYSIS_SCHEMA_VERSION,
+          model: result.model,
+          summary: String(result.analysis.summary || '').slice(0, 1000),
+          analyzedAt,
+          error: ''
+        };
+        return true;
+      });
+      if (!recorded) {
+        await removeChildrenwearAnalysisCacheIfUnreferenced(role, fingerprint.contentHash);
+        throw new Error('素材已删除或替换，本次分析结果已作废');
+      }
+      return { path: fingerprint.path, role, reused: false, analysis: result.analysis };
+    } catch (error) {
+      if (await childrenwearAnalysisFingerprintStillCurrent(fingerprint, lifecycleEpoch, workspaceId)) {
+        await updateChildrenwearAnalysisIndex(index => {
+          if (childrenwearAnalysisPathEpoch(fingerprint.path, workspaceId) !== lifecycleEpoch) return false;
+          index[childrenwearAnalysisPathKey(fingerprint.path)] = {
+            ...fingerprint,
+            role,
+            status: 'failed',
+            schemaVersion: ANALYSIS_SCHEMA_VERSION,
+            analyzedAt: '',
+            error: String(error?.message || error).slice(0, 1000)
+          };
+          return true;
+        });
+      }
+      throw error;
+    }
+  })().finally(() => childrenwearAnalysisInFlight.delete(inFlightKey));
+  childrenwearAnalysisInFlight.set(inFlightKey, operation);
+  return operation;
+}
+
+async function runChildrenwearAnalysisTasks(taskValues, payload = {}, options = {}) {
+  const tasks = [...new Map((taskValues || []).map(item => {
+    const role = normalizeAnalysisRole(item.role);
+    const file = String(item.path || '');
+    return [`${role}\u0000${path.resolve(file).toLocaleLowerCase('en-US')}`, { role, path: file }];
+  })).values()].filter(item => item.path).slice(0, 5000);
+  if (!tasks.length) return { total: 0, analyzed: 0, reused: 0, failed: 0, failures: [], concurrency: 0 };
+  const concurrency = childrenwearAnalysisConcurrencyLimit(tasks.length);
+  const analysisPrompts = new Map();
+  await Promise.all([...new Set(tasks.map(item => item.role))].map(async role => {
+    analysisPrompts.set(role, await configuredChildrenwearAnalysisPrompt(role));
+  }));
+  let completed = 0;
+  let reused = 0;
+  const failures = [];
+  const results = await runWithConcurrency(tasks, concurrency, async task => {
+    if (options.signal?.aborted) throw new Error('任务已停止');
+    try {
+      const result = await analyzeChildrenwearAsset(task.path, task.role, {
+        force: payload.force === true,
+        signal: options.signal,
+        analysisPrompt: analysisPrompts.get(task.role)
+      });
+      if (result.reused) reused += 1;
+      return result;
+    } catch (error) {
+      failures.push({ path: task.path, role: task.role, error: String(error?.message || error) });
+      return null;
+    } finally {
+      completed += 1;
+      options.reportProgress?.({
+        phase: 'analyzing',
+        current: completed,
+        total: tasks.length,
+        concurrency,
+        percent: Math.round(completed / tasks.length * 100),
+        message: `正在并发分析素材 ${completed}/${tasks.length}（并发 ${concurrency}）`
+      });
+    }
+  });
+  return {
+    total: tasks.length,
+    analyzed: results.filter(item => item?.ok && item.value).length,
+    reused,
+    failed: failures.length,
+    failures,
+    concurrency
+  };
+}
+
+function enqueueChildrenwearAnalysisBatch(operation) {
+  const workspaceId = currentWorkspaceId();
+  const previous = childrenwearAnalysisBatchQueues.get(workspaceId) || Promise.resolve();
+  const batch = previous.catch(() => {}).then(operation);
+  const queued = batch.catch(() => {});
+  childrenwearAnalysisBatchQueues.set(workspaceId, queued);
+  return batch.finally(() => {
+    if (childrenwearAnalysisBatchQueues.get(workspaceId) === queued) childrenwearAnalysisBatchQueues.delete(workspaceId);
+  });
+}
+
+async function analyzeChildrenwearAssets(payload = {}, options = {}) {
+  const role = normalizeAnalysisRole(payload.role);
+  const paths = [...new Set((payload.paths || []).map(String).filter(Boolean))].slice(0, 5000);
+  if (!paths.length) throw new Error('没有需要分析的素材');
+  const result = await enqueueChildrenwearAnalysisBatch(() => runChildrenwearAnalysisTasks(
+    paths.map(file => ({ path: file, role })),
+    payload,
+    options
+  ));
+  return { role, ...result };
+}
+
+async function scanPendingChildrenwearAnalysis(payload = {}, options = {}) {
+  return enqueueChildrenwearAnalysisBatch(async () => {
+    if (options.signal?.aborted) throw new Error('任务已停止');
+    const config = await loadConfig();
+    const analysisIndex = await readChildrenwearAnalysisIndex();
+    const tasks = [];
+    const byLibrary = {};
+    for (const [configKey, role] of Object.entries(ROLE_BY_LIBRARY_KEY)) {
+      const root = String(config[configKey] || '');
+      const indexed = root ? await imageLibraryIndex(root) : [];
+      let pending = 0;
+      let failed = 0;
+      for (const item of indexed) {
+        const status = await childrenwearAnalysisStatusForPath(item.path, role, analysisIndex);
+        if (status.status === 'analyzed' || status.status === 'analyzing') continue;
+        if (status.status === 'failed') {
+          failed += 1;
+          if (payload.includeFailed !== true) continue;
+        } else {
+          pending += 1;
+        }
+        tasks.push({ path: item.path, role, configKey });
+      }
+      byLibrary[configKey] = { total: indexed.length, pending, failed };
+    }
+    if (!tasks.length) return { total: 0, analyzed: 0, reused: 0, failed: 0, failures: [], concurrency: 0, byLibrary };
+    const result = await runChildrenwearAnalysisTasks(tasks, { force: false }, options);
+    return { ...result, byLibrary };
+  });
+}
+
+async function requireChildrenwearAssetAnalysis(file, roleValue) {
+  const role = normalizeAnalysisRole(roleValue);
+  const fingerprint = await childrenwearFileFingerprint(file);
+  const cached = await readJsonFile(childrenwearAnalysisCacheFile(role, fingerprint.contentHash), null);
+  if (!cached?.analysis || cached.schemaVersion !== ANALYSIS_SCHEMA_VERSION || cached.role !== role) {
+    throw new Error('该素材尚未完成 AI 分析，请先在 01 素材资产中完成分析');
+  }
+  return { ...cached, path: fingerprint.path };
+}
+
 function shouldUsePowerShellApiFallback(url, error) {
-  return process.platform === 'win32'
-    && /change2pro\.com/i.test(String(url || ''))
-    && /fetch failed|ECONNRESET|socket|network/i.test(`${error?.message || ''} ${error?.cause?.code || ''}`);
+  if (process.platform !== 'win32') return false;
+  let protocol = '';
+  try { protocol = new URL(String(url || '')).protocol; } catch { return false; }
+  return ['http:', 'https:'].includes(protocol)
+    && /fetch failed|ECONNRESET|ECONNREFUSED|ETIMEDOUT|UND_ERR|socket|network/i.test(`${error?.message || ''} ${error?.cause?.code || ''}`);
 }
 
 async function powershellJsonRequest(url, options = {}, timeoutMs = 120000) {
@@ -1349,6 +1957,38 @@ try {
   });
 }
 
+async function powershellDownloadBuffer(url, timeoutMs = IMAGE_URL_TIMEOUT_MS) {
+  const tempRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'caishen-image-download-'));
+  const outputFile = path.join(tempRoot, 'image.bin');
+  const scriptFile = path.join(tempRoot, 'download.ps1');
+  const script = `
+$ErrorActionPreference = 'Stop'
+$params = @{ Uri = [string]$args[0]; OutFile = [string]$args[1]; TimeoutSec = [int]$args[2]; UseBasicParsing = $true }
+Invoke-WebRequest @params
+`;
+  await fsp.writeFile(scriptFile, script, 'utf8');
+  return new Promise((resolve, reject) => {
+    execFile('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptFile, url, outputFile, String(Math.max(15, Math.ceil(timeoutMs / 1000)))], {
+      timeout: timeoutMs + 5000,
+      windowsHide: true,
+      encoding: 'buffer',
+      maxBuffer: 2 * 1024 * 1024
+    }, async (error, _stdout, stderr) => {
+      try {
+        if (error) {
+          const detail = Buffer.isBuffer(stderr) ? stderr.toString('utf8') : String(stderr || '');
+          return reject(new Error(detail || error.message));
+        }
+        return resolve(await fsp.readFile(outputFile));
+      } catch (readError) {
+        return reject(readError);
+      } finally {
+        fsp.rm(tempRoot, { recursive: true, force: true }).catch(() => {});
+      }
+    });
+  });
+}
+
 async function apiJson(url, options = {}, timeoutMs = 120000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -1399,7 +2039,7 @@ function randomDelay(minimumMs, maximumMs, signal = null) {
 
 function isRetryableImageApiFailure(status, value) {
   const numericStatus = Number(status) || 0;
-  if ([408, 409, 425, 429].includes(numericStatus) || numericStatus >= 500) return true;
+  if (numericStatus === 0 || [408, 409, 425, 429].includes(numericStatus) || numericStatus >= 500) return true;
   const text = typeof value === 'string' ? value : JSON.stringify(value || '');
   return /system_cpu_overloaded|cpu overloaded|temporar(?:y|ily) unavailable|upstream service|server is busy|service unavailable|rate limit|too many requests|try again|timeout/i.test(text);
 }
@@ -1494,6 +2134,10 @@ async function downloadGeneratedImage(url, signal) {
       return Buffer.from(await response.arrayBuffer());
     } catch (error) {
       lastError = error;
+      if (process.platform === 'win32' && /fetch failed|ECONNRESET|socket|network/i.test(`${error?.message || ''} ${error?.cause?.code || ''}`)) {
+        try { return await powershellDownloadBuffer(url, IMAGE_URL_TIMEOUT_MS); }
+        catch (fallbackError) { lastError = fallbackError; }
+      }
       if (signal?.aborted || attempt >= 3) throw error;
       await randomDelay(500 * attempt, 1000 * attempt, signal);
     } finally {
@@ -1521,6 +2165,7 @@ async function generateImage(prompt, imagePaths, options = {}) {
   const attemptBillingKey = options.billingOnceKey
     || billingOnceKey('image:api-request', currentWorkspaceId(), Date.now(), crypto.randomUUID());
   let billingAmountMinor = 0;
+  let apiRequestCount = 0;
   try {
     const attemptStartedAt = new Map();
     const endpoint = apiEndpoint(api.baseUrl, '/images/edits');
@@ -1581,7 +2226,10 @@ async function generateImage(prompt, imagePaths, options = {}) {
     }, {
       signal: options.signal,
       onState: event => {
-        if (event.state === 'running') attemptStartedAt.set(event.attempt, Date.now());
+        if (event.state === 'running') {
+          attemptStartedAt.set(event.attempt, Date.now());
+          apiRequestCount += 1;
+        }
         const startedAt = attemptStartedAt.get(event.attempt);
         options.onRequestState?.({
           ...event,
@@ -1603,6 +2251,11 @@ async function generateImage(prompt, imagePaths, options = {}) {
       downloadElapsedMs: Math.max(0, Date.now() - downloadStartedAt)
     });
     bytes.billingAmountMinor = billingAmountMinor;
+    bytes.apiRequestCount = apiRequestCount;
+    bytes.imageModel = api.imageModel || '';
+    bytes.relayId = api.activeRelay?.id || '';
+    bytes.relayName = api.activeRelay?.name || '';
+    bytes.upstreamCostCnyMicro = apiRequestCount * Math.max(0, Number(api.activeRelay?.upstreamImageCostCnyMicro) || 0);
     return bytes;
   } catch (error) {
     error.billingAmountMinor = Math.max(0, Number(error?.billingAmountMinor) || 0) + billingAmountMinor;
@@ -2433,8 +3086,9 @@ async function generateTemplateJob(job, source, config, options = {}) {
 
   if (!source.printPath || !fs.existsSync(source.printPath)) throw new Error('原始印花图不存在');
   if (!source.masterImagePath || !fs.existsSync(source.masterImagePath)) throw new Error('请先生成当前任务的母版图');
-  let prompt = renderPromptTemplate(await getPromptValue('templatePrint'), {
-    templatePath: job.relativePath
+  let prompt = TEMPLATE_PRINT_PROMPT({
+    relativeTemplatePath: job.relativePath,
+    templateImagePath: job.relativePath
   });
   let imagePaths = [job.templatePath, source.masterImagePath, source.printPath];
   if (options.extraInstruction) prompt += `\n\n本次运营补充要求：${String(options.extraInstruction).trim()}`;
@@ -2830,7 +3484,7 @@ async function generateTemplateTaskMaster(task = {}, options = {}) {
   if (typeof options.reportProgress === 'function') {
     await options.reportProgress({ phase: 'generating', current: 0, total: 1, percent: 10, message: '正在生成母版图…' });
   }
-  let prompt = String(await getPromptValue('templateMasterGeneration') || '').trim();
+  let prompt = TEMPLATE_MASTER_PROMPT.trim();
   prompt = `${prompt || '根据第一张产品参考图和第二张印花图生成标准电商母版图。'}\n\nCURRENT_MASTER_REQUEST_CONTRACT\nThe request contains exactly two images in this fixed order: image 1 is the cabinet product reference and image 2 is the original print artwork. Never swap their roles. Image 1 may contain a living room, bedroom, furniture, curtains, floor, wall, plants, lamps, speakers, props, people, text or labels. Preserve only the same complete cabinet structure from image 1, remove every environmental element, apply image 2 only to the cabinet's printable exterior fronts with physical perspective and continuous registration, and output a centered complete cabinet on a uniform pure white RGB(255,255,255) background with only a subtle natural grounding shadow. Never preserve, recreate or extend the source scene. This contract overrides any conflicting optional instruction.`;
   const bytes = await generateImage(prompt, [referencePath, task.printPath], {
     size: config.imageSize || '1024x1024',
@@ -3092,6 +3746,654 @@ async function generateFree(payload = {}, options = {}) {
   return { outputPath, url: imageUrl(outputPath) };
 }
 
+function childrenwearMetadataFile(folder) {
+  return path.join(folder, 'childrenwear-task.json');
+}
+
+function childrenwearDateCode(input = new Date()) {
+  const date = input instanceof Date ? input : new Date(input);
+  const safeDate = Number.isNaN(date.getTime()) ? new Date() : date;
+  return `${String(safeDate.getMonth() + 1).padStart(2, '0')}${String(safeDate.getDate()).padStart(2, '0')}`;
+}
+
+function normalizedChildrenwearTaskCode(value) {
+  const match = String(value || '').trim().match(/^(\d{4})-(\d{3})$/);
+  return match ? `${match[1]}-${match[2]}` : '';
+}
+
+function childrenwearTaskCodeFromFolder(folder) {
+  const match = path.basename(String(folder || '')).match(/^(\d{4}-\d{3})(?:-|$)/);
+  return normalizedChildrenwearTaskCode(match?.[1]);
+}
+
+function childrenwearStyleName(value, fallback = '童装款式') {
+  const text = String(value || '').trim().replace(/\d{4}-\d{3}\s*$/, '').replace(/[·｜|]\s*[^·｜|]+$/, '').trim();
+  return (text || fallback).slice(0, 50);
+}
+
+function childrenwearTaskDisplayName(styleName, taskCode) {
+  const style = childrenwearStyleName(styleName);
+  const code = normalizedChildrenwearTaskCode(taskCode);
+  return code ? `${style}${code}` : style;
+}
+
+function publicChildrenwearTask(value = {}) {
+  const models = Array.isArray(value.modelOutputs) ? value.modelOutputs : [];
+  const combinations = Array.isArray(value.combinationOutputs) ? value.combinationOutputs : [];
+  const masterHistory = Array.isArray(value.masterHistory) ? value.masterHistory : [];
+  return {
+    ...value,
+    realPhotoUrl: value.realPhotoPath ? imageUrl(value.realPhotoPath) : '',
+    realPhotoThumbnailUrl: value.realPhotoPath ? thumbnailUrl(value.realPhotoPath, 480, '') : '',
+    realPhotoPreviewUrl: value.realPhotoPath ? thumbnailUrl(value.realPhotoPath, 1200, '') : '',
+    referenceUrl: value.referencePath ? imageUrl(value.referencePath) : '',
+    referenceThumbnailUrl: value.referencePath ? thumbnailUrl(value.referencePath, 480, '') : '',
+    referencePreviewUrl: value.referencePath ? thumbnailUrl(value.referencePath, 1200, '') : '',
+    masterUrl: value.masterPath ? imageUrl(value.masterPath) : '',
+    masterThumbnailUrl: value.masterPath ? thumbnailUrl(value.masterPath, 480, '') : '',
+    masterPreviewUrl: value.masterPath ? thumbnailUrl(value.masterPath, 1200, '') : '',
+    masterHistory: masterHistory.map(item => ({
+      ...item,
+      url: item.path ? imageUrl(item.path) : '',
+      thumbnailUrl: item.path ? thumbnailUrl(item.path, 480, '') : '',
+      previewUrl: item.path ? thumbnailUrl(item.path, 1200, '') : ''
+    })),
+    masterUrls: (value.masterPaths || []).map(item => item ? imageUrl(item) : ''),
+    masterThumbnailUrls: (value.masterPaths || []).map(item => item ? thumbnailUrl(item, 480, '') : ''),
+    masterPreviewUrls: (value.masterPaths || []).map(item => item ? thumbnailUrl(item, 1200, '') : ''),
+    modelOutputs: models.map(item => ({
+      ...item,
+      url: item.path ? imageUrl(item.path) : '',
+      thumbnailUrl: item.path ? thumbnailUrl(item.path, 480, '') : '',
+      previewUrl: item.path ? thumbnailUrl(item.path, 1200, '') : '',
+      modelReferenceUrl: item.modelReferencePath ? imageUrl(item.modelReferencePath) : '',
+      modelReferenceThumbnailUrl: item.modelReferencePath ? thumbnailUrl(item.modelReferencePath, 480, '') : '',
+      modelReferencePreviewUrl: item.modelReferencePath ? thumbnailUrl(item.modelReferencePath, 1200, '') : ''
+    })),
+    combinationReferenceUrl: value.combinationReferencePath ? imageUrl(value.combinationReferencePath) : '',
+    combinationReferenceThumbnailUrl: value.combinationReferencePath ? thumbnailUrl(value.combinationReferencePath, 480, '') : '',
+    combinationReferencePreviewUrl: value.combinationReferencePath ? thumbnailUrl(value.combinationReferencePath, 1200, '') : '',
+    combinationOutputs: combinations.map(item => ({
+      ...item,
+      url: item.path ? imageUrl(item.path) : '',
+      thumbnailUrl: item.path ? thumbnailUrl(item.path, 480, '') : '',
+      previewUrl: item.path ? thumbnailUrl(item.path, 1200, '') : ''
+    }))
+  };
+}
+
+async function readChildrenwearTask(folder) {
+  const value = await readJsonFile(childrenwearMetadataFile(folder), null);
+  return value && typeof value === 'object' ? value : null;
+}
+
+async function readChildrenwearTaskForOutput(file) {
+  let folder = path.dirname(String(file || ''));
+  for (let depth = 0; depth < 4; depth += 1) {
+    const task = await readChildrenwearTask(folder);
+    if (task) return task;
+    const parent = path.dirname(folder);
+    if (parent === folder) break;
+    folder = parent;
+  }
+  return null;
+}
+
+async function writeChildrenwearTask(folder, value) {
+  const next = { ...value, folder, updatedAt: new Date().toISOString() };
+  await writeJsonFile(childrenwearMetadataFile(folder), next);
+  return publicChildrenwearTask(next);
+}
+
+async function updateChildrenwearTask(folder, updater) {
+  const key = `${currentWorkspaceId()}\u0000${path.resolve(folder).toLocaleLowerCase('en-US')}`;
+  const previous = childrenwearTaskUpdateQueues.get(key) || Promise.resolve();
+  const operation = previous.catch(() => {}).then(async () => {
+    const current = await readChildrenwearTask(folder);
+    if (!current) throw new Error('童装任务不存在');
+    const next = await updater(current);
+    return writeChildrenwearTask(folder, next);
+  });
+  const queued = operation.catch(() => {});
+  childrenwearTaskUpdateQueues.set(key, queued);
+  return operation.finally(() => {
+    if (childrenwearTaskUpdateQueues.get(key) === queued) childrenwearTaskUpdateQueues.delete(key);
+  });
+}
+
+async function renameChildrenwearTask(payload = {}) {
+  const folder = String(payload.folder || '');
+  const task = await readChildrenwearTask(folder);
+  if (!task) throw new Error('款式任务不存在');
+  const taskName = String(payload.taskName || '').trim();
+  if (!taskName) throw new Error('任务名称不能为空');
+  task.styleName = childrenwearStyleName(taskName, task.styleName || task.category || '童装款式');
+  task.taskName = childrenwearTaskDisplayName(task.styleName, task.taskCode).slice(0, 80);
+  return writeChildrenwearTask(folder, task);
+}
+
+async function deleteChildrenwearTasks(folders = []) {
+  const config = await loadConfig();
+  const taskRoot = path.resolve(config.outputPath || currentDefaultOutputRoot(), '童装任务');
+  const requested = [...new Set((folders || []).map(value => path.resolve(String(value || ''))).filter(Boolean))];
+  let deleted = 0;
+  const deletedFolders = [];
+  for (const folder of requested) {
+    // A childrenwear task is always one direct child of the dedicated task root.
+    // Refuse broader output folders and nested asset/output paths.
+    if (path.dirname(folder).toLocaleLowerCase('en-US') !== taskRoot.toLocaleLowerCase('en-US')) {
+      throw new Error('只能删除童装任务根目录下的完整款式任务');
+    }
+    const stat = await fsp.stat(folder).catch(() => null);
+    if (!stat) continue;
+    if (!stat.isDirectory() || !await readChildrenwearTask(folder)) throw new Error('目标不是有效的款式任务目录');
+    await fsp.rm(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    deleted += 1;
+    deletedFolders.push(folder);
+  }
+  return { deleted, folders: deletedFolders };
+}
+
+async function nextChildrenwearTaskFolder(category = '', requestedCode = '') {
+  const config = await loadConfig();
+  const root = path.join(config.outputPath || currentDefaultOutputRoot(), '童装任务');
+  await fsp.mkdir(root, { recursive: true });
+  const label = safeFileName(category || '童装').slice(0, 24);
+  const today = childrenwearDateCode();
+  const preferred = normalizedChildrenwearTaskCode(requestedCode);
+  const entries = await fsp.readdir(root, { withFileTypes: true }).catch(() => []);
+  const used = new Set();
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const folderCode = childrenwearTaskCodeFromFolder(entry.name);
+    if (folderCode) used.add(folderCode);
+    const task = await readJsonFile(childrenwearMetadataFile(path.join(root, entry.name)), null);
+    const taskCode = normalizedChildrenwearTaskCode(task?.taskCode);
+    if (taskCode) used.add(taskCode);
+  }
+  let sequence = preferred?.startsWith(`${today}-`) ? Number(preferred.slice(-3)) : 1;
+  while (sequence <= 999) {
+    const taskCode = `${today}-${String(sequence).padStart(3, '0')}`;
+    if (!used.has(taskCode)) {
+      const folder = path.join(root, `${taskCode}-${label}`);
+      try {
+        await fsp.mkdir(folder);
+        return folder;
+      } catch (error) {
+        if (error?.code !== 'EEXIST') throw error;
+      }
+    }
+    sequence += 1;
+  }
+  throw new Error('当天任务编号已达到 999，请联系管理员');
+}
+
+async function copyChildrenwearTaskAsset(sourcePath, folder, groupName, targetName = '') {
+  if (!sourcePath || !fs.existsSync(sourcePath)) return '';
+  const targetFolder = path.join(folder, '素材', safeFileName(groupName || '参考素材'));
+  await fsp.mkdir(targetFolder, { recursive: true });
+  const target = path.join(targetFolder, safeFileName(targetName || path.basename(sourcePath)));
+  if (path.resolve(sourcePath) !== path.resolve(target)) await fsp.copyFile(sourcePath, target);
+  return target;
+}
+
+function childrenwearAssetFolderHint(file) {
+  return path.basename(path.dirname(String(file || '')))
+    .normalize('NFKC')
+    .replace(/(?:[-_\s]*(?:实拍产品图|实拍图|成品参考图|成品图|参考图|参考模特图|模特图|组合参考图|组合图))$/u, '')
+    .replace(/[^\p{L}\p{N}]+/gu, '')
+    .toLocaleLowerCase('zh-CN');
+}
+
+function childrenwearPathWithin(root, target) {
+  const relative = path.relative(path.resolve(String(root || '')), path.resolve(String(target || '')));
+  return Boolean(relative) && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+}
+
+async function findChildrenwearAssetReplacement(missingPath, roots = []) {
+  const expectedName = path.basename(String(missingPath || '')).toLocaleLowerCase('zh-CN');
+  if (!expectedName) return '';
+  const candidatePaths = new Map();
+  for (const root of [...new Set(roots.map(value => String(value || '').trim()).filter(Boolean))]) {
+    const stat = await fsp.stat(root).catch(() => null);
+    if (!stat?.isDirectory()) continue;
+    const indexed = await imageLibraryIndex(root);
+    for (const item of indexed) {
+      if (item.name.toLocaleLowerCase('zh-CN') !== expectedName) continue;
+      const resolved = path.resolve(item.path);
+      candidatePaths.set(resolved.toLocaleLowerCase('en-US'), resolved);
+    }
+  }
+  const candidates = [...candidatePaths.values()];
+  if (candidates.length === 1) return candidates[0];
+  if (!candidates.length) return '';
+  const expectedHint = childrenwearAssetFolderHint(missingPath);
+  const ranked = candidates.map(candidate => {
+    const hint = childrenwearAssetFolderHint(candidate);
+    const score = expectedHint && hint === expectedHint ? 100 : expectedHint && hint && (expectedHint.includes(hint) || hint.includes(expectedHint)) ? 50 : 0;
+    return { candidate, score };
+  }).sort((left, right) => right.score - left.score || left.candidate.localeCompare(right.candidate, 'zh-CN', { numeric: true }));
+  return ranked[0].score > (ranked[1]?.score || 0) ? ranked[0].candidate : '';
+}
+
+async function resolveChildrenwearTaskAsset(currentPath, taskFolder, groupName, searchRoots = [], targetName = '') {
+  const existing = String(currentPath || '');
+  if (existing && fs.existsSync(existing)) return copyChildrenwearTaskAsset(existing, taskFolder, groupName, targetName);
+  const localRoot = path.join(taskFolder, '素材', safeFileName(groupName));
+  const replacement = await findChildrenwearAssetReplacement(existing, [localRoot, ...searchRoots]);
+  return replacement ? copyChildrenwearTaskAsset(replacement, taskFolder, groupName, targetName) : '';
+}
+
+async function repairChildrenwearTaskAssets(task, config = {}) {
+  const folder = String(task?.folder || '');
+  if (!folder) return { changed: false, missing: [] };
+  const workspaceAssets = path.join(currentWorkspaceRoot(), 'assets');
+  const roots = {
+    real: [config.childrenwearRealAssetsPath, path.join(workspaceAssets, 'childrenwear-real')],
+    reference: [config.childrenwearReferenceAssetsPath, path.join(workspaceAssets, 'childrenwear-reference')],
+    model: [config.childrenwearModelAssetsPath, path.join(workspaceAssets, 'childrenwear-model')],
+    combination: [config.childrenwearCombinationAssetsPath, path.join(workspaceAssets, 'childrenwear-combination')]
+  };
+  let changed = false;
+  const missing = [];
+  const repairField = async (holder, key, groupName, searchRoots, targetName = '') => {
+    const previous = String(holder?.[key] || '');
+    if (!previous) return;
+    const resolved = await resolveChildrenwearTaskAsset(previous, folder, groupName, searchRoots, targetName);
+    if (!resolved) {
+      missing.push({ key, path: previous });
+      return;
+    }
+    if (path.resolve(previous).toLocaleLowerCase('en-US') !== path.resolve(resolved).toLocaleLowerCase('en-US')) {
+      holder[key] = resolved;
+      changed = true;
+    }
+  };
+  await repairField(task, 'realPhotoPath', '实拍图', roots.real);
+  await repairField(task, 'referencePath', '成品参考图', roots.reference);
+  for (const output of task.modelOutputs || []) await repairField(output, 'modelReferencePath', '参考模特图', roots.model);
+  await repairField(task, 'combinationReferencePath', '组合参考图', roots.combination);
+  if (Array.isArray(task.masterPaths)) {
+    const repairedMasters = [];
+    for (let index = 0; index < task.masterPaths.length; index += 1) {
+      const source = String(task.masterPaths[index] || '');
+      const extension = path.extname(source) || '.png';
+      const targetName = `平铺图${String(index + 1).padStart(2, '0')}${extension}`;
+      const resolved = await resolveChildrenwearTaskAsset(source, folder, '组合平铺图', [], targetName);
+      repairedMasters.push(resolved || source);
+      if (!resolved) missing.push({ key: `masterPaths.${index}`, path: source });
+      else if (path.resolve(source).toLocaleLowerCase('en-US') !== path.resolve(resolved).toLocaleLowerCase('en-US')) changed = true;
+    }
+    task.masterPaths = repairedMasters;
+  }
+  task.assetHealth = { missing, checkedAt: new Date().toISOString() };
+  return { changed, missing };
+}
+
+async function generateChildrenwearMaster(payload = {}, options = {}) {
+  const generationStartedAt = new Date();
+  if (!payload.realPhotoPath || !fs.existsSync(payload.realPhotoPath)) throw new Error('请上传一张实拍产品图');
+  if (!payload.referencePath || !fs.existsSync(payload.referencePath)) throw new Error('请选择一张参考成品图');
+  options.reportProgress?.({ phase: 'preparing', percent: 5, message: '正在读取素材 AI 分析缓存' });
+  const [productAnalysis, referenceAnalysis] = await Promise.all([
+    requireChildrenwearAssetAnalysis(payload.realPhotoPath, 'product'),
+    requireChildrenwearAssetAnalysis(payload.referencePath, 'flat_reference')
+  ]);
+  const folder = payload.folder || await nextChildrenwearTaskFolder(payload.category, payload.taskCode);
+  await fsp.mkdir(folder, { recursive: true });
+  const [realPhotoPath, referencePath] = await Promise.all([
+    copyChildrenwearTaskAsset(payload.realPhotoPath, folder, '实拍图'),
+    copyChildrenwearTaskAsset(payload.referencePath, folder, '成品参考图')
+  ]);
+  const existing = await readChildrenwearTask(folder) || {};
+  const version = Math.max(1, Number(existing.masterVersion || 0) + 1);
+  const evidenceFolder = path.join(folder, '.evidence', `master-v${version}`);
+  await fsp.mkdir(evidenceFolder, { recursive: true });
+  const pieceCount = childrenwearPieceCount({ productManifest: productAnalysis.analysis });
+  const prompt = await buildConfiguredChildrenwearPrompt('childrenwearMasterGeneration', buildChildrenwearMasterPrompt({
+    ...payload,
+    pieceCount,
+    productManifest: productAnalysis.analysis,
+    referenceSpec: referenceAnalysis.analysis
+  }));
+  await fsp.writeFile(path.join(evidenceFolder, 'prompt.txt'), prompt, 'utf8');
+  options.reportProgress?.({ phase: 'generating', percent: 18, message: '正在生成童装平铺母版' });
+  const config = await loadConfig();
+  const bytes = await generateImage(prompt, [realPhotoPath, referencePath], {
+    size: config.imageSize || '1024x1024',
+    quality: config.imageQuality || 'high',
+    billingDescription: '童装平铺母版生成',
+    billingReference: path.basename(realPhotoPath),
+    billingOnceKey: billingOnceKey('image:childrenwear-master', folder, version, Date.now(), crypto.randomUUID()),
+    signal: options.signal,
+    onRequestState: event => {
+      const waiting = event.state === 'retry_wait';
+      options.reportProgress?.({
+        phase: waiting ? 'waiting_upstream' : 'generating',
+        percent: waiting ? 35 : 55,
+        message: waiting ? '生图接口等待重试' : '生图接口正在处理母版'
+      });
+    }
+  });
+  const generationCompletedAt = new Date();
+  const generationMetrics = {
+    startedAt: generationStartedAt.toISOString(),
+    completedAt: generationCompletedAt.toISOString(),
+    elapsedMs: Math.max(0, generationCompletedAt.getTime() - generationStartedAt.getTime()),
+    billingCostMinor: Math.max(0, Number(bytes.billingAmountMinor) || 0),
+    upstreamCostCnyMicro: Math.max(0, Number(bytes.upstreamCostCnyMicro) || 0),
+    apiRequestCount: Math.max(1, Number(bytes.apiRequestCount) || 1),
+    modelId: String(bytes.imageModel || config.imageModel || ''),
+    relayId: String(bytes.relayId || ''),
+    relayName: String(bytes.relayName || '')
+  };
+  const masterOutputFolder = path.join(folder, '平铺图');
+  await fsp.mkdir(masterOutputFolder, { recursive: true });
+  const masterPath = path.join(masterOutputFolder, `平铺母版-v${version}.png`);
+  await sharp(bytes, { failOn: 'none' }).png({ compressionLevel: 9 }).toFile(masterPath);
+  const now = new Date().toISOString();
+  const history = Array.isArray(existing.masterHistory) ? existing.masterHistory : [];
+  const task = {
+    ...existing,
+    id: existing.id || path.basename(folder),
+    folder,
+    taskCode: normalizedChildrenwearTaskCode(existing.taskCode || payload.taskCode) || childrenwearTaskCodeFromFolder(folder),
+    styleName: childrenwearStyleName(existing.styleName || payload.taskName || payload.category || '童装款式'),
+    taskName: '',
+    category: String(payload.category || existing.category || '童装').trim(),
+    material: String(payload.material || existing.material || '').trim(),
+    pieceCount,
+    craft: String(payload.craft || existing.craft || '').trim(),
+    note: String(payload.extraInstruction || existing.note || '').trim(),
+    realPhotoPath,
+    referencePath,
+    evidencePaths: [],
+    analysisSchemaVersion: ANALYSIS_SCHEMA_VERSION,
+    productManifest: productAnalysis.analysis,
+    flatReferenceSpec: referenceAnalysis.analysis,
+    productAnalysisHash: productAnalysis.contentHash,
+    flatReferenceAnalysisHash: referenceAnalysis.contentHash,
+    masterPath,
+    masterVersion: version,
+    masterApproved: false,
+    masterApprovedAt: '',
+    masterReviewStatus: 'pending',
+    masterIssueNote: '',
+    masterGeneration: generationMetrics,
+    masterHistory: [...history, { version, path: masterPath, createdAt: now, ...generationMetrics }].slice(-20),
+    modelOutputs: Array.isArray(existing.modelOutputs) ? existing.modelOutputs : [],
+    createdAt: existing.createdAt || now
+  };
+  task.taskName = childrenwearTaskDisplayName(task.styleName, task.taskCode).slice(0, 80);
+  options.reportProgress?.({ phase: 'completed', percent: 100, message: '母版生成完成，等待成品审核' });
+  return writeChildrenwearTask(folder, task);
+}
+
+async function approveChildrenwearOutput(payload = {}) {
+  const folder = String(payload.folder || '');
+  const task = await readChildrenwearTask(folder);
+  if (!task) throw new Error('童装任务不存在');
+  const now = new Date().toISOString();
+  if (payload.stage === 'master') {
+    if (!task.masterPath || !fs.existsSync(task.masterPath)) throw new Error('母版文件不存在');
+    task.masterApproved = payload.approved !== false;
+    task.masterApprovedAt = task.masterApproved ? now : '';
+    task.masterReviewStatus = task.masterApproved ? 'approved' : (payload.reviewStatus === 'needs_regeneration' ? 'needs_regeneration' : 'pending');
+    task.masterIssueNote = task.masterReviewStatus === 'needs_regeneration' ? String(payload.issueNote || '').trim().slice(0, 300) : '';
+  } else if (payload.stage === 'model') {
+    const output = (task.modelOutputs || []).find(item => item.id === String(payload.outputId || ''));
+    if (!output) throw new Error('模特图不存在');
+    output.approved = payload.approved !== false;
+    output.approvedAt = output.approved ? now : '';
+    output.reviewStatus = output.approved ? 'approved' : (payload.reviewStatus === 'needs_regeneration' ? 'needs_regeneration' : 'pending');
+    output.issueNote = output.reviewStatus === 'needs_regeneration' ? String(payload.issueNote || '').trim().slice(0, 300) : '';
+  } else if (payload.stage === 'combination') {
+    const output = (task.combinationOutputs || []).find(item => item.id === String(payload.outputId || ''));
+    if (!output) throw new Error('组合图不存在');
+    output.approved = payload.approved !== false;
+    output.approvedAt = output.approved ? now : '';
+    output.reviewStatus = output.approved ? 'approved' : (payload.reviewStatus === 'needs_regeneration' ? 'needs_regeneration' : 'pending');
+    output.issueNote = output.reviewStatus === 'needs_regeneration' ? String(payload.issueNote || '').trim().slice(0, 300) : '';
+  } else {
+    throw new Error('审核阶段无效');
+  }
+  return writeChildrenwearTask(folder, task);
+}
+
+async function generateChildrenwearModel(payload = {}, options = {}) {
+  const generationStartedAt = new Date();
+  const folder = String(payload.folder || '');
+  const task = await readChildrenwearTask(folder);
+  if (!task) throw new Error('童装任务不存在');
+  const config = await loadConfig();
+  await repairChildrenwearTaskAssets(task, config);
+  if (!task.masterApproved) throw new Error('请先人工确认母版图');
+  if (!payload.modelReferencePath || !fs.existsSync(payload.modelReferencePath)) throw new Error('请上传模特或姿势参考图');
+  if (!task.masterPath || !fs.existsSync(task.masterPath)) throw new Error('已审核母版文件不存在');
+  if (!task.realPhotoPath || !fs.existsSync(task.realPhotoPath)) throw new Error('任务实拍图已丢失，请重新选择实拍图后再生成');
+  const modelReferenceAnalysis = await requireChildrenwearAssetAnalysis(payload.modelReferencePath, 'model_reference');
+  const modelReferencePath = await copyChildrenwearTaskAsset(payload.modelReferencePath, folder, '参考模特图');
+  task.taskName = childrenwearTaskDisplayName(task.styleName || task.category || task.taskName, task.taskCode).slice(0, 80);
+  const productManifest = task.productManifest || (await requireChildrenwearAssetAnalysis(task.realPhotoPath, 'product')).analysis;
+  const prompt = await buildConfiguredChildrenwearPrompt('childrenwearModelGeneration', buildChildrenwearModelPrompt({
+    productManifest,
+    referenceSpec: modelReferenceAnalysis.analysis,
+    extraInstruction: payload.extraInstruction
+  }));
+  const outputId = `model-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
+  const evidenceFolder = path.join(folder, '.evidence', outputId);
+  await fsp.mkdir(evidenceFolder, { recursive: true });
+  await fsp.writeFile(path.join(evidenceFolder, 'prompt.txt'), prompt, 'utf8');
+  options.reportProgress?.({ phase: 'generating', percent: 15, message: '正在将已审核母版生成模特上身图' });
+  const bytes = await generateImage(prompt, [task.masterPath, modelReferencePath], {
+    size: config.imageSize || '1024x1024',
+    quality: config.imageQuality || 'high',
+    billingDescription: '童装模特上身图生成',
+    billingReference: path.basename(task.masterPath),
+    billingOnceKey: billingOnceKey('image:childrenwear-model', folder, outputId, Date.now(), crypto.randomUUID()),
+    signal: options.signal,
+    onRequestState: event => options.reportProgress?.({
+      phase: event.state === 'retry_wait' ? 'waiting_upstream' : 'generating',
+      percent: event.state === 'retry_wait' ? 35 : 58,
+      message: event.state === 'retry_wait' ? '生图接口等待重试' : '生图接口正在处理模特图'
+    })
+  });
+  const generationCompletedAt = new Date();
+  const modelOutputFolder = path.join(folder, '模特图');
+  await fsp.mkdir(modelOutputFolder, { recursive: true });
+  const outputPath = path.join(modelOutputFolder, `${outputId}.png`);
+  await sharp(bytes, { failOn: 'none' }).png({ compressionLevel: 9 }).toFile(outputPath);
+  const output = {
+    id: outputId,
+    path: outputPath,
+    modelReferencePath,
+    modelReferenceSpec: modelReferenceAnalysis.analysis,
+    modelReferenceAnalysisHash: modelReferenceAnalysis.contentHash,
+    approved: false,
+    approvedAt: '',
+    reviewStatus: 'pending',
+    issueNote: '',
+    createdAt: generationCompletedAt.toISOString(),
+    startedAt: generationStartedAt.toISOString(),
+    completedAt: generationCompletedAt.toISOString(),
+    elapsedMs: Math.max(0, generationCompletedAt.getTime() - generationStartedAt.getTime()),
+    billingCostMinor: Math.max(0, Number(bytes.billingAmountMinor) || 0),
+    upstreamCostCnyMicro: Math.max(0, Number(bytes.upstreamCostCnyMicro) || 0),
+    apiRequestCount: Math.max(1, Number(bytes.apiRequestCount) || 1),
+    modelId: String(bytes.imageModel || config.imageModel || ''),
+    relayId: String(bytes.relayId || ''),
+    relayName: String(bytes.relayName || '')
+  };
+  options.reportProgress?.({ phase: 'completed', percent: 100, message: '模特图生成完成，等待成品审核' });
+  // API generation is allowed to run concurrently even for the same style.
+  // Serialize only the final metadata merge so one completion cannot overwrite
+  // another completion's output record.
+  return updateChildrenwearTask(folder, current => ({
+    ...current,
+    taskName: childrenwearTaskDisplayName(current.styleName || current.category || current.taskName, current.taskCode).slice(0, 80),
+    productManifest: current.productManifest || productManifest,
+    modelOutputs: [...(current.modelOutputs || []), output].slice(-50)
+  }));
+}
+
+async function listChildrenwearTasks() {
+  const config = await loadConfig();
+  const root = path.join(config.outputPath || currentDefaultOutputRoot(), '童装任务');
+  const entries = await fsp.readdir(root, { withFileTypes: true }).catch(() => []);
+  const tasks = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const task = await readChildrenwearTask(path.join(root, entry.name));
+    if (task) tasks.push(task);
+  }
+  const usedByDate = new Map();
+  for (const task of tasks) {
+    const code = normalizedChildrenwearTaskCode(task.taskCode);
+    if (!code) continue;
+    const stamp = code.slice(0, 4);
+    if (!usedByDate.has(stamp)) usedByDate.set(stamp, new Set());
+    usedByDate.get(stamp).add(Number(code.slice(-3)));
+  }
+  for (const task of [...tasks].sort((left, right) => String(left.createdAt || '').localeCompare(String(right.createdAt || '')))) {
+    let changed = false;
+    const assetRepair = await repairChildrenwearTaskAssets(task, config);
+    if (assetRepair.changed) changed = true;
+    if (!normalizedChildrenwearTaskCode(task.taskCode)) {
+      const stamp = childrenwearDateCode(task.createdAt || task.updatedAt || new Date());
+      if (!usedByDate.has(stamp)) usedByDate.set(stamp, new Set());
+      const used = usedByDate.get(stamp);
+      let sequence = 1;
+      while (used.has(sequence) && sequence < 999) sequence += 1;
+      used.add(sequence);
+      task.taskCode = `${stamp}-${String(sequence).padStart(3, '0')}`;
+      changed = true;
+    }
+    const styleName = childrenwearStyleName(task.styleName || task.category || task.taskName || '童装款式');
+    const taskName = childrenwearTaskDisplayName(styleName, task.taskCode);
+    if (task.styleName !== styleName || task.taskName !== taskName) {
+      task.styleName = styleName;
+      task.taskName = taskName;
+      changed = true;
+    }
+    if (changed) await writeJsonFile(childrenwearMetadataFile(task.folder), task);
+  }
+  return tasks.map(publicChildrenwearTask).sort((left, right) => String(right.updatedAt || '').localeCompare(String(left.updatedAt || '')));
+}
+
+async function generateChildrenwearCombination(payload = {}, options = {}) {
+  const generationStartedAt = new Date();
+  const masterPaths = [...new Set((payload.masterPaths || []).map(String))].slice(0, 4);
+  if (masterPaths.length < 2) throw new Error('组合图至少需要选择 2 个已审核母版');
+  const folder = payload.folder || await nextChildrenwearTaskFolder('多SKU组合', payload.taskCode);
+  await fsp.mkdir(folder, { recursive: true });
+  const existing = await readChildrenwearTask(folder) || {};
+  const config = await loadConfig();
+  if (existing.folder) await repairChildrenwearTaskAssets(existing, config);
+  const skuManifest = [];
+  for (let index = 0; index < masterPaths.length; index += 1) {
+    const masterPath = masterPaths[index];
+    const sourceTask = await readChildrenwearTaskForOutput(masterPath);
+    const approvedCurrentMaster = sourceTask?.masterApproved && path.resolve(sourceTask.masterPath) === path.resolve(masterPath);
+    const existingSnapshot = (existing.masterPaths || []).some(item => path.resolve(item) === path.resolve(masterPath))
+      && childrenwearPathWithin(path.join(folder, '素材', '组合平铺图'), masterPath)
+      && fs.existsSync(masterPath);
+    if (!approvedCurrentMaster && !existingSnapshot) {
+      throw new Error('组合图只能使用已人工审核的当前母版');
+    }
+    const previousItem = Array.isArray(existing.skuManifest) ? existing.skuManifest[index] : null;
+    const source = approvedCurrentMaster ? sourceTask : previousItem || sourceTask || {};
+    const productManifest = source.productManifest || (source.realPhotoPath
+      ? (await requireChildrenwearAssetAnalysis(source.realPhotoPath, 'product')).analysis
+      : null);
+    if (!productManifest) throw new Error(`第 ${index + 1} 个平铺图缺少商品身份分析，请重新从已分析素材生成母版`);
+    skuManifest.push({
+      taskName: String(source.taskName || source.styleName || `SKU ${index + 1}`),
+      category: String(source.category || '童装 SKU'),
+      material: String(source.material || '以对应母版为准'),
+      pieceCount: childrenwearPieceCount({ productManifest }),
+      productManifest
+    });
+  }
+  if (!payload.combinationReferencePath || !fs.existsSync(payload.combinationReferencePath)) throw new Error('请选择一张组合参考图');
+  const combinationReferenceAnalysis = await requireChildrenwearAssetAnalysis(payload.combinationReferencePath, 'combination_reference');
+  const localMasterPaths = [];
+  for (let index = 0; index < masterPaths.length; index += 1) {
+    const source = masterPaths[index];
+    const extension = path.extname(source) || '.png';
+    localMasterPaths.push(await copyChildrenwearTaskAsset(source, folder, '组合平铺图', `平铺图${String(index + 1).padStart(2, '0')}${extension}`));
+  }
+  const combinationReferencePath = await copyChildrenwearTaskAsset(payload.combinationReferencePath, folder, '组合参考图');
+  const version = Math.max(1, Number(existing.combinationVersion || 0) + 1);
+  const outputId = `combination-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
+  const prompt = await buildConfiguredChildrenwearPrompt('childrenwearCombinationGeneration', buildChildrenwearCombinationPrompt({
+    count: localMasterPaths.length,
+    items: skuManifest,
+    referenceSpec: combinationReferenceAnalysis.analysis
+  }));
+  const evidenceFolder = path.join(folder, '.evidence', outputId);
+  await fsp.mkdir(evidenceFolder, { recursive: true });
+  await fsp.writeFile(path.join(evidenceFolder, 'prompt.txt'), prompt, 'utf8');
+  options.reportProgress?.({ phase: 'generating', percent: 15, message: '正在生成多 SKU 组合图' });
+  const bytes = await generateImage(prompt, [...localMasterPaths, combinationReferencePath], {
+    size: config.imageSize || '1024x1024',
+    quality: config.imageQuality || 'high',
+    billingDescription: '童装多 SKU 组合图生成',
+    billingReference: localMasterPaths.map(value => path.basename(value)).join(' + '),
+    billingOnceKey: billingOnceKey('image:childrenwear-combination', folder, outputId, Date.now(), crypto.randomUUID()),
+    signal: options.signal,
+    onRequestState: event => options.reportProgress?.({
+      phase: event.state === 'retry_wait' ? 'waiting_upstream' : 'generating',
+      percent: event.state === 'retry_wait' ? 35 : 58,
+      message: event.state === 'retry_wait' ? '生图接口等待重试' : '生图接口正在处理组合图'
+    })
+  });
+  const generationCompletedAt = new Date();
+  const combinationOutputFolder = path.join(folder, '组合图');
+  await fsp.mkdir(combinationOutputFolder, { recursive: true });
+  const outputPath = path.join(combinationOutputFolder, `${outputId}.png`);
+  await sharp(bytes, { failOn: 'none' }).png({ compressionLevel: 9 }).toFile(outputPath);
+  const now = new Date().toISOString();
+  const output = {
+    id: outputId,
+    path: outputPath,
+    approved: false,
+    approvedAt: '',
+    reviewStatus: 'pending',
+    issueNote: '',
+    createdAt: now,
+    startedAt: generationStartedAt.toISOString(),
+    completedAt: generationCompletedAt.toISOString(),
+    elapsedMs: Math.max(0, generationCompletedAt.getTime() - generationStartedAt.getTime()),
+    billingCostMinor: Math.max(0, Number(bytes.billingAmountMinor) || 0),
+    upstreamCostCnyMicro: Math.max(0, Number(bytes.upstreamCostCnyMicro) || 0),
+    apiRequestCount: Math.max(1, Number(bytes.apiRequestCount) || 1),
+    modelId: String(bytes.imageModel || config.imageModel || ''),
+    relayId: String(bytes.relayId || ''),
+    relayName: String(bytes.relayName || '')
+  };
+  const task = {
+    ...existing,
+    id: existing.id || path.basename(folder),
+    folder,
+    type: existing.type || 'combination',
+    taskCode: normalizedChildrenwearTaskCode(existing.taskCode || payload.taskCode) || childrenwearTaskCodeFromFolder(folder),
+    styleName: childrenwearStyleName(existing.styleName || existing.category || payload.taskName || '多SKU组合'),
+    taskName: '',
+    category: existing.category || '多 SKU 组合图',
+    masterPaths: localMasterPaths,
+    skuManifest,
+    combinationReferencePath,
+    combinationReferenceSpec: combinationReferenceAnalysis.analysis,
+    combinationReferenceAnalysisHash: combinationReferenceAnalysis.contentHash,
+    combinationVersion: version,
+    combinationOutputs: [...(existing.combinationOutputs || []), output].slice(-50),
+    createdAt: existing.createdAt || now
+  };
+  task.taskName = childrenwearTaskDisplayName(task.styleName, task.taskCode).slice(0, 80);
+  options.reportProgress?.({ phase: 'completed', percent: 100, message: '组合图生成完成，等待成品审核' });
+  return writeChildrenwearTask(folder, task);
+}
+
 async function initializeRuntime() {
   await Promise.all([
     fsp.mkdir(currentUserDataRoot(), { recursive: true }),
@@ -3105,6 +4407,9 @@ async function initializeRuntime() {
 const runtimeExports = {
   DATA_ROOT,
   apiSettingsStatus,
+  analyzeChildrenwearAssets,
+  childrenwearAnalysisConcurrencyLimit,
+  scanPendingChildrenwearAnalysis,
   approveReviewFolder,
   batchApproveReviewFolders,
   billing,
@@ -3117,8 +4422,13 @@ const runtimeExports = {
   isOpenDrawerTemplatePrintAnalysis,
   openDrawerRegisteredPrintPrompt,
   deleteReviewFolders,
+  deleteChildrenwearTasks,
   fileFromToken,
   fileToken,
+  approveChildrenwearOutput,
+  generateChildrenwearCombination,
+  generateChildrenwearMaster,
+  generateChildrenwearModel,
   generateFree,
   generateTask,
   generateTemplateTaskMaster,
@@ -3126,11 +4436,15 @@ const runtimeExports = {
   getImageSchedulerSnapshot,
   getTemplatePreparation,
   imageUrl,
+  invalidateImageLibraryIndex,
+  invalidateChildrenwearAnalysisPaths,
   initializeRuntime,
   isOutputPath,
   isWorkspacePath,
   listTemplateFolders,
   listTemplates,
+  listChildrenwearTasks,
+  renameChildrenwearTask,
   loadApiSettings,
   loadConfig,
   loadPromptSettings,
@@ -3151,6 +4465,7 @@ const runtimeExports = {
   canAdminViewPromptSettings,
   saveTemplateRegions,
   scanImages,
+  scanImageLibraryPage,
   setTemplateManualStatus,
   testApiSettings,
   testRelayHealth,

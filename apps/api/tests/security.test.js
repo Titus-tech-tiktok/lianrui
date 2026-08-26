@@ -75,3 +75,14 @@ test('all account roles can change their own password with current password veri
   assert.equal((await auth.authenticate('member1', 'new-member')).id, member.id);
   await assert.rejects(() => auth.changeOwnPassword(member.id, 'wrong-password', 'next-member'), /当前密码不正确/);
 });
+
+test('改密请求在响应丢失后可用同一请求号安全重试', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'caishen-password-idempotent-'));
+  const auth = createAuthService(root);
+  const user = await auth.createUser({ username: 'retry-user', displayName: '重试用户', password: 'old-password', role: 'member' }, { actorRole: 'superadmin' });
+  const requestId = 'password-change-request-001';
+  await auth.changeOwnPassword(user.id, 'old-password', 'new-password', requestId);
+  await auth.changeOwnPassword(user.id, 'old-password', 'new-password', requestId);
+  assert.ok(await auth.authenticate('retry-user', 'new-password'));
+  await fs.rm(root, { recursive: true, force: true });
+});

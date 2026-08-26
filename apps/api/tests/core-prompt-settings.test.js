@@ -4,17 +4,25 @@ const assert = require('node:assert/strict');
 const {
   PROMPT_DEFINITIONS,
   normalizePromptValue,
-  publicPromptSettings,
-  renderPromptTemplate
+  publicPromptSettings
 } = require('../src/core/prompt-settings');
 
-test('prompt settings expose only the three active generation prompts', () => {
+test('prompt settings expose all active childrenwear analysis and generation prompts', () => {
   assert.deepEqual(PROMPT_DEFINITIONS.map(item => item.id), [
+    'childrenwearProductAnalysis',
+    'childrenwearFlatReferenceAnalysis',
+    'childrenwearModelReferenceAnalysis',
+    'childrenwearCombinationReferenceAnalysis',
+    'childrenwearMasterGeneration',
+    'childrenwearModelGeneration',
+    'childrenwearCombinationGeneration'
+  ]);
+  assert.equal(PROMPT_DEFINITIONS.filter(item => item.group === '多嘻噜卡 AI 分析').length, 4);
+  assert.equal(PROMPT_DEFINITIONS.filter(item => item.group === '多嘻噜卡生图').length, 3);
+  for (const removedId of [
     'templatePrint',
     'templateMasterGeneration',
-    'freeImageDefault'
-  ]);
-  for (const removedId of [
+    'freeImageDefault',
     'masterGeneration',
     'templateAnalysis',
     'templateMigration',
@@ -27,17 +35,13 @@ test('prompt settings expose only the three active generation prompts', () => {
   }
 });
 
-test('custom prompt values preserve empty strings and render dynamic values', () => {
+test('custom childrenwear prompt values preserve empty strings', () => {
   const settings = publicPromptSettings({
     prompts: {
-      freeImageDefault: '',
-      templatePrint: 'path={{templatePath}}'
+      childrenwearMasterGeneration: ''
     }
   });
-  assert.equal(settings.prompts.find(item => item.id === 'freeImageDefault').customized, true);
-  assert.deepEqual(settings.prompts.find(item => item.id === 'templatePrint').placeholders, ['{{templatePath}}']);
-  assert.equal(renderPromptTemplate(settings.prompts.find(item => item.id === 'templatePrint').value, {
-    templatePath: 'main/01.png'
-  }), 'path=main/01.png');
-  assert.equal(normalizePromptValue('freeImageDefault', ''), '');
+  assert.equal(settings.prompts.find(item => item.id === 'childrenwearMasterGeneration').customized, true);
+  assert.equal(settings.prompts.find(item => item.id === 'childrenwearMasterGeneration').value, '');
+  assert.equal(normalizePromptValue('childrenwearMasterGeneration', ''), '');
 });

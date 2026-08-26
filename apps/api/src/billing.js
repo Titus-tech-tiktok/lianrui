@@ -124,6 +124,7 @@ function createBillingService(dataRoot) {
       : Math.max(0, Number(initialBalance) || 0);
     value.reservations = value.reservations && typeof value.reservations === 'object' ? value.reservations : {};
     value.chargedOnce = value.chargedOnce && typeof value.chargedOnce === 'object' ? value.chargedOnce : {};
+    value.adjustedOnce = value.adjustedOnce && typeof value.adjustedOnce === 'object' ? value.adjustedOnce : {};
     value.createdAt ||= new Date().toISOString();
     value.updatedAt ||= value.createdAt;
     cleanReservations(value);
@@ -137,6 +138,7 @@ function createBillingService(dataRoot) {
         balanceMinor: source.balanceMinor,
         reservations: source.reservations,
         chargedOnce: source.chargedOnce,
+        adjustedOnce: source.adjustedOnce,
         createdAt: source.createdAt,
         updatedAt: source.updatedAt
       });
@@ -144,6 +146,7 @@ function createBillingService(dataRoot) {
       delete source.balanceMinor;
       delete source.reservations;
       delete source.chargedOnce;
+      delete source.adjustedOnce;
     }
     source.createdAt ||= new Date().toISOString();
     source.updatedAt ||= source.createdAt;
@@ -301,7 +304,10 @@ function createBillingService(dataRoot) {
     let startMs = todayStartMs;
     let endMs = nowMs;
     let normalizedRange = range;
-    if (range === '7d') startMs = todayStartMs - 6 * dayMs;
+    if (range === 'yesterday') {
+      startMs = todayStartMs - dayMs;
+      endMs = todayStartMs;
+    } else if (range === '7d') startMs = todayStartMs - 6 * dayMs;
     else if (range === 'month') {
       const chinaNow = new Date(nowMs + chinaOffsetMs);
       startMs = Date.UTC(chinaNow.getUTCFullYear(), chinaNow.getUTCMonth(), 1) - chinaOffsetMs;
@@ -326,6 +332,51 @@ function createBillingService(dataRoot) {
       endMs,
       startDate: chinaDate(startMs),
       endDate: chinaDate(Math.max(startMs, endMs - 1))
+    };
+  }
+
+  async function getLedgerReport(userLookup = new Map(), options = {}) {
+    const windowRange = accountingWindowRange({ range: options.range || 'today', startDate: options.startDate, endDate: options.endDate });
+    const requestedRelayId = String(options.relayId || '').trim();
+    const relayId = requestedRelayId ? normalizeRelayId(requestedRelayId) : '';
+    const limit = Math.max(1, Math.min(500, Math.trunc(Number(options.limit) || 500)));
+    let text = '';
+    try { text = await fs.readFile(ledgerFile, 'utf8'); } catch { text = ''; }
+    const transactions = [];
+    const activeWorkspaces = new Set();
+    let transactionCount = 0;
+    let imageSpendMinor = 0;
+    let imageCount = 0;
+    for (const line of text.trim().split('\n').filter(Boolean)) {
+      let entry;
+      try { entry = JSON.parse(line); } catch { continue; }
+      const workspaceId = String(entry.workspaceId || '');
+      if (!userLookup.has(workspaceId)) continue;
+      const entryRelayId = String(entry.relayId || legacyRelayId);
+      if (relayId && entryRelayId !== relayId) continue;
+      const created = new Date(entry.createdAt).getTime();
+      if (!Number.isFinite(created) || created < windowRange.startMs || created >= windowRange.endMs) continue;
+      const sourceScale = entry?.amountScale === BILLING_SCALE ? BILLING_SCALE : 100;
+      const amountMinor = sourceScale === BILLING_SCALE ? Math.trunc(Number(entry.amountMinor) || 0) : migrateMoney(entry.amountMinor, sourceScale);
+      transactionCount += 1;
+      activeWorkspaces.add(workspaceId);
+      if (entry.kind === 'image' && amountMinor < 0) {
+        imageSpendMinor += Math.abs(amountMinor);
+        imageCount += 1;
+      }
+      transactions.push({ ...entry, relayId: entryRelayId, currency: BILLING_CURRENCY, amountScale: BILLING_SCALE, amountMinor, balanceMinor: sourceScale === BILLING_SCALE ? Math.trunc(Number(entry.balanceMinor) || 0) : migrateMoney(entry.balanceMinor, sourceScale) });
+    }
+    transactions.reverse();
+    return {
+      relayId,
+      range: windowRange.range,
+      startDate: windowRange.startDate,
+      endDate: windowRange.endDate,
+      startedAt: new Date(windowRange.startMs).toISOString(),
+      endedAt: new Date(windowRange.endMs).toISOString(),
+      metrics: { imageSpendMinor, imageCount, averageImageCostMinor: imageCount ? Math.round(imageSpendMinor / imageCount) : 0, transactionCount, activeUserCount: activeWorkspaces.size },
+      transactions: transactions.slice(0, limit),
+      truncated: transactions.length > limit
     };
   }
 
@@ -522,7 +573,8 @@ function createBillingService(dataRoot) {
       name: String(relay?.name || relay?.id || '未命名中转站').slice(0, 80),
       enabled: relay?.enabled !== false,
       customerCnyPerUsd: Math.max(0.000001, Number(relay?.customerCnyPerUsd) || 7),
-      upstreamImageCostCnyMicro: Math.max(0, Math.trunc(Number(relay?.upstreamImageCostCnyMicro) || 0))
+      upstreamImageCostCnyMicro: Math.max(0, Math.trunc(Number(relay?.upstreamImageCostCnyMicro) || 0)),
+      upstreamAnalysisCostCnyMicro: Math.max(0, Math.trunc(Number(relay?.upstreamAnalysisCostCnyMicro) || 0))
     })).filter(relay => !requestedRelayId || relay.id === requestedRelayId);
     if (requestedRelayId && !relays.length) throw new Error('中转站不存在');
     const byRelay = new Map(relays.map(relay => [relay.id, {
@@ -531,6 +583,7 @@ function createBillingService(dataRoot) {
       customerTopupUsdMinor: 0,
       confirmedSpendUsdMinor: 0,
       successfulImages: 0,
+      successfulAnalyses: 0,
       daily: new Map()
     }]));
     let text = '';
@@ -549,10 +602,10 @@ function createBillingService(dataRoot) {
       const createdAt = new Date(entry.createdAt).getTime();
       const inWindow = Number.isFinite(createdAt) && createdAt >= windowRange.startMs && createdAt < windowRange.endMs;
       const kind = String(entry.kind || '');
-      if (kind === 'image' && amountMinor < 0) report.lifetimeSpendUsdMinor += Math.abs(amountMinor);
+      if ((kind === 'image' || kind === 'llm') && amountMinor < 0) report.lifetimeSpendUsdMinor += Math.abs(amountMinor);
       if (!inWindow) continue;
       const day = new Date(createdAt + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
-      const point = report.daily.get(day) || { date: day, topupUsdMinor: 0, spendUsdMinor: 0, successfulImages: 0 };
+      const point = report.daily.get(day) || { date: day, topupUsdMinor: 0, spendUsdMinor: 0, successfulImages: 0, successfulAnalyses: 0 };
       if (kind === 'adjustment' && amountMinor > 0) {
         report.customerTopupUsdMinor += amountMinor;
         point.topupUsdMinor += amountMinor;
@@ -561,6 +614,11 @@ function createBillingService(dataRoot) {
         report.successfulImages += 1;
         point.spendUsdMinor += Math.abs(amountMinor);
         point.successfulImages += 1;
+      } else if (kind === 'llm' && amountMinor <= 0) {
+        report.confirmedSpendUsdMinor += Math.abs(amountMinor);
+        report.successfulAnalyses += 1;
+        point.spendUsdMinor += Math.abs(amountMinor);
+        point.successfulAnalyses += 1;
       } else {
         continue;
       }
@@ -578,16 +636,24 @@ function createBillingService(dataRoot) {
       const customerBalanceCnyMinor = usdMicroToCnyMinor(customerBalanceUsdMinor);
       const customerTopupCnyMinor = usdMicroToCnyMinor(report.customerTopupUsdMinor);
       const confirmedRevenueCnyMinor = usdMicroToCnyMinor(report.confirmedSpendUsdMinor);
-      const upstreamCostCnyMinor = Math.round((report.successfulImages * relay.upstreamImageCostCnyMicro) / 10_000);
-      const costConfigured = relay.upstreamImageCostCnyMicro > 0 || report.successfulImages === 0;
+      const upstreamImageCostCnyMinor = Math.round((report.successfulImages * relay.upstreamImageCostCnyMicro) / 10_000);
+      const upstreamAnalysisCostCnyMinor = Math.round((report.successfulAnalyses * relay.upstreamAnalysisCostCnyMicro) / 10_000);
+      const upstreamCostCnyMinor = upstreamImageCostCnyMinor + upstreamAnalysisCostCnyMinor;
+      const imageCostConfigured = relay.upstreamImageCostCnyMicro > 0 || report.successfulImages === 0;
+      const analysisCostConfigured = relay.upstreamAnalysisCostCnyMicro > 0 || report.successfulAnalyses === 0;
+      const costConfigured = imageCostConfigured && analysisCostConfigured;
       reports.push({
         relayId: relay.id,
         relayName: relay.name,
         enabled: relay.enabled,
         customerCnyPerUsd: relay.customerCnyPerUsd,
         upstreamImageCostCnyMicro: relay.upstreamImageCostCnyMicro,
+        upstreamAnalysisCostCnyMicro: relay.upstreamAnalysisCostCnyMicro,
         costConfigured,
+        imageCostConfigured,
+        analysisCostConfigured,
         successfulImages: report.successfulImages,
+        successfulAnalyses: report.successfulAnalyses,
         customerRechargeUsdMinor,
         customerBalanceUsdMinor,
         customerTopupUsdMinor: report.customerTopupUsdMinor,
@@ -596,22 +662,32 @@ function createBillingService(dataRoot) {
         customerBalanceCnyMinor,
         customerTopupCnyMinor,
         confirmedRevenueCnyMinor,
+        upstreamImageCostCnyMinor,
+        upstreamAnalysisCostCnyMinor,
         upstreamCostCnyMinor,
         grossProfitCnyMinor: confirmedRevenueCnyMinor - upstreamCostCnyMinor
       });
       for (const point of report.daily.values()) {
         const customerTopupCnyMinor = usdMicroToCnyMinor(point.topupUsdMinor);
         const revenueCnyMinor = usdMicroToCnyMinor(point.spendUsdMinor);
-        const upstreamCostCnyMinor = Math.round((point.successfulImages * relay.upstreamImageCostCnyMicro) / 10_000);
+        const upstreamImageCostCnyMinor = Math.round((point.successfulImages * relay.upstreamImageCostCnyMicro) / 10_000);
+        const upstreamAnalysisCostCnyMinor = Math.round((point.successfulAnalyses * relay.upstreamAnalysisCostCnyMicro) / 10_000);
+        const upstreamCostCnyMinor = upstreamImageCostCnyMinor + upstreamAnalysisCostCnyMinor;
         daily.push({
           date: point.date,
           relayId: relay.id,
           relayName: relay.name,
           successfulImages: point.successfulImages,
+          successfulAnalyses: point.successfulAnalyses,
           customerTopupCnyMinor,
           revenueCnyMinor,
+          upstreamImageCostCnyMinor,
+          upstreamAnalysisCostCnyMinor,
           upstreamCostCnyMinor,
-          costConfigured: relay.upstreamImageCostCnyMicro > 0
+          imageCostConfigured: relay.upstreamImageCostCnyMicro > 0 || point.successfulImages === 0,
+          analysisCostConfigured: relay.upstreamAnalysisCostCnyMicro > 0 || point.successfulAnalyses === 0,
+          costConfigured: (relay.upstreamImageCostCnyMicro > 0 || point.successfulImages === 0)
+            && (relay.upstreamAnalysisCostCnyMicro > 0 || point.successfulAnalyses === 0)
         });
       }
     }
@@ -633,7 +709,10 @@ function createBillingService(dataRoot) {
         confirmedRevenueCnyMinor: reports.reduce((sum, report) => sum + report.confirmedRevenueCnyMinor, 0),
         upstreamCostCnyMinor: reports.reduce((sum, report) => sum + report.upstreamCostCnyMinor, 0),
         grossProfitCnyMinor: reports.reduce((sum, report) => sum + report.grossProfitCnyMinor, 0),
-        successfulImages: reports.reduce((sum, report) => sum + report.successfulImages, 0)
+        successfulImages: reports.reduce((sum, report) => sum + report.successfulImages, 0),
+        successfulAnalyses: reports.reduce((sum, report) => sum + report.successfulAnalyses, 0),
+        upstreamImageCostCnyMinor: reports.reduce((sum, report) => sum + report.upstreamImageCostCnyMinor, 0),
+        upstreamAnalysisCostCnyMinor: reports.reduce((sum, report) => sum + report.upstreamAnalysisCostCnyMinor, 0)
       }
     };
   }
@@ -688,6 +767,10 @@ function createBillingService(dataRoot) {
     return mutate(async () => {
       const state = await readAccounts();
       const { record, wallet: account } = accountWallet(state, workspaceId, relayId);
+      const onceKey = normalizeBillingOnceKey(metadata.onceKey || metadata.adjustmentOnceKey);
+      if (onceKey && account.adjustedOnce?.[onceKey]) {
+        return { account: publicAccount(workspaceId, relayId, account), transaction: null, adjustmentId: account.adjustedOnce[onceKey], alreadyAdjusted: true };
+      }
       const next = account.balanceMinor + amountMinor;
       if (next < 0) throw new Error('扣减金额不能超过当前余额');
       account.balanceMinor = next;
@@ -704,9 +787,12 @@ function createBillingService(dataRoot) {
         amountMinor,
         balanceMinor: next,
         description: String(metadata.description || (amountMinor > 0 ? '账户充值到账' : '算力余额扣减')).slice(0, 160),
+        reference: String(metadata.reference || '').slice(0, 240),
+        onceKey,
         operatorUserId: String(metadata.operatorUserId || '').slice(0, 80),
         createdAt: account.updatedAt
       };
+      if (onceKey) account.adjustedOnce[onceKey] = entry.id;
       await writeJson(accountsFile, state);
       await appendLedger(entry);
       return { account: publicAccount(workspaceId, relayId, account), transaction: entry };
@@ -731,7 +817,7 @@ function createBillingService(dataRoot) {
       const amountMinor = Number.isSafeInteger(overrideAmount) && overrideAmount >= 0
         ? overrideAmount
         : (min === max ? min : min + crypto.randomInt(max - min + 1));
-      if (amountMinor <= 0) return { billable: false, workspaceId, relayId, type, amountMinor: 0 };
+      if (amountMinor <= 0 && metadata.recordUsage !== true) return { billable: false, workspaceId, relayId, type, amountMinor: 0 };
       const state = await readAccounts();
       const { record, wallet: account } = accountWallet(state, workspaceId, relayId);
       const onceKey = normalizeBillingOnceKey(metadata.onceKey || metadata.billingOnceKey);
@@ -974,6 +1060,7 @@ function createBillingService(dataRoot) {
     ensureAccount,
     getAccountingReport,
     getGlobalStats,
+    getLedgerReport,
     getRelayUsageState,
     getRules: readRules,
     getSummary,

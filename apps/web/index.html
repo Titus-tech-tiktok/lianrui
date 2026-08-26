@@ -4,17 +4,17 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="永沙统计">
+  <meta name="apple-mobile-web-app-title" content="多嘻噜卡科技">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: caishen:; style-src 'self'; script-src 'self'">
-  <title>庞大科技</title>
-  <link rel="icon" href="/caishen-logo.png" type="image/png">
+  <title>多嘻噜卡科技</title>
+  <link rel="icon" href="/duoxiluka-logo.png" type="image/png">
   <link rel="stylesheet" href="/src/styles.css">
 </head>
 <body>
   <div class="auth-gate" id="authGate">
     <section class="auth-card" aria-labelledby="authTitle">
-      <div class="auth-brand"><img src="/caishen-logo.png" alt=""><div><span>TEAM WORKSPACE</span><b>庞大科技</b></div></div>
+      <div class="auth-brand"><img src="/duoxiluka-logo.png" alt="多嘻噜卡"><div><span>DUOXILUKA · AI STUDIO</span><b>多嘻噜卡科技</b></div></div>
       <div class="auth-copy"><span id="authEyebrow">团队账号</span><h1 id="authTitle">登录自己的工作区</h1><p id="authDescription">每位美工的素材、任务、提示词和输出配置互相独立。</p></div>
       <form id="authForm">
         <label id="authDisplayNameField" hidden>姓名或昵称<input id="authDisplayName" autocomplete="name" maxlength="40" placeholder="例如：小林"></label>
@@ -28,26 +28,61 @@
   <div class="app-shell" id="appShell" hidden>
     <header class="topbar">
       <div class="brand">
-        <img src="/caishen-logo.png" alt="庞大科技">
-        <div><strong>庞大科技</strong></div>
+        <img src="/duoxiluka-logo.png" alt="多嘻噜卡科技">
+        <div><strong>多嘻噜卡科技</strong></div>
         <button class="sidebar-toggle" id="sidebarToggleButton" type="button" aria-label="隐藏边栏" title="隐藏边栏">‹</button>
       </div>
       <nav class="nav" aria-label="主导航">
-        <button class="nav-item" data-index="01" data-icon="资" data-page="assets" title="素材资产">素材资产</button>
-        <button class="nav-item active" data-index="02" data-icon="图" data-page="tasks" title="素材生图">素材生图</button>
-        <button class="nav-item" data-index="03" data-icon="筛" data-page="review" title="人工筛图">人工筛图</button>
-        <button class="nav-item" data-index="04" data-icon="生" data-page="free" title="自由生图">自由生图</button>
+        <button class="nav-item active" data-index="01" data-icon="资" data-page="assets" title="素材资产">素材资产</button>
+        <button class="nav-item" data-index="02" data-icon="平" data-page="childrenwear" data-childrenwear-production-nav="master" title="生成平铺图">生成平铺图</button>
+        <button class="nav-item" data-index="03" data-icon="模" data-page="childrenwear" data-childrenwear-production-nav="model" title="生成模特图">生成模特图</button>
+        <button class="nav-item" data-index="04" data-icon="组" data-page="childrenwear" data-childrenwear-production-nav="combination" title="组合多 SKU 图">组合多SKU图</button>
+        <button class="nav-item" data-index="05" data-icon="审" data-page="childrenwear-review" title="成品审核与下载">成品审核与下载</button>
+        <button class="nav-item" hidden data-index="03" data-icon="图" data-page="tasks" title="旧版素材生图">旧版素材生图</button>
+        <button class="nav-item" hidden data-index="04" data-icon="筛" data-page="review" title="旧版人工筛图">旧版人工筛图</button>
+        <button class="nav-item" hidden data-index="05" data-icon="生" data-page="free" title="自由生图">自由生图</button>
         <div class="nav-divider" aria-hidden="true"><span>管理设置</span></div>
-        <button class="nav-item" id="promptSettingsNav" data-index="05" data-icon="词" data-page="prompts" title="提示词设置">提示词设置</button>
-        <button class="nav-item" data-index="06" data-icon="设" data-page="settings" title="系统设置">系统设置</button>
+        <button class="nav-item" id="promptSettingsNav" hidden data-index="06" data-icon="词" data-page="prompts" title="提示词设置">提示词设置</button>
+        <button class="nav-item" data-index="07" data-icon="设" data-page="settings" title="系统设置">系统设置</button>
       </nav>
       <div class="sidebar-finance">
         <button class="sidebar-balance" id="openBillingDetailButton" type="button"><span>算力余额</span><b id="currentBalance">读取中…</b><small id="currentBillingHint">点击查看费用明细</small></button>
+        <button class="alipay-entry" id="openAlipayButton" type="button" hidden><span class="alipay-mark">支</span><b>Alipay</b></button>
         <div class="sidebar-account"><div><span>当前账号</span><b id="currentUserName">正在读取…</b></div><div class="sidebar-account-actions"><button class="text-button" id="changePasswordButton" type="button">改密</button><button class="text-button" id="logoutButton" type="button">退出</button></div></div>
       </div>
     </header>
 
     <main>
+      <section class="page childrenwear-page" id="page-childrenwear" aria-label="图片生产">
+        <section class="cw-production-panel" data-childrenwear-production-panel="master">
+          <aside class="cw-source-column">
+            <header><span class="index">02</span><div><h2>选择生成素材</h2><p>点击素材自动补入右侧任务卡片</p></div></header>
+            <div class="cw-source-tabs"><button class="active" type="button" data-cw-source-tab="master-real">实拍产品图</button><button type="button" data-cw-source-tab="master-reference">成品参考图</button></div>
+            <div class="cw-source-folders" id="cwMasterSourceFolders"></div>
+            <div class="cw-source-grid" id="cwMasterSourceGrid"></div>
+          </aside>
+          <main class="cw-task-column">
+            <header class="cw-task-toolbar"><div><span class="index pale">02</span><h2>平铺母版任务</h2></div><div><span id="cwMasterCount">0 项</span><button class="secondary" type="button" data-cw-batch="select-all" data-stage="master">全选</button><button class="secondary" type="button" data-cw-batch="clear" data-stage="master">取消</button><button class="secondary" type="button" data-cw-batch="approve" data-stage="master">通过选中</button><button class="secondary danger-soft" type="button" data-cw-batch="mark-issue" data-stage="master">标记问题</button><button class="secondary danger-soft" type="button" data-cw-batch="delete" data-stage="master">删除选中</button><button class="primary" type="button" data-cw-batch="generate" data-stage="master">生成/重新生成选中</button></div></header>
+            <div class="cw-task-guide-block"><p class="cw-task-guide">实拍产品图 + 成品参考图 → 平铺母版图。审核通过后才会进入 03、04 的已审核素材库。</p><div class="cw-queue-filters" aria-label="平铺图任务状态"><button class="active" type="button" data-cw-queue-filter="all">全部</button><button type="button" data-cw-queue-filter="ready">待生成</button><button type="button" data-cw-queue-filter="running">生成中</button><button type="button" data-cw-queue-filter="pending">待审核</button><button type="button" data-cw-queue-filter="needs_regeneration">需重生成</button><button type="button" data-cw-queue-filter="approved">已通过</button></div></div>
+            <div class="cw-task-list" id="cwMasterQueue"></div>
+          </main>
+        </section>
+        <section class="cw-production-panel" data-childrenwear-production-panel="model" hidden>
+          <aside class="cw-source-column"><header><span class="index">03</span><div><h2>选择生成素材</h2><p>仅显示已审核平铺图和模特参考图</p></div></header><div class="cw-source-tabs"><button class="active" type="button" data-cw-source-tab="model-master">已审核平铺图</button><button type="button" data-cw-source-tab="model-reference">参考模特图</button></div><div class="cw-source-folders" id="cwModelSourceFolders"></div><div class="cw-source-grid" id="cwModelSourceGrid"></div></aside>
+          <main class="cw-task-column"><header class="cw-task-toolbar"><div><span class="index pale">03</span><h2>模特图任务</h2></div><div><span id="cwModelCount">0 项</span><button class="secondary" type="button" data-cw-batch="select-all" data-stage="model">全选</button><button class="secondary" type="button" data-cw-batch="clear" data-stage="model">取消</button><button class="secondary danger-soft" type="button" data-cw-batch="delete" data-stage="model">删除选中</button><button class="primary" type="button" data-cw-batch="generate" data-stage="model">生成选中模特图</button></div></header><p class="cw-task-guide">已审核平铺图 + 参考模特图 → 模特上身图。系统自动调用已配置提示词。</p><div class="cw-task-list" id="cwModelQueue"></div></main>
+        </section>
+        <section class="cw-production-panel" data-childrenwear-production-panel="combination" hidden>
+          <aside class="cw-source-column"><header><span class="index">04</span><div><h2>选择生成素材</h2><p>一张任务卡可选择 2～4 张平铺图</p></div></header><div class="cw-source-tabs"><button class="active" type="button" data-cw-source-tab="combination-master">已审核平铺图</button><button type="button" data-cw-source-tab="combination-reference">组合参考图</button></div><div class="cw-source-folders" id="cwCombinationSourceFolders"></div><div class="cw-source-grid" id="cwCombinationSourceGrid"></div></aside>
+          <main class="cw-task-column"><header class="cw-task-toolbar"><div><span class="index pale">04</span><h2>组合多 SKU 图任务</h2></div><div><span id="cwCombinationCount">0 项</span><button class="secondary" type="button" data-cw-batch="select-all" data-stage="combination">全选</button><button class="secondary" type="button" data-cw-batch="clear" data-stage="combination">取消</button><button class="secondary danger-soft" type="button" data-cw-batch="delete" data-stage="combination">删除选中</button><button class="primary" type="button" data-cw-batch="generate" data-stage="combination">生成选中组合图</button></div></header><p class="cw-task-guide">平铺图 A + B + C… + 组合参考图 → 多 SKU 组合图。系统自动调用已配置提示词。</p><div class="cw-task-list" id="cwCombinationQueue"></div></main>
+        </section>
+      </section>
+
+      <section class="page childrenwear-review-page" id="page-childrenwear-review" aria-label="成品审核与下载">
+        <header class="cw-review-toolbar"><div><span class="index">05</span><div><h2>成品审核与下载</h2><p>勾选图片后，在页眉统一完成高清审核、通过、重生成和下载</p></div></div><div class="cw-review-toolbar-actions"><span id="cwReviewCount">0 项</span><button class="secondary" type="button" id="cwReviewSelectAll">全选</button><button class="secondary" type="button" id="cwReviewClear">取消</button><button class="secondary" type="button" id="cwReviewCompareSelected">高清审核选中</button><button class="primary" type="button" id="cwReviewApproveSelected">通过选中</button><button class="secondary" type="button" id="cwReviewRegenerateSelected">重新生成选中</button><button class="primary" type="button" id="cwReviewDownloadSelected">批量下载选中款式</button></div></header>
+        <div class="cw-review-filters"><button class="active" type="button" data-cw-review-filter="pending">待审核</button><button type="button" data-cw-review-filter="needs_regeneration">需重生成</button><button type="button" data-cw-review-filter="approved">已通过</button><button type="button" data-cw-review-filter="all">全部</button></div>
+        <div class="cw-review-grid" id="cwReviewGrid"></div>
+      </section>
+
       <section class="page" id="page-prompts" aria-label="提示词设置">
         <div class="prompt-settings-layout">
           <aside class="prompt-settings-list">
@@ -63,7 +98,7 @@
         </div>
       </section>
 
-      <section class="page active" id="page-tasks" aria-label="素材生图">
+      <section class="page" id="page-tasks" aria-label="素材生图">
         <div class="task-layout">
           <div class="template-source-tabs" role="tablist" aria-label="素材生图素材类型"><button class="active" type="button" role="tab" aria-selected="true" data-template-source-tab="template">套图文件夹</button><button type="button" role="tab" aria-selected="false" data-template-source-tab="print">印花素材</button></div>
           <article class="asset-panel template-picker-panel" id="templateAssetPanel">
@@ -122,8 +157,17 @@
         </div>
       </section>
 
-      <section class="page" id="page-assets" aria-label="素材资产">
-        <div class="asset-library-workspace">
+      <section class="page active" id="page-assets" aria-label="素材资产">
+        <div class="asset-library-workspace childrenwear-assets-workspace">
+          <div class="asset-library-tabs-bar"><div class="asset-preview-tabs" role="tablist" aria-label="童装素材类型"><button class="active" role="tab" aria-selected="true" data-childrenwear-library-tab="childrenwearRealAssetsPath">实拍产品图</button><button role="tab" aria-selected="false" data-childrenwear-library-tab="childrenwearReferenceAssetsPath">成品参考图</button><button role="tab" aria-selected="false" data-childrenwear-library-tab="childrenwearModelAssetsPath">参考模特图</button><button role="tab" aria-selected="false" data-childrenwear-library-tab="childrenwearCombinationAssetsPath">组合图</button></div><div class="childrenwear-analysis-automation"><label class="childrenwear-analysis-switch"><input id="childrenwearAutoAnalysisEnabled" type="checkbox"><span>自动分析新图</span></label><label class="childrenwear-analysis-interval"><span>每</span><select id="childrenwearAutoAnalysisInterval"><option value="1">1 分钟</option><option value="5">5 分钟</option><option value="10">10 分钟</option><option value="30">30 分钟</option><option value="60">60 分钟</option></select><span>扫描</span></label><button class="secondary" id="runChildrenwearAnalysisScanButton" type="button">立即扫描分析</button><small id="childrenwearAnalysisScanStatus">等待扫描</small></div></div>
+          <div class="childrenwear-library-grid">
+            <section class="childrenwear-library-card active" data-childrenwear-library="childrenwearRealAssetsPath"><header><div><h2>实拍产品图素材库</h2><p>商品版型、颜色、材质、图案与辅料的唯一依据。</p></div><div class="childrenwear-library-header-actions"><button class="secondary" type="button" data-childrenwear-library-upload="childrenwearRealAssetsPath">添加文件</button><button class="secondary import-mode-button" type="button" data-childrenwear-library-folder="childrenwearRealAssetsPath">按用途文件夹导入</button><button class="secondary import-mode-button" type="button" data-import-childrenwear-style-package>按款式整包导入</button><button class="secondary" type="button" data-analyze-childrenwear-library="childrenwearRealAssetsPath">AI 分析未完成</button><button class="secondary" type="button" data-select-all-childrenwear-library="childrenwearRealAssetsPath">全选</button><button class="secondary danger-outline" type="button" data-delete-childrenwear-library="childrenwearRealAssetsPath" disabled>删除选中</button></div></header><div class="childrenwear-folder-browser" data-childrenwear-folder-list="childrenwearRealAssetsPath"></div><div class="childrenwear-library-toolbar"><div><h3>实拍产品图</h3><span id="childrenwearRealAssetsSummary">正在读取素材…</span></div><label>预览大小 <input type="range" min="28" max="50" value="38" data-image-preview-size></label></div><div class="childrenwear-library-items" id="childrenwearRealAssetsGrid"><div class="empty-inline">尚未上传实拍图</div></div><div class="childrenwear-library-pagination" data-childrenwear-pagination="childrenwearRealAssetsPath"></div></section>
+            <section class="childrenwear-library-card" data-childrenwear-library="childrenwearReferenceAssetsPath" hidden><header><div><h2>成品参考图素材库</h2><p>只用于平铺姿态、构图、背景、光影和商业呈现。</p></div><div class="childrenwear-library-header-actions"><button class="secondary" type="button" data-childrenwear-library-upload="childrenwearReferenceAssetsPath">添加文件</button><button class="secondary import-mode-button" type="button" data-childrenwear-library-folder="childrenwearReferenceAssetsPath">按用途文件夹导入</button><button class="secondary import-mode-button" type="button" data-import-childrenwear-style-package>按款式整包导入</button><button class="secondary" type="button" data-analyze-childrenwear-library="childrenwearReferenceAssetsPath">AI 分析未完成</button><button class="secondary" type="button" data-select-all-childrenwear-library="childrenwearReferenceAssetsPath">全选</button><button class="secondary danger-outline" type="button" data-delete-childrenwear-library="childrenwearReferenceAssetsPath" disabled>删除选中</button></div></header><div class="childrenwear-folder-browser" data-childrenwear-folder-list="childrenwearReferenceAssetsPath"></div><div class="childrenwear-library-toolbar"><div><h3>成品参考图</h3><span id="childrenwearReferenceAssetsSummary">正在读取素材…</span></div><label>预览大小 <input type="range" min="28" max="50" value="38" data-image-preview-size></label></div><div class="childrenwear-library-items" id="childrenwearReferenceAssetsGrid"><div class="empty-inline">尚未上传参考图</div></div><div class="childrenwear-library-pagination" data-childrenwear-pagination="childrenwearReferenceAssetsPath"></div></section>
+            <section class="childrenwear-library-card" data-childrenwear-library="childrenwearModelAssetsPath" hidden><header><div><h2>参考模特图素材库</h2><p>只用于人物、姿势、场景、镜头和灯光。</p></div><div class="childrenwear-library-header-actions"><button class="secondary" type="button" data-childrenwear-library-upload="childrenwearModelAssetsPath">添加文件</button><button class="secondary import-mode-button" type="button" data-childrenwear-library-folder="childrenwearModelAssetsPath">按用途文件夹导入</button><button class="secondary import-mode-button" type="button" data-import-childrenwear-style-package>按款式整包导入</button><button class="secondary" type="button" data-analyze-childrenwear-library="childrenwearModelAssetsPath">AI 分析未完成</button><button class="secondary" type="button" data-select-all-childrenwear-library="childrenwearModelAssetsPath">全选</button><button class="secondary danger-outline" type="button" data-delete-childrenwear-library="childrenwearModelAssetsPath" disabled>删除选中</button></div></header><div class="childrenwear-folder-browser" data-childrenwear-folder-list="childrenwearModelAssetsPath"></div><div class="childrenwear-library-toolbar"><div><h3>参考模特图</h3><span id="childrenwearModelAssetsSummary">正在读取素材…</span></div><label>预览大小 <input type="range" min="28" max="50" value="38" data-image-preview-size></label></div><div class="childrenwear-library-items" id="childrenwearModelAssetsGrid"><div class="empty-inline">尚未上传模特图</div></div><div class="childrenwear-library-pagination" data-childrenwear-pagination="childrenwearModelAssetsPath"></div></section>
+            <section class="childrenwear-library-card" data-childrenwear-library="childrenwearCombinationAssetsPath" hidden><header><div><h2>组合图素材库</h2><p>保存历史组合图、组合构图参考和多 SKU 陈列样式。</p></div><div class="childrenwear-library-header-actions"><button class="secondary" type="button" data-childrenwear-library-upload="childrenwearCombinationAssetsPath">添加文件</button><button class="secondary import-mode-button" type="button" data-childrenwear-library-folder="childrenwearCombinationAssetsPath">按用途文件夹导入</button><button class="secondary import-mode-button" type="button" data-import-childrenwear-style-package>按款式整包导入</button><button class="secondary" type="button" data-analyze-childrenwear-library="childrenwearCombinationAssetsPath">AI 分析未完成</button><button class="secondary" type="button" data-select-all-childrenwear-library="childrenwearCombinationAssetsPath">全选</button><button class="secondary danger-outline" type="button" data-delete-childrenwear-library="childrenwearCombinationAssetsPath" disabled>删除选中</button></div></header><div class="childrenwear-folder-browser" data-childrenwear-folder-list="childrenwearCombinationAssetsPath"></div><div class="childrenwear-library-toolbar"><div><h3>组合图</h3><span id="childrenwearCombinationAssetsSummary">正在读取素材…</span></div><label>预览大小 <input type="range" min="28" max="50" value="38" data-image-preview-size></label></div><div class="childrenwear-library-items" id="childrenwearCombinationAssetsGrid"><div class="empty-inline">尚未上传组合图</div></div><div class="childrenwear-library-pagination" data-childrenwear-pagination="childrenwearCombinationAssetsPath"></div></section>
+          </div>
+        </div>
+        <div class="asset-library-workspace" hidden>
           <div class="asset-library-tabs-bar"><div class="asset-preview-tabs" role="tablist" aria-label="素材类型"><button class="active" role="tab" aria-selected="true" data-asset-preview="detailSetsPath">套图模板</button><button role="tab" aria-selected="false" data-asset-preview="printsPath">印花素材</button></div><span>点击标签切换素材库</span></div>
           <div class="asset-source-panels">
             <div class="asset-source-row" data-asset-source="printsPath" hidden><div class="asset-source-copy"><b>印花素材文件夹</b><span id="settingPrintsPath">尚未配置</span><small id="assetStagePrintsPath">选择文件夹后会自动开始扫描。</small></div><div class="asset-source-actions"><button class="secondary" data-stage-asset="printsPath">导入文件夹</button><button class="primary" data-sync-asset="printsPath" disabled hidden>开始扫描</button></div></div>
@@ -186,7 +230,7 @@
                 <div class="api-advanced-grid">
                   <label>图片响应格式<select id="apiResponseFormat"><option value="url">图片链接（推荐）</option><option value="b64_json">Base64</option></select></label>
                   <label>请求超时<select id="apiRequestTimeout"><option value="60">60 秒</option><option value="120">120 秒</option><option value="180">180 秒</option><option value="300">300 秒</option></select></label>
-                  <label>API 初始并发<input id="imageInitialConcurrency" type="number" min="1" max="20000" step="1" value="8"></label>
+                  <label>API 初始并发（AI 分析最多 500）<input id="imageInitialConcurrency" type="number" min="1" max="20000" step="1" value="8"></label>
                   <label>API 最高并发<input id="imageMaxConcurrency" type="number" min="1" max="20000" step="1" value="30"></label>
                   <label>API 启动间隔毫秒<input id="imageStartIntervalMs" type="number" min="0" max="60000" step="100" value="500"></label>
                   <div class="api-fixed-parameter"><b>单任务生成数量</b><span>固定 1 张；批量数量由生成任务列表控制。</span></div>
@@ -221,7 +265,7 @@
             <div class="settings-foot"><span>浏览器只负责上传本机文件；服务器不会读取成员电脑上的原始路径。</span></div>
           </section>
           <section class="settings-panel billing-settings-panel" data-settings-panel="billing" hidden>
-            <div class="settings-panel-head"><div><h2>计费管理</h2><p>按成功结果扣费；失败、超时和自动重试不重复收费。</p></div><span class="api-status-badge" id="billingStatusBadge">未启用</span></div>
+            <div class="settings-panel-head"><div><h2>计费管理</h2><p>按实际发出的上游 API 请求扣费；本机重连和同一请求的重复提交不重复收费。</p></div><span class="api-status-badge" id="billingStatusBadge">未启用</span></div>
             <div class="billing-settings-grid">
               <section class="settings-card billing-rule-card">
                 <div class="settings-card-head"><div><h3>计费开关</h3><p>每张图片的价格在对应中转站中独立设置；这里不再提供全局价格。</p></div></div>
@@ -238,6 +282,19 @@
               <div class="settings-card-head"><div><h3>最近费用流水</h3><p>记录成功生图和管理员调账；旧版模型调用记录仍会保留。</p></div><div class="inline-actions"><button class="text-button danger-text" id="clearBillingLedgerButton" type="button">清空流水</button><button class="text-button" id="refreshBillingButton" type="button">刷新</button></div></div>
               <div class="billing-ledger-list" id="billingLedgerList"><div class="empty-inline">暂无费用流水</div></div>
             </section>
+            <section class="settings-card alipay-admin-card">
+              <div class="settings-card-head"><div><h3>Alipay 配置</h3><p>设置收款码和功能状态；用户提交订单号后，核验到账再入账。</p></div><span id="alipayAdminStatus">读取中…</span></div>
+              <div class="alipay-admin-config">
+                <label>收款方名称<input id="alipayPayeeName" maxlength="80" placeholder="用于付款前核对"></label>
+                <label class="billing-toggle"><span><b>启用 Alipay</b><small>启用前请先上传有效收款码。</small></span><input id="alipayEnabled" type="checkbox"></label>
+                <label class="alipay-qr-upload">支付宝收款码<input id="alipayQrFile" type="file" accept="image/png,image/jpeg,image/webp"><small id="alipayQrHint">尚未上传</small></label>
+                <div class="inline-actions"><button class="secondary" id="uploadAlipayQrButton" type="button">上传收款码</button><button class="primary" id="saveAlipaySettingsButton" type="button">保存 Alipay 配置</button></div>
+              </div>
+            </section>
+            <section class="settings-card alipay-review-card">
+              <div class="settings-card-head"><div><h3>Alipay 到账核验</h3><p>按支付宝订单号核对实际到账金额，确认后计入指定服务余额。</p></div><button class="text-button" id="refreshAlipayReviewButton" type="button">刷新</button></div>
+              <div class="alipay-review-list" id="alipayReviewList"><div class="empty-inline">正在读取核验记录…</div></div>
+            </section>
             <div class="settings-foot"><span>算力余额不足时不会调用上游模型；并发任务会先占用预计费用，完成后才正式扣款。</span></div>
           </section>
         </div>
@@ -246,22 +303,44 @@
   </div>
   <div class="modal-backdrop" id="taskTemplateFolderModal" hidden>
     <section class="modal-card task-template-folder-modal" role="dialog" aria-modal="true" aria-labelledby="taskTemplateFolderModalTitle">
-      <div class="modal-head"><div><span class="eyebrow">TEMPLATE FOLDERS</span><h2 id="taskTemplateFolderModalTitle">更换套图文件夹</h2><p>选择素材资产中已经导入的文件夹，确认后左侧会显示其中需要换印花的图片。</p></div><button class="icon-button" id="closeTaskTemplateFolderModalButton" aria-label="关闭">×</button></div>
+      <div class="modal-head"><div><span class="eyebrow">多嘻噜卡科技</span><h2 id="taskTemplateFolderModalTitle">更换套图文件夹</h2><p>选择素材资产中已经导入的文件夹，确认后左侧会显示其中需要换印花的图片。</p></div><button class="icon-button" id="closeTaskTemplateFolderModalButton" aria-label="关闭">×</button></div>
       <div class="task-template-folder-list" id="taskTemplateFolderList"><div class="empty-inline">正在读取套图文件夹…</div></div>
       <div class="modal-foot"><span>需要新文件夹时，请先到“素材资产”页面导入。</span><div><button class="secondary" id="openTemplateAssetsButton" type="button">前往素材资产</button></div></div>
     </section>
   </div>
+  <div class="modal-backdrop" id="childrenwearAssetPickerModal" hidden>
+    <section class="modal-card childrenwear-picker-modal" role="dialog" aria-modal="true" aria-labelledby="childrenwearPickerTitle">
+      <div class="modal-head"><div><span class="eyebrow">多嘻噜卡科技</span><h2 id="childrenwearPickerTitle">选择任务素材</h2><p id="childrenwearPickerDescription">只在当前生产任务中使用，不改变素材资产。</p></div><button class="icon-button" id="closeChildrenwearPickerButton" aria-label="关闭">×</button></div>
+      <div class="childrenwear-picker-folders" id="childrenwearPickerFolders"></div>
+      <div class="childrenwear-picker-grid" id="childrenwearPickerGrid"><div class="empty-inline">正在读取素材…</div></div>
+      <div class="childrenwear-picker-pagination" id="childrenwearPickerPagination"></div>
+      <div class="modal-foot childrenwear-picker-foot"><span id="childrenwearPickerStatus">请选择一张素材</span><label class="image-preview-size-control">预览大小 <input type="range" min="28" max="50" value="38" data-image-preview-size></label><div><button class="secondary" id="cancelChildrenwearPickerButton" type="button">取消</button><button class="primary" id="applyChildrenwearPickerButton" type="button" disabled>使用选中素材</button></div></div>
+    </section>
+  </div>
   <div class="modal-backdrop" id="billingDetailModal" hidden>
     <section class="modal-card billing-detail-modal" role="dialog" aria-modal="true" aria-labelledby="billingDetailTitle">
-      <div class="modal-head"><div><span class="eyebrow">ACCOUNT BILLING</span><h2 id="billingDetailTitle">算力余额与费用明细</h2><p id="billingDetailSummary">正在读取当前账户费用。</p></div><button class="icon-button" id="closeBillingDetailButton" aria-label="关闭">×</button></div>
+      <div class="modal-head"><div><span class="eyebrow">多嘻噜卡科技</span><h2 id="billingDetailTitle">算力余额与费用明细</h2><p id="billingDetailSummary">正在读取当前账户费用。</p></div><button class="icon-button" id="closeBillingDetailButton" aria-label="关闭">×</button></div>
+      <div class="billing-detail-filters" id="billingDetailFilters" hidden><label>查看范围<select id="billingDetailUserFilter"></select></label><label>服务账户<select id="billingDetailRelayFilter"></select></label><label>统计日期<select id="billingDetailRangeFilter"><option value="today">今天</option><option value="yesterday">昨天</option><option value="7d">近 7 日</option><option value="month">本月</option><option value="custom">自定义日期</option></select></label></div>
+      <div class="billing-detail-custom-range" id="billingDetailCustomRange" hidden><label>开始日期<input id="billingDetailStartDate" type="date"></label><span>至</span><label>结束日期<input id="billingDetailEndDate" type="date"></label><button class="secondary" id="applyBillingDetailDateButton" type="button">查询</button></div>
       <div class="billing-detail-rates" id="billingDetailRates"></div>
       <div class="billing-ledger-list billing-detail-list" id="billingDetailList"><div class="empty-inline">正在读取费用明细…</div></div>
-      <div class="modal-foot"><span>只有成功的模型调用会扣费。</span><div><button class="secondary" id="refreshBillingDetailButton" type="button">刷新</button></div></div>
+      <div class="modal-foot"><span>每次实际发出的上游请求会按当前线路规则计费。</span><div><button class="secondary" id="refreshBillingDetailButton" type="button">刷新</button></div></div>
+    </section>
+  </div>
+  <div class="modal-backdrop" id="alipayModal" hidden>
+    <section class="modal-card alipay-modal" role="dialog" aria-modal="true" aria-labelledby="alipayTitle">
+      <div class="modal-head"><div><span class="eyebrow"><span class="alipay-mark">支</span> ALIPAY</span><h2 id="alipayTitle">Alipay</h2><p>选择充值额度并按页面金额付款，付款完成后提交支付宝订单号。</p></div><button class="icon-button" id="closeAlipayButton" aria-label="关闭">×</button></div>
+      <div class="alipay-customer-body">
+        <section class="alipay-pay-panel"><div class="alipay-qr-column"><div class="alipay-qr-frame"><img id="alipayQrImage" alt="支付宝收款码"><span id="alipayQrEmpty">收款码暂不可用</span></div><p class="alipay-order-reminder"><b>付款前请注意</b>请按“本次应付”金额付款。完成后在支付宝账单中复制订单号，再提交到账核验。</p></div>
+          <div class="alipay-form-column"><label>充值到<select id="alipayService"><option value="">请选择到账账户</option></select></label><label>充值额度（USD）<div class="money-input"><span>$</span><input id="alipayAmountUsd" type="number" min="1" max="1000000" step="0.01"></div></label><div class="alipay-payment-amount"><span>本次应付</span><b id="alipayPaymentCny">¥0.00</b></div><label>支付宝订单号<input id="alipayOrderNo" inputmode="numeric" maxlength="64" placeholder="粘贴 12-64 位数字订单号"></label><button class="primary" id="submitAlipayRechargeButton" type="button">提交到账核验</button></div></section>
+        <section class="alipay-history-panel"><h3>充值记录</h3><div id="alipayHistoryList"><div class="empty-inline">暂无充值记录</div></div></section>
+      </div>
+      <div class="modal-foot"><span id="alipayCustomerStatus">请按页面显示金额完成付款。</span><div><button class="secondary" id="refreshAlipayHistoryButton" type="button">刷新记录</button></div></div>
     </section>
   </div>
   <div class="modal-backdrop" id="changePasswordModal" hidden>
     <section class="modal-card change-password-modal" role="dialog" aria-modal="true" aria-labelledby="changePasswordTitle">
-      <div class="modal-head"><div><span class="eyebrow">ACCOUNT SECURITY</span><h2 id="changePasswordTitle">修改登录密码</h2><p>所有账号都可以修改自己的密码；保存后请使用新密码登录。</p></div><button class="icon-button" id="closeChangePasswordButton" aria-label="关闭">×</button></div>
+      <div class="modal-head"><div><span class="eyebrow">多嘻噜卡科技</span><h2 id="changePasswordTitle">修改登录密码</h2><p>所有账号都可以修改自己的密码；保存后请使用新密码登录。</p></div><button class="icon-button" id="closeChangePasswordButton" aria-label="关闭">×</button></div>
       <form class="change-password-form" id="changePasswordForm">
         <label>当前密码<input id="currentPasswordInput" type="password" autocomplete="current-password" minlength="3" maxlength="128" required></label>
         <label>新密码<input id="newPasswordInput" type="password" autocomplete="new-password" minlength="3" maxlength="128" required placeholder="3-128 位"></label>
@@ -272,7 +351,7 @@
   </div>
   <div class="modal-backdrop" id="apiModelModal" hidden>
     <section class="modal-card api-model-modal" role="dialog" aria-modal="true" aria-labelledby="apiModelModalTitle">
-      <div class="modal-head"><div><span class="eyebrow">AVAILABLE MODELS</span><h2 id="apiModelModalTitle">选择 API 模型</h2><p id="apiModelModalDescription">模型列表严格来自当前通道的密钥分组。</p></div><button class="icon-button" id="closeApiModelModalButton" aria-label="关闭">×</button></div>
+      <div class="modal-head"><div><span class="eyebrow">多嘻噜卡科技</span><h2 id="apiModelModalTitle">选择 API 模型</h2><p id="apiModelModalDescription">模型列表严格来自当前通道的密钥分组。</p></div><button class="icon-button" id="closeApiModelModalButton" aria-label="关闭">×</button></div>
       <div class="api-model-modal-tools"><input id="apiModelSearch" type="search" placeholder="搜索模型名称或所属方"><span id="apiModelCount">0 个</span></div>
       <section class="api-model-browser" id="apiModelBrowser" hidden><div class="api-model-list" id="apiModelList"></div></section>
       <div class="modal-foot api-model-modal-foot"><span id="selectedApiModel">尚未选择</span><div><button class="primary" id="applyApiModelButton" type="button">使用此模型</button></div></div>
@@ -280,12 +359,54 @@
   </div>
   <div class="modal-backdrop" id="templateConfigModal" hidden>
     <section class="modal-card template-result-modal" role="dialog" aria-modal="true" aria-labelledby="templateConfigTitle">
-      <div class="modal-head"><div><span class="eyebrow">PRINT REGION</span><h2 id="templateConfigTitle">框选换印花区域</h2><p id="templateConfigPath">粗略框住柜体即可，系统会在框内自动细化柜门和抽屉面板。</p></div><button class="icon-button" id="closeTemplateConfigButton" aria-label="关闭">×</button></div>
+      <div class="modal-head"><div><span class="eyebrow">多嘻噜卡科技</span><h2 id="templateConfigTitle">框选换印花区域</h2><p id="templateConfigPath">粗略框住柜体即可，系统会在框内自动细化柜门和抽屉面板。</p></div><button class="icon-button" id="closeTemplateConfigButton" aria-label="关闭">×</button></div>
       <div class="template-result-content" id="templateRegionResult"><div class="empty-state"><b>正在读取套图</b><span>请稍候。</span></div></div>
       <div class="modal-foot"><span id="templateConfigStatus">正在读取…</span><div><button class="primary" id="saveTemplateRegionsButton">保存框选结果</button></div></div>
     </section>
   </div>
-  <div class="image-hover-preview" id="imageHoverPreview" aria-hidden="true"><img id="imageHoverPreviewImage" alt=""><span id="imageHoverPreviewCaption"></span></div>
+  <div class="modal-backdrop brand-dialog-backdrop" id="brandDialogModal" hidden>
+    <section class="modal-card brand-dialog-modal" role="dialog" aria-modal="true" aria-labelledby="brandDialogTitle" aria-describedby="brandDialogMessage">
+      <header class="brand-dialog-head">
+        <img src="/duoxiluka-logo.png" alt="">
+        <div><span>DUOXILUKA</span><b>多嘻噜卡科技</b></div>
+      </header>
+      <div class="brand-dialog-content">
+        <h2 id="brandDialogTitle">操作确认</h2>
+        <p id="brandDialogMessage"></p>
+        <label class="brand-dialog-field" id="brandDialogField" hidden>
+          <span id="brandDialogFieldLabel">请输入</span>
+          <input id="brandDialogInput" autocomplete="off">
+        </label>
+      </div>
+      <footer class="brand-dialog-actions">
+        <button class="secondary" id="brandDialogCancelButton" type="button">取消</button>
+        <button class="primary" id="brandDialogConfirmButton" type="button">确定</button>
+      </footer>
+    </section>
+  </div>
+  <div class="image-hover-preview" id="imageHoverPreview" aria-hidden="true"><div class="image-hover-preview-viewport" id="imageHoverPreviewViewport"><img id="imageHoverPreviewImage" alt=""></div><span id="imageHoverPreviewCaption"></span></div>
+  <div class="image-hover-lens" id="imageHoverLens" aria-hidden="true"></div>
+  <div class="cw-compare-backdrop" id="cwCompareModal" hidden>
+    <section class="cw-compare-dialog" role="dialog" aria-modal="true" aria-labelledby="cwCompareTitle">
+      <header class="cw-compare-header">
+        <div><span>高清连续审核</span><h2 id="cwCompareTitle">生成图片对比</h2><small id="cwCompareStage"></small></div>
+        <div class="cw-compare-toolbar">
+          <button class="secondary" id="cwComparePrevious" type="button">← 上一张</button>
+          <span id="cwCompareCounter">0 / 0</span>
+          <button class="secondary" id="cwCompareFit" type="button">适应屏幕</button>
+          <button class="secondary" id="cwCompareActual" type="button">原始像素 1:1</button>
+          <button class="secondary square" id="cwCompareZoomOut" type="button" aria-label="缩小">−</button>
+          <b id="cwCompareZoomValue">100%</b>
+          <button class="secondary square" id="cwCompareZoomIn" type="button" aria-label="放大">＋</button>
+          <button class="secondary" id="cwCompareNext" type="button">下一张 →</button>
+          <button class="cw-compare-close" id="cwCompareClose" type="button" aria-label="关闭高清对比">×</button>
+        </div>
+      </header>
+      <div class="cw-compare-source-picker" id="cwCompareSourcePicker" aria-label="选择参与对比的图片"></div>
+      <div class="cw-compare-panes" id="cwComparePanes"></div>
+      <footer class="cw-compare-footer"><span>拖动图片标题调整顺序 · 勾选需要对比的图片 · 滚轮缩放 · ←/→ 连续审核 · Esc 关闭</span><div><button class="secondary" id="cwCompareRegenerate" type="button">重新生成这一张</button><button class="primary" id="cwCompareApprove" type="button">审核通过并查看下一张</button></div></footer>
+    </section>
+  </div>
   <div class="toast" id="toast" role="status"></div>
   <script type="module" src="/src/api-bridge.js"></script>
   <script type="module" src="/src/renderer.js"></script>

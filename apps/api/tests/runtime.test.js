@@ -13,28 +13,41 @@ test('本地工作区配置可以保存并重新读取', async () => {
   const runtime = require('../src/runtime');
   await runtime.initializeRuntime();
   const outputPath = path.join(temp, '主电脑成品输出');
-  await runtime.saveConfig({ operatorCode: 'web', auditMode: 'quality', outputPath });
+  await runtime.saveConfig({
+    operatorCode: 'web',
+    auditMode: 'quality',
+    outputPath,
+    childrenwearAutoAnalysisEnabled: true,
+    childrenwearAutoAnalysisIntervalMinutes: 10
+  });
   const config = await runtime.loadConfig();
   assert.equal(config.operatorCode, 'web');
   assert.equal(config.auditMode, 'quality');
   assert.equal(config.outputPath, outputPath);
+  assert.equal(config.childrenwearAutoAnalysisEnabled, true);
+  assert.equal(config.childrenwearAutoAnalysisIntervalMinutes, 10);
+  assert.equal((await runtime.scanPendingChildrenwearAnalysis()).total, 0);
   assert.equal((await fs.stat(outputPath)).isDirectory(), true);
   const externalImage = path.join(outputPath, '预览.png');
   await fs.writeFile(externalImage, Buffer.from('preview'));
   assert.equal(runtime.fileFromToken(runtime.fileToken(externalImage)), externalImage);
   const defaults = await runtime.loadPromptSettings();
   assert.deepEqual(defaults.prompts.map(item => item.id), [
-    'templatePrint',
-    'templateMasterGeneration',
-    'freeImageDefault'
+    'childrenwearProductAnalysis',
+    'childrenwearFlatReferenceAnalysis',
+    'childrenwearModelReferenceAnalysis',
+    'childrenwearCombinationReferenceAnalysis',
+    'childrenwearMasterGeneration',
+    'childrenwearModelGeneration',
+    'childrenwearCombinationGeneration'
   ]);
-  await runtime.savePromptSetting('freeImageDefault', '保持商品结构不变');
+  await runtime.savePromptSetting('childrenwearMasterGeneration', '保持童装商品结构不变');
   let prompts = await runtime.loadPromptSettings();
-  assert.equal(prompts.prompts.find(item => item.id === 'freeImageDefault').value, '保持商品结构不变');
-  assert.equal(prompts.prompts.find(item => item.id === 'freeImageDefault').customized, true);
-  await runtime.resetPromptSetting('freeImageDefault');
+  assert.equal(prompts.prompts.find(item => item.id === 'childrenwearMasterGeneration').value, '保持童装商品结构不变');
+  assert.equal(prompts.prompts.find(item => item.id === 'childrenwearMasterGeneration').customized, true);
+  await runtime.resetPromptSetting('childrenwearMasterGeneration');
   prompts = await runtime.loadPromptSettings();
-  assert.equal(prompts.prompts.find(item => item.id === 'freeImageDefault').value, '');
-  assert.equal(prompts.prompts.find(item => item.id === 'freeImageDefault').customized, false);
+  assert.match(prompts.prompts.find(item => item.id === 'childrenwearMasterGeneration').value, /CHILDRENSWEAR_STRUCTURED_FLAT_LAY_EXECUTION/);
+  assert.equal(prompts.prompts.find(item => item.id === 'childrenwearMasterGeneration').customized, false);
   await fs.rm(temp, { recursive: true, force: true });
 });

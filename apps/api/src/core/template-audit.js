@@ -107,7 +107,7 @@ function imageContent(dataUrl) {
 
 function buildTemplateAuditPayload(options = {}) {
   return {
-    model: textValue(options.model) || textValue(options.fallbackModel),
+    model: options.model || options.fallbackModel,
     messages: [{
       role: 'user',
       content: [

@@ -16,7 +16,7 @@ test('不同团队账号使用独立配置、素材目录和文件令牌边界',
   await runtime.runWithWorkspace('local', async () => {
     await runtime.initializeRuntime();
     await runtime.saveConfig({ operatorCode: 'admin' });
-    await runtime.savePromptSetting('freeImageDefault', '管理员统一提示词');
+    await runtime.savePromptSetting('childrenwearMasterGeneration', '管理员统一童装提示词');
     await runtime.saveApiSettings({
       baseUrl: 'https://api.example.com/v1',
       apiKey: 'server-api-key',
@@ -36,7 +36,7 @@ test('不同团队账号使用独立配置、素材目录和文件令牌边界',
     assert.equal((await runtime.loadConfig()).operatorCode, 'artist');
     assert.match(runtime.WORKSPACE_ROOT, /user-artist$/);
     assert.throws(() => runtime.fileToken(adminFile), /不属于/);
-    assert.equal((await runtime.loadPromptSettings()).prompts.find(item => item.id === 'freeImageDefault').value, '管理员统一提示词');
+    assert.equal((await runtime.loadPromptSettings()).prompts.find(item => item.id === 'childrenwearMasterGeneration').value, '管理员统一童装提示词');
     const apiSettings = await runtime.loadApiSettings();
     assert.equal(apiSettings.relays.find(item => item.id === apiSettings.activeRelayId)?.baseUrl, 'https://api.example.com/v1');
   });

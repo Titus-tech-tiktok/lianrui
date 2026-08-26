@@ -1,5 +1,8 @@
 name: Deploy
 
+permissions:
+  contents: read
+
 on:
   push:
     branches:
@@ -19,6 +22,7 @@ jobs:
   check:
     name: Build and test
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -39,7 +43,9 @@ jobs:
     name: Deploy to server
     runs-on: ubuntu-latest
     needs: check
+    if: vars.ENABLE_PRODUCTION_DEPLOY == 'true'
     environment: production
+    timeout-minutes: 30
     steps:
       - name: Resolve deploy ref
         id: ref
@@ -54,41 +60,18 @@ jobs:
       - name: Load SSH key
         shell: bash
         run: |
+          test -n "${{ secrets.DEPLOY_HOST }}"
+          test -n "${{ secrets.DEPLOY_USER }}"
+          test -n "${{ secrets.DEPLOY_PATH }}"
+          test -n "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}"
           mkdir -p ~/.ssh
           printf '%s\n' "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -p "${{ secrets.DEPLOY_SSH_PORT || 22 }}" "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
 
-      - name: Bootstrap SSH key when needed
+      - name: Verify SSH access
         shell: bash
-        env:
-          DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
-        run: |
-          ssh_args=(-i ~/.ssh/deploy_key -p "${{ secrets.DEPLOY_SSH_PORT || 22 }}" -o BatchMode=yes)
-          target="${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}"
-          if ssh "${ssh_args[@]}" "$target" true; then
-            exit 0
-          fi
-
-          if [ -z "$DEPLOY_PASSWORD" ]; then
-            echo "SSH key is not authorized and DEPLOY_PASSWORD is not configured." >&2
-            exit 1
-          fi
-
-          if ! command -v sshpass >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y sshpass
-          fi
-
-          deploy_public_key="$(ssh-keygen -y -f ~/.ssh/deploy_key) github-actions-yongsha"
-          SSHPASS="$DEPLOY_PASSWORD" sshpass -e ssh \
-            -p "${{ secrets.DEPLOY_SSH_PORT || 22 }}" \
-            -o PreferredAuthentications=password \
-            -o PubkeyAuthentication=no \
-            "$target" \
-            "mkdir -p ~/.ssh && chmod 700 ~/.ssh && (grep -qxF '$deploy_public_key' ~/.ssh/authorized_keys 2>/dev/null || printf '%s\\n' '$deploy_public_key' >> ~/.ssh/authorized_keys) && chmod 600 ~/.ssh/authorized_keys"
-
-          ssh "${ssh_args[@]}" "$target" true
+        run: ssh -i ~/.ssh/deploy_key -p "${{ secrets.DEPLOY_SSH_PORT || 22 }}" -o BatchMode=yes "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" true
 
       - name: Update server
         shell: bash
@@ -97,24 +80,16 @@ jobs:
             "DEPLOY_REF='${{ steps.ref.outputs.value }}' bash -s" << 'EOF'
             set -euo pipefail
             cd "${{ secrets.DEPLOY_PATH }}"
-            git fetch origin --prune
+            test -d .git
+            test -f Dockerfile
+            test -f docker-compose.yml
+            git fetch origin --tags --prune
             if git rev-parse --verify --quiet "origin/${DEPLOY_REF}" >/dev/null; then
               git checkout --force -B "${DEPLOY_REF}" "origin/${DEPLOY_REF}"
             else
               git checkout --force "${DEPLOY_REF}"
             fi
-            export APP_COMMIT_SHA="$(git rev-parse HEAD)"
-            docker compose up -d --build
-            docker image prune -f
-            docker compose ps
-            for attempt in $(seq 1 30); do
-              health="$(curl -fsS http://127.0.0.1:8788/api/health 2>/dev/null || true)"
-              if printf '%s' "$health" | grep -Fq "\"commit\":\"${APP_COMMIT_SHA}\""; then
-                printf 'Deployment verified at %s\n' "$APP_COMMIT_SHA"
-                exit 0
-              fi
-              sleep 2
-            done
-            printf 'Deployment health check did not report commit %s\n' "$APP_COMMIT_SHA" >&2
-            exit 1
+            git reset --hard HEAD
+            git clean -fd
+            bash scripts/deploy-server.sh
           EOF
