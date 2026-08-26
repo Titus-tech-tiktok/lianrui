@@ -12,7 +12,7 @@ const sharp = require('sharp');
 const runtime = require('./runtime');
 const { createAuthService } = require('./auth');
 const { createAlipayRechargeService } = require('./alipay-recharge');
-const { verifyBusinessRequest } = require('./business-link');
+const { requestBusiness, sealBusinessData, verifyBusinessRequest } = require('./business-link');
 const { createBusinessSnapshotService } = require('./business-snapshot');
 const { metadataPaths, normalizeSourceMetadata } = require('./core/review-engine');
 const { isSameOrChildPath } = require('./core/path-utils');
@@ -28,6 +28,7 @@ const businessSnapshot = createBusinessSnapshotService({
   businessId: 'duoxiluka',
   businessName: '多嘻噜卡科技'
 });
+const YONGSHA_BUSINESS_URL = String(process.env.CAISHEN_YONGSHA_BUSINESS_URL || '').trim().replace(/\/+$/, '');
 const tempRoot = () => path.join(runtime.WORKSPACE_ROOT, 'tmp');
 const assetRoot = () => path.join(runtime.WORKSPACE_ROOT, 'assets');
 const jobRoot = () => path.join(runtime.WORKSPACE_ROOT, 'jobs');
@@ -1240,7 +1241,7 @@ async function startServer() {
     const verification = verifyBusinessRequest(req);
     if (!verification.ok) return res.status(verification.status).json({ error: verification.error });
     try {
-      return res.json({ data: await businessSnapshot.snapshot(req.body || {}) });
+      return res.json({ data: sealBusinessData(await businessSnapshot.snapshot(req.body || {})) });
     } catch (error) {
       return res.status(400).json({ error: error?.message || String(error) });
     }
@@ -1250,7 +1251,7 @@ async function startServer() {
     const verification = verifyBusinessRequest(req);
     if (!verification.ok) return res.status(verification.status).json({ error: verification.error });
     try {
-      return res.json({ data: await businessSnapshot.rechargeAction(req.body || {}, 'business-link') });
+      return res.json({ data: sealBusinessData(await businessSnapshot.rechargeAction(req.body || {}, 'business-link')) });
     } catch (error) {
       return res.status(400).json({ error: error?.message || String(error) });
     }
@@ -1396,14 +1397,26 @@ async function startServer() {
   app.get('/api/alipay/config', async (req, res) => {
     if (req.user.role !== 'admin' && !isSuperAdmin(req.user)) return res.status(403).json({ error: '当前账号不能使用 Alipay' });
     try {
-      const [settings, relayChoices] = await Promise.all([alipayRecharge.getSettings(), runtime.loadRelayChoices(true)]);
+      const [settings, relayChoices] = await Promise.all([
+        YONGSHA_BUSINESS_URL
+          ? requestBusiness(YONGSHA_BUSINESS_URL, '/api/internal/business/alipay-config', {})
+          : alipayRecharge.getSettings(),
+        runtime.loadRelayChoices(true)
+      ]);
       return res.json({ data: { ...settings, qrUrl: settings.qrAvailable ? '/api/alipay/qr' : '', activeServiceId: relayChoices.activeRelayId, services: relayChoices.relays.map(relay => ({ id: relay.id, name: relay.name, description: relay.description })) } });
     } catch (error) { return res.status(400).json({ error: error?.message || String(error) }); }
   });
 
   app.get('/api/alipay/qr', async (_req, res) => {
-    const settings = await alipayRecharge.getSettings();
+    const settings = YONGSHA_BUSINESS_URL
+      ? await requestBusiness(YONGSHA_BUSINESS_URL, '/api/internal/business/alipay-config', {})
+      : await alipayRecharge.getSettings();
     if (!settings.qrAvailable) return res.status(404).json({ error: '收款码尚未配置' });
+    if (YONGSHA_BUSINESS_URL) {
+      res.type(settings.qrMimeType || 'image/png');
+      res.set('Cache-Control', 'private, no-store');
+      return res.send(Buffer.from(settings.qrBase64, 'base64'));
+    }
     return res.sendFile(alipayRecharge.qrFile);
   });
 
