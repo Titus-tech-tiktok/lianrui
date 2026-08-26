@@ -33,9 +33,11 @@ function boundedInteger(value, fallback, minimum, maximum = Number.MAX_SAFE_INTE
   return Math.min(maximum, Math.max(minimum, Math.floor(parsed)));
 }
 
+const MAX_IMAGE_API_CONCURRENCY = 20000;
+
 class AdaptiveImageScheduler {
   constructor(options = {}) {
-    this.maxConcurrency = boundedInteger(options.maxConcurrency, 50, 1, 50);
+    this.maxConcurrency = boundedInteger(options.maxConcurrency, 50, 1, MAX_IMAGE_API_CONCURRENCY);
     this.currentConcurrency = boundedInteger(
       options.initialConcurrency,
       Math.min(4, this.maxConcurrency),
@@ -67,7 +69,7 @@ class AdaptiveImageScheduler {
   }
 
   configure(options = {}) {
-    const nextMax = boundedInteger(options.maxConcurrency, this.maxConcurrency, 1, 50);
+    const nextMax = boundedInteger(options.maxConcurrency, this.maxConcurrency, 1, MAX_IMAGE_API_CONCURRENCY);
     const requestedCurrent = Object.prototype.hasOwnProperty.call(options, 'initialConcurrency')
       ? options.initialConcurrency
       : this.currentConcurrency;
@@ -234,6 +236,7 @@ class AdaptiveImageScheduler {
 
 module.exports = {
   AdaptiveImageScheduler,
+  MAX_IMAGE_API_CONCURRENCY,
   RetryableRequestError,
   parseRetryAfterMs
 };

@@ -114,8 +114,6 @@ const state = {
   billingAdmin: null,
   billingAdminFilter: '',
   billingAdminRelayId: '',
-  globalStats: null,
-  globalStatsRange: 'today',
   mobileStats: null,
   mobileStatsRange: 'today',
   mobileStatsRelayId: '',
@@ -168,18 +166,6 @@ const state = {
   reviewRegenerationDialog: null,
   freeSource: null,
   freeResult: null,
-  titleLibrary: null,
-  readyTitleTasks: [],
-  generatedTitles: [],
-  generatedTitleCategory: '',
-  selectedTitleIndexes: new Set(),
-  requiredTitleRoots: new Set(),
-  taobaoPublishSettings: null,
-  taobaoPublishTasks: [],
-  taobaoPublishBlockedTasks: [],
-  activeTaobaoPublishTaskId: '',
-  activeTaobaoCategoryId: '',
-  activeTaobaoStoreId: '',
   promptSettings: null,
   activePromptId: '',
   freePromptDefaultApplied: false,
@@ -277,7 +263,6 @@ function applyCurrentUser(user) {
   $('#currentUserName').textContent = user.displayName || user.username;
   $('#currentUserName').title = `${user.username} · ${roleLabel(user.role)}`;
   $('#promptSettingsNav').hidden = !canViewPrompts();
-  if ($('#globalStatsNav')) $('#globalStatsNav').hidden = !isSuperAdmin();
   $('[data-settings-tab="general"]').hidden = user.role === 'admin';
   $('#apiSettingsTab').hidden = !isTeamAdmin();
   const apiTabStatus = $('#apiTabStatus');
@@ -414,177 +399,6 @@ function formatInteger(value = 0) {
 
 function formatPercent(value = 0) {
   return `${(Math.max(0, Number(value) || 0) * 100).toFixed(1)}%`;
-}
-
-function globalStatsRangeLabel(range = 'today') {
-  return ({ today: '今天', yesterday: '昨天', '7d': '近7天', '30d': '近30天' })[range] || '今天';
-}
-
-function globalStatsOperationLabel(key = '') {
-  return ({
-    generation: '首次生图',
-    regeneration: '重新生成',
-    master: '母版生成',
-    free: '自由生图',
-    analysis: '模板配置',
-    llm: '旧版模型调用',
-    other: '其他'
-  })[key] || key || '其他';
-}
-
-function ensureGlobalStatsPage() {
-  const existingNav = $('#globalStatsNav');
-  if (!existingNav) {
-    const freeNav = $('.nav-item[data-page="free"]');
-    const button = document.createElement('button');
-    button.className = 'nav-item';
-    button.id = 'globalStatsNav';
-    button.dataset.index = '06';
-    button.dataset.icon = '统';
-    button.dataset.page = 'global-stats';
-    button.title = '全局统计';
-    button.textContent = '全局统计';
-    if (freeNav) freeNav.before(button);
-    else $('.sidebar-nav')?.append(button);
-  }
-  [
-    ['free', '07'],
-    ['prompts', '08'],
-    ['settings', '09']
-  ].forEach(([page, index]) => {
-    const nav = $(`.nav-item[data-page="${page}"]`);
-    if (nav) nav.dataset.index = index;
-  });
-
-  if ($('#page-global-stats')) return;
-  const page = document.createElement('section');
-  page.className = 'page';
-  page.id = 'page-global-stats';
-  page.setAttribute('aria-label', '全局统计');
-  page.innerHTML = `
-    <div class="global-stats-page">
-      <div class="panel global-stats-hero">
-        <div>
-          <span class="eyebrow">SUPER ADMIN</span>
-          <h1>全局统计</h1>
-          <p>查看全站生成、重新生成、模板配置、成本和成功率。</p>
-        </div>
-        <div class="global-stats-toolbar">
-          <div class="global-stats-range" role="tablist" aria-label="统计范围">
-            <button type="button" data-global-stats-range="today">今天</button>
-            <button type="button" data-global-stats-range="yesterday">昨天</button>
-            <button type="button" data-global-stats-range="7d">近7天</button>
-            <button type="button" data-global-stats-range="30d">近30天</button>
-          </div>
-          <button class="secondary" type="button" id="refreshGlobalStatsButton">刷新</button>
-        </div>
-      </div>
-      <div id="globalStatsContent" class="global-stats-content">
-        <div class="empty-inline">正在读取统计数据...</div>
-      </div>
-    </div>`;
-  const freePage = $('#page-free');
-  if (freePage) freePage.before(page);
-  else document.querySelector('main')?.append(page);
-}
-
-function renderGlobalStats() {
-  const container = $('#globalStatsContent');
-  if (!container) return;
-  $$('.global-stats-range [data-global-stats-range]').forEach(button => {
-    const active = button.dataset.globalStatsRange === state.globalStatsRange;
-    button.classList.toggle('active', active);
-    button.setAttribute('aria-selected', String(active));
-  });
-  const data = state.globalStats;
-  if (!data) {
-    container.innerHTML = '<div class="empty-inline">暂无统计数据</div>';
-    return;
-  }
-  const totals = data.totals || {};
-  const operationRows = data.byOperation || [];
-  const accountRows = data.byAccount || [];
-  const trend = data.trend || [];
-  const maxTrend = Math.max(1, ...trend.map(item => Number(item.generated) || 0));
-  const maxOperationCost = Math.max(1, ...operationRows.map(item => Number(item.totalCostMinor) || 0));
-  const totalImages = (totals.imageGenerated || 0) + (totals.imageRegenerated || 0) + (totals.masterGenerated || 0) + (totals.freeGenerated || 0);
-  const rangeText = globalStatsRangeLabel(data.range || state.globalStatsRange);
-  const trendBars = trend.slice(-30).map(item => {
-    const height = Math.max(6, Math.round(((Number(item.generated) || 0) / maxTrend) * 100));
-    return `<span style="--h:${height}%" title="${escapeHtml(formatLocalDateTime(item.time))}：${formatInteger(item.generated)} 张"></span>`;
-  }).join('');
-  const operationsHtml = operationRows.map(item => {
-    const width = Math.max(3, Math.round(((Number(item.totalCostMinor) || 0) / maxOperationCost) * 100));
-    return `
-      <div class="global-stats-operation">
-        <div><b>${escapeHtml(globalStatsOperationLabel(item.key))}</b><span>${formatInteger(item.count)} 次</span></div>
-        <div class="global-stats-bar"><i style="width:${width}%"></i></div>
-        <strong>${formatMoney(item.totalCostMinor)}</strong>
-      </div>`;
-  }).join('') || '<div class="empty-inline">当前范围没有扣费流水</div>';
-  const accountsHtml = accountRows.slice(0, 10).map((item, index) => `
-    <tr>
-      <td>${String(index + 1).padStart(2, '0')}</td>
-      <td><b>${escapeHtml(item.displayName || item.username)}</b><span>${escapeHtml(roleLabel(item.role))}</span></td>
-      <td>${formatMoney(item.totalCostMinor)}</td>
-      <td>${formatInteger(item.imageGenerated)}</td>
-      <td>${formatInteger(item.imageRegenerated)}</td>
-      <td>${formatInteger(item.analysisCalls)}</td>
-      <td>${formatPercent(item.successRate)}</td>
-    </tr>
-  `).join('') || '<tr><td colspan="7">当前范围没有账号消耗</td></tr>';
-
-  container.innerHTML = `
-    <div class="global-stats-kpis">
-      <article><span>${rangeText}总消耗</span><b>${formatMoney(totals.totalCostMinor)}</b><em>平均每张 ${formatMoney(totals.averageCostMinor)}</em></article>
-      <article><span>生成图片</span><b>${formatInteger(totalImages)}</b><em>首次 ${formatInteger(totals.imageGenerated)} / 重生成 ${formatInteger(totals.imageRegenerated)}</em></article>
-      <article><span>一次成功率</span><b>${formatPercent(totals.successRate)}</b><em>一次通过 ${formatInteger(totals.firstPassImages)} 张</em></article>
-      <article><span>配置套图</span><b>${formatInteger(totals.templateAnalysisFolders)}</b><em>历史模型调用 ${formatInteger(totals.analysisCalls)} 次</em></article>
-    </div>
-    <div class="global-stats-layout">
-      <section class="panel global-stats-card">
-        <div class="section-head"><div><span class="eyebrow">TREND</span><h2>生成趋势</h2></div><small>${formatLocalDateTime(data.startedAt)} - ${formatLocalDateTime(data.endedAt)}</small></div>
-        <div class="global-stats-chart">${trendBars || '<span style="--h:6%"></span>'}</div>
-      </section>
-      <section class="panel global-stats-phone">
-        <span class="eyebrow">PHONE WIDGET</span>
-        <h2>手机桌面卡片</h2>
-        <div class="global-stats-widget">
-          <span>${rangeText}</span>
-          <b>${formatMoney(totals.totalCostMinor)}</b>
-          <div><strong>${formatInteger(totalImages)}</strong><small>张图</small><strong>${formatPercent(totals.successRate)}</strong><small>成功率</small></div>
-        </div>
-      </section>
-      <section class="panel global-stats-card">
-        <div class="section-head"><div><span class="eyebrow">COST</span><h2>消耗拆分</h2></div></div>
-        <div class="global-stats-operations">${operationsHtml}</div>
-      </section>
-      <section class="panel global-stats-card global-stats-table-card">
-        <div class="section-head"><div><span class="eyebrow">ACCOUNT</span><h2>账号排行</h2></div><small>${formatInteger(totals.activeWorkspaces)} 个账号有消耗</small></div>
-        <div class="global-stats-table-wrap">
-          <table class="global-stats-table">
-            <thead><tr><th>#</th><th>账号</th><th>消耗</th><th>生图</th><th>重生成</th><th>模型调用</th><th>成功率</th></tr></thead>
-            <tbody>${accountsHtml}</tbody>
-          </table>
-        </div>
-      </section>
-    </div>`;
-}
-
-async function loadGlobalStats() {
-  if (!isSuperAdmin()) return;
-  const button = $('#refreshGlobalStatsButton');
-  if (button) button.disabled = true;
-  try {
-    state.globalStats = await window.caishen.getGlobalStats(state.globalStatsRange);
-    renderGlobalStats();
-  } catch (error) {
-    const container = $('#globalStatsContent');
-    if (container) container.innerHTML = `<div class="empty-inline">${escapeHtml(errorText(error))}</div>`;
-    toast(errorText(error), true);
-  } finally {
-    if (button) button.disabled = false;
-  }
 }
 
 function shouldOpenMobileStats() {
@@ -1358,16 +1172,6 @@ function bindImageHoverPreview() {
   previewImage.addEventListener('load', () => { if (sourceImage) positionBesideSource(); });
 }
 
-function parseTitlePrefixRoots(value) {
-  const seen = new Set();
-  return String(value || '').split(/[\s,，、;；/\\|]+/).map(root => root.replace(/[\s,，。；;、|/\\]+/g, '').trim()).filter(root => {
-    const key = root.toLocaleUpperCase('zh-CN');
-    if (!root || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
 function shortPath(value) {
   if (!value) return '尚未配置';
   const parts = value.split('/').filter(Boolean);
@@ -1376,7 +1180,6 @@ function shortPath(value) {
 
 function setPage(name) {
   if (name === 'prompts' && !canViewPrompts()) name = 'settings';
-  if (name === 'global-stats' && !isSuperAdmin()) name = 'tasks';
   if (name === 'mobile-stats' && !isSuperAdmin()) name = 'tasks';
   if (name === 'settings') {
     if (state.currentUser?.role === 'admin' && state.settingsTab === 'general') state.settingsTab = 'api';
@@ -1405,11 +1208,8 @@ function setPage(name) {
   requestAnimationFrame(() => {
     if (currentPage !== name) return;
     if (name === 'review') loadReviews({ silent: state.reviews.length > 0 });
-    if (name === 'titles') loadTitlePage();
-    if (name === 'taobao-publish') loadTaobaoPublishPage();
     if (name === 'prompts' && canViewPrompts() && !state.promptSettings) loadPromptSettings();
     if (name === 'assets') loadAssetLibraryPreview(state.assetPreviewKey, { preserveSelection: true });
-    if (name === 'global-stats') loadGlobalStats();
     if (name === 'mobile-stats') loadMobileStats();
     if (name === 'settings' && isTeamAdmin() && !state.relayChoices) loadRelayChoices();
     if (name === 'settings' && isSuperAdmin() && !state.apiSettings) loadApiSettings();
@@ -2902,7 +2702,7 @@ async function apiBatchConcurrencyLimit(total = Infinity) {
     }
   }
   const configured = Number(state.apiConcurrencySettings?.imageMaxConcurrency);
-  const max = Math.min(50, Math.max(1, Math.trunc(Number.isFinite(configured) ? configured : 8)));
+  const max = Math.min(20000, Math.max(1, Math.trunc(Number.isFinite(configured) ? configured : 8)));
   const count = Number(total);
   return Number.isFinite(count) ? Math.min(max, Math.max(1, Math.trunc(count))) : max;
 }
@@ -3231,18 +3031,18 @@ async function generateQueue(options = {}) {
     grouped.get(groupKey).push(task);
   }
   const taskGroups = [...grouped.values()];
-  for (let groupIndex = 0; groupIndex < taskGroups.length; groupIndex += 1) {
+  const groupConcurrency = await apiBatchConcurrencyLimit(taskGroups.length);
+  await runClientConcurrency(taskGroups, groupConcurrency, async tasks => {
     if (state.stopGenerationRequested) {
-      taskGroups.slice(groupIndex).flat().forEach(item => {
+      tasks.forEach(item => {
         if (item.status === '排队中') {
           item.status = '未开始';
           item.progress = { ...(item.progress || {}), phase: 'stopped', message: '已停止，重新点击生成后再处理' };
         }
       });
       renderQueue();
-      break;
+      return;
     }
-    const tasks = taskGroups[groupIndex];
     const task = tasks[0];
     const payload = tasks.length > 1
       ? { ...task, templateRelativePaths: tasks.map(item => item.templateRelativePath).filter(Boolean) }
@@ -3273,7 +3073,7 @@ async function generateQueue(options = {}) {
       }
     }
     renderQueue();
-  }
+  });
   if (state.stopGenerationRequested) {
     runnable.forEach(item => {
       if (item.status === '排队中') {
@@ -3948,649 +3748,6 @@ async function generateFree() {
     toast(errorText(error), true);
   } finally {
     $('#freeGenerateButton').disabled = false;
-  }
-}
-
-async function loadTitleLibrary() {
-  try {
-    state.titleLibrary = await window.caishen.getTitleLibrary();
-    state.requiredTitleRoots = new Set(state.titleLibrary?.requiredRoots || []);
-    renderTitleLibrary();
-  } catch (error) {
-    toast(errorText(error), true);
-  }
-}
-
-async function loadReadyTitleTasks() {
-  const list = $('#readyTitleTaskList');
-  if (list) list.innerHTML = '<div class="title-empty-state"><span>02</span><b>正在读取任务</b><p>正在检查人工筛图结果和标题生成条件。</p></div>';
-  try {
-    state.readyTitleTasks = await window.caishen.listReadyTitleTasks();
-    renderReadyTitleTasks();
-  } catch (error) {
-    state.readyTitleTasks = [];
-    if (list) list.innerHTML = `<div class="title-empty-state error"><span>!</span><b>任务读取失败</b><p>${escapeHtml(errorText(error))}</p></div>`;
-    $('#readyTitleTaskSummary').textContent = '读取失败';
-  }
-}
-
-async function loadTitlePage() {
-  await Promise.all([loadTitleLibrary(), loadReadyTitleTasks()]);
-}
-
-function renderReadyTitleTasks() {
-  const list = $('#readyTitleTaskList');
-  if (!list) return;
-  $('#readyTitleTaskSummary').textContent = state.readyTitleTasks.length
-    ? `${state.readyTitleTasks.length} 个任务已满足标题生成条件`
-    : '人工筛图中全部图片通过后会出现在这里';
-  list.innerHTML = state.readyTitleTasks.length
-    ? state.readyTitleTasks.map((task, index) => `<article class="title-task-card" data-title-task-index="${index}"><div class="title-task-copy"><b>${escapeHtml(task.name)}</b><span>${task.imageCount} 张套图图片已通过；品类：${escapeHtml(task.category)}；${task.libraryAvailable ? `词库 ${task.libraryRecordCount} 条` : '缺少关键词库'}；${task.hasTitle ? '已生成标题.xlsx' : '未生成标题'}</span>${task.firstTitle ? `<strong>${escapeHtml(task.firstTitle)}</strong>` : ''}</div><div class="title-task-manual-title"><label>品类<input data-title-task-category value="${escapeHtml(task.category || '')}" placeholder="例如：餐边柜"></label><label>标题<input data-title-task-title value="${escapeHtml(task.firstTitle || '')}" maxlength="30" placeholder="手动输入淘宝标题"></label></div><div class="title-task-actions"><button class="secondary" data-title-task-action="save-title">保存标题</button><button class="primary" data-title-task-action="generate">${task.hasTitle ? '重新生成标题' : '生成标题'}</button>${task.hasTitle ? '<button class="secondary" data-title-task-action="open-title">下载标题</button>' : ''}<button class="secondary" data-title-task-action="open-folder">查看任务文件</button></div></article>`).join('')
-    : '<div class="title-empty-state"><span>02</span><b>暂无可生成标题的任务</b><p>请先在“人工筛图”中完成套图审核；全部图片通过后，任务会自动出现在这里。</p></div>';
-}
-
-async function handleReadyTitleTaskAction(event) {
-  const button = event.target.closest('[data-title-task-action]');
-  const card = event.target.closest('[data-title-task-index]');
-  if (!button || !card) return;
-  const task = state.readyTitleTasks[Number(card.dataset.titleTaskIndex)];
-  if (!task) return;
-  if (button.dataset.titleTaskAction === 'open-title') return window.caishen.revealFile(task.titleFile);
-  if (button.dataset.titleTaskAction === 'open-folder') return window.caishen.openFolder(task.folder);
-  if (button.dataset.titleTaskAction === 'save-title') {
-    const title = card.querySelector('[data-title-task-title]')?.value || '';
-    const category = card.querySelector('[data-title-task-category]')?.value || task.category;
-    button.disabled = true;
-    button.textContent = '保存中…';
-    try {
-      const result = await window.caishen.saveTitleForTask({ folder: task.folder, title, category });
-      $('#titleLibraryStatus').textContent = `已保存：${result.name}`;
-      await loadReadyTitleTasks();
-      toast('标题已保存');
-    } catch (error) {
-      toast(errorText(error), true);
-      renderReadyTitleTasks();
-    }
-    return;
-  }
-  button.disabled = true;
-  button.textContent = '生成中…';
-  try {
-    const category = card.querySelector('[data-title-task-category]')?.value.trim() || task.category;
-    const result = await window.caishen.generateTitleForTask({ folder: task.folder, category });
-    $('#titleLibraryStatus').textContent = `已生成：${result.name}`;
-    await loadReadyTitleTasks();
-    toast(`已生成 ${result.name}/标题.xlsx`);
-  } catch (error) {
-    toast(errorText(error), true);
-    renderReadyTitleTasks();
-  }
-}
-
-function renderTitleLibrary() {
-  const library = state.titleLibrary;
-  if (!library) {
-    $('#titlePrefixes').value = '';
-    $('#requiredRootPanel').innerHTML = '<span>请先导入关键词表。</span>';
-    $('#titleLibraryStatus').textContent = '还没有导入关键词表。';
-    return;
-  }
-  $('#titlePrefixes').value = (library.prefixRoots || []).join(' ');
-  $('#requiredRootPanel').innerHTML = library.rootCandidates.length
-    ? library.rootCandidates.map(root => `<label class="root-check"><input type="checkbox" data-required-root="${escapeHtml(root)}"${state.requiredTitleRoots.has(root) ? ' checked' : ''}><span>${escapeHtml(root)}</span></label>`).join('')
-    : '<span>词库里没有可用词根。</span>';
-  $('#titleLibraryStatus').textContent = `当前词库：${library.sourceFileName}，${library.recordCount} 条关键词；开头词根 ${library.prefixRoots?.length || 0} 个；必选词 ${state.requiredTitleRoots.size} 个。`;
-}
-
-async function importTitleLibrary() {
-  try {
-    const library = await window.caishen.importTitleLibrary();
-    if (!library) return;
-    state.titleLibrary = library;
-    state.requiredTitleRoots = new Set(library.requiredRoots || []);
-    renderTitleLibrary();
-    await loadReadyTitleTasks();
-    toast(`已导入 ${library.recordCount} 条关键词`);
-  } catch (error) { toast(errorText(error), true); }
-}
-
-async function saveTitleSetup(showMessage = true) {
-  try {
-    state.titleLibrary = await window.caishen.saveTitleSetup({
-      prefixes: $('#titlePrefixes').value,
-      requiredRoots: [...state.requiredTitleRoots]
-    });
-    if (showMessage) toast('词根和必选词已保存');
-    renderTitleLibrary();
-  } catch (error) { toast(errorText(error), true); }
-}
-
-async function generateTitles() {
-  try {
-    const prefixRoots = parseTitlePrefixRoots($('#titlePrefixes').value);
-    state.generatedTitles = await window.caishen.generateTitles({
-      prefixes: $('#titlePrefixes').value,
-      requiredRoots: [...state.requiredTitleRoots],
-      count: $('#titleCount').value
-    });
-    state.generatedTitleCategory = prefixRoots.join('、');
-    state.selectedTitleIndexes.clear();
-    renderTitleResults();
-    toast(`已生成 ${state.generatedTitles.length} 个标题`);
-  } catch (error) { toast(errorText(error), true); }
-}
-
-function renderTitleResults() {
-  const results = $('#titleResults');
-  $('#titleActionBar').hidden = state.generatedTitles.length === 0;
-  if (!state.generatedTitles.length) {
-    results.innerHTML = '<div class="title-empty-state"><span>01</span><b>还没有生成标题</b><p>填写开头词根并选择必选词，然后点击上方“生成标题”。</p></div>';
-    $('#titleSummary').textContent = '填写开头词根后点击“生成标题”。';
-    return;
-  }
-  $('#titleSummary').textContent = `${state.generatedTitleCategory}：已生成 ${state.generatedTitles.length} 个标题，已选 ${state.selectedTitleIndexes.size} 个。点击标题会复制并选中；选择后可导出 Excel。`;
-  results.innerHTML = state.generatedTitles.map((title, index) => `<div class="title-row${state.selectedTitleIndexes.has(index) ? ' selected' : ''}" data-title-index="${index}"><input class="title-select" type="checkbox"${state.selectedTitleIndexes.has(index) ? ' checked' : ''}><span>${String(index + 1).padStart(2, '0')}</span><b data-copy-title="${index}">${escapeHtml(title)}</b><span>${title.length}/30</span></div>`).join('');
-}
-
-async function exportSelectedTitles() {
-  try {
-    const titles = [...state.selectedTitleIndexes].sort((a, b) => a - b).map(index => state.generatedTitles[index]);
-    const file = await window.caishen.exportTitles({ titles, category: state.generatedTitleCategory });
-    if (file) toast(`已导出 ${titles.length} 个标题`);
-  } catch (error) { toast(errorText(error), true); }
-}
-
-async function loadTaobaoPublishPage() {
-  const list = $('#taobaoPublishTaskList');
-  if (list) list.innerHTML = '<div class="title-empty-state"><span>淘</span><b>正在读取任务</b><p>正在同步人工筛图已通过任务。</p></div>';
-  try {
-    const data = await window.caishen.listTaobaoPublishTasks();
-    state.taobaoPublishSettings = data.settings || null;
-    state.taobaoPublishTasks = data.tasks || [];
-    state.taobaoPublishBlockedTasks = data.blockedTasks || [];
-    const currentTask = state.taobaoPublishTasks.find(item => (item.id || item.folder) === state.activeTaobaoPublishTaskId);
-    if (!currentTask) state.activeTaobaoPublishTaskId = state.taobaoPublishTasks[0]?.id || state.taobaoPublishTasks[0]?.folder || '';
-    const activeTask = state.taobaoPublishTasks.find(item => (item.id || item.folder) === state.activeTaobaoPublishTaskId);
-    if (activeTask?.categoryId) state.activeTaobaoCategoryId = activeTask.categoryId;
-    if (!state.activeTaobaoCategoryId) state.activeTaobaoCategoryId = state.taobaoPublishSettings?.categories?.[0]?.id || '';
-    renderTaobaoPublishPage();
-  } catch (error) {
-    state.taobaoPublishTasks = [];
-    state.taobaoPublishBlockedTasks = [];
-    if (list) list.innerHTML = `<div class="title-empty-state error"><span>!</span><b>读取失败</b><p>${escapeHtml(errorText(error))}</p></div>`;
-    toast(errorText(error), true);
-  }
-}
-
-function taobaoStatusClass(status = '') {
-  if (status === '已保存草稿') return 'complete';
-  if (['失败', '发布失败', '需要人工处理', '模板未配置'].includes(status)) return 'failed';
-  if ([
-    '等待插件接收',
-    '等待本地发布器领取',
-    '插件已接收',
-    '本地发布器已领取',
-    '正在打开淘宝页面',
-    '正在打开淘宝',
-    '正在填写字段',
-    '正在填写模板',
-    '正在上传图片',
-    '正在保存草稿'
-  ].includes(status)) return 'running';
-  return 'idle';
-}
-
-function taobaoTaskMetaLine(task = {}) {
-  const stores = taobaoStoresForCurrentUser();
-  const devices = state.taobaoPublishSettings?.devices || [];
-  const store = stores.find(item => item.id === task.storeId);
-  const device = devices.find(item => item.id === task.deviceId);
-  const parts = [
-    `目标店铺：${task.storeName || store?.name || (task.storeId ? task.storeId : '未指定')}`,
-    task.deviceId ? `执行设备：${device?.name || task.deviceId}` : ''
-  ].filter(Boolean);
-  return parts.join(' · ');
-}
-
-function taobaoStoresForCurrentUser() {
-  const stores = state.taobaoPublishSettings?.stores || [];
-  if (!state.currentUser?.id) return [];
-  return stores.filter(store => !store.ownerUserId || store.ownerUserId === state.currentUser?.id);
-}
-
-function renderTaobaoPublisherDevices() {
-  const list = $('#taobaoPublisherDeviceList');
-  if (!list) return;
-  const stores = taobaoStoresForCurrentUser();
-  const devices = (state.taobaoPublishSettings?.devices || [])
-    .filter(device => !device.userId || device.userId === state.currentUser?.id);
-  if (!devices.length) {
-    list.innerHTML = '<div class="empty-inline">还没有本地发布器设备连接。打开 exe 并登录同一个 Web 账号后会显示在这里。</div>';
-    return;
-  }
-  list.innerHTML = `<div class="taobao-publisher-devices-head"><b>本地发布器设备</b><span>${devices.length} 台</span></div>
-    ${devices.map(device => {
-      const store = stores.find(item => item.id === device.activeStoreId);
-      return `<article class="taobao-publisher-device-card">
-        <div><b>${escapeHtml(device.name || device.id)}</b><span>${device.enabled === false ? '已停用' : '可领取任务'}</span></div>
-        <dl>
-          <div><dt>当前店铺</dt><dd>${escapeHtml(store?.name || device.activeStoreId || '未选择')}</dd></div>
-          <div><dt>发布器版本</dt><dd>${escapeHtml(device.appVersion || '未上报')}</dd></div>
-          <div><dt>最后在线</dt><dd>${escapeHtml(device.lastSeenAt ? formatLocalDateTime(device.lastSeenAt) : '未上报')}</dd></div>
-        </dl>
-      </article>`;
-    }).join('')}`;
-}
-
-function renderTaobaoCategoryList() {
-  const list = $('#taobaoCategoryList');
-  if (!list) return;
-  const categories = state.taobaoPublishSettings?.categories || [];
-  if (!categories.length) {
-    list.innerHTML = '<div class="empty-inline">暂无类目模板</div>';
-    return;
-  }
-  const activeId = state.activeTaobaoCategoryId || categories[0]?.id || '';
-  list.innerHTML = `<label class="taobao-category-select">发布类目<select id="taobaoCategoryQuickSelect">${categories.map(category => `<option value="${escapeHtml(category.id)}"${category.id === activeId ? ' selected' : ''}>${escapeHtml(category.name)}</option>`).join('')}</select></label>`;
-}
-
-function activeTaobaoCategory() {
-  const categories = state.taobaoPublishSettings?.categories || [];
-  return categories.find(category => category.id === state.activeTaobaoCategoryId) || categories[0] || null;
-}
-
-const TAOBAO_SELECTOR_FIELDS = [
-  ['categorySearch', '类目搜索输入框'],
-  ['categorySearchButton', '类目搜索按钮'],
-  ['categoryResult', '类目结果/下一步按钮'],
-  ['title', '标题输入框'],
-  ['price', '价格输入框'],
-  ['stock', '库存输入框'],
-  ['shipFrom', '发货地输入框'],
-  ['freightTemplate', '运费模板控件'],
-  ['serviceTemplate', '服务模板控件'],
-  ['storeName', '当前店铺名文本'],
-  ['uploadButton', '打开上传按钮'],
-  ['allImages', '全部图片上传框'],
-  ['mainImages', '主图上传框'],
-  ['ratioImages', '3:4 主图上传框'],
-  ['detailImages', '详情页上传框'],
-  ['saveDraft', '保存草稿按钮']
-];
-
-function renderTaobaoSelectorInputs(selectors = {}) {
-  return TAOBAO_SELECTOR_FIELDS.map(([key, label]) => (
-    `<label>${escapeHtml(label)}<input name="selector.${escapeHtml(key)}" value="${escapeHtml(selectors[key] || '')}" placeholder="CSS 选择器，可留空"></label>`
-  )).join('');
-}
-
-function collectTaobaoSelectors(data) {
-  const selectors = parseJsonField(data.get('selectorJson'), '选择器 JSON');
-  for (const [key] of TAOBAO_SELECTOR_FIELDS) {
-    const value = String(data.get(`selector.${key}`) || '').trim();
-    if (value) selectors[key] = value;
-    else delete selectors[key];
-  }
-  return selectors;
-}
-
-function taobaoDiagnosticText(item = {}) {
-  return [item.label, item.text, item.placeholder, item.name, item.id, item.value]
-    .map(value => String(value || '').toLocaleLowerCase('zh-CN'))
-    .join(' ');
-}
-
-function taobaoDiagnosticSelector(items = [], keywords = []) {
-  const wanted = keywords.map(item => String(item || '').toLocaleLowerCase('zh-CN'));
-  const hit = items.find(item => item?.selector && wanted.some(keyword => taobaoDiagnosticText(item).includes(keyword)));
-  return hit?.selector || '';
-}
-
-function applyTaobaoDiagnosticsSelectors() {
-  const form = $('#taobaoCategoryTemplateForm');
-  if (!form) return toast('请先选择类目模板', true);
-  const raw = String(form.querySelector('[name="taobaoDiagnosticsImport"]')?.value || '').trim();
-  if (!raw) return toast('请先粘贴插件诊断 JSON', true);
-  let payload = null;
-  try {
-    payload = JSON.parse(raw);
-  } catch {
-    return toast('插件诊断必须是 JSON', true);
-  }
-  const detail = payload.detail && typeof payload.detail === 'object' ? payload.detail : payload;
-  const fields = [...(Array.isArray(detail.visibleFields) ? detail.visibleFields : []), ...(Array.isArray(detail.visibleSelects) ? detail.visibleSelects : [])];
-  const buttons = Array.isArray(detail.visibleButtons) ? detail.visibleButtons : [];
-  const files = Array.isArray(detail.fileInputs) ? detail.fileInputs : [];
-  const next = {
-    categorySearch: taobaoDiagnosticSelector(fields, ['搜索发品', '类目关键词', '产品名称', '条码信息', '搜索']),
-    categorySearchButton: taobaoDiagnosticSelector(buttons, ['搜索', '查询']),
-    categoryResult: taobaoDiagnosticSelector(buttons, ['选择', '下一步', '开始发布', '发布']),
-    title: taobaoDiagnosticSelector(fields, ['标题', '宝贝标题', '商品标题']),
-    price: taobaoDiagnosticSelector(fields, ['价格', '一口价', '销售价']),
-    stock: taobaoDiagnosticSelector(fields, ['库存', '数量']),
-    shipFrom: taobaoDiagnosticSelector(fields, ['发货地']),
-    freightTemplate: taobaoDiagnosticSelector(fields, ['运费模板']),
-    serviceTemplate: taobaoDiagnosticSelector(fields, ['服务模板']),
-    storeName: taobaoDiagnosticSelector(fields, ['当前店铺', '店铺名称', '店铺名', '卖家店铺']),
-    uploadButton: taobaoDiagnosticSelector(buttons, ['上传图片', '上传', '选择图片', '添加图片', '图片空间']),
-    allImages: files.length === 1 ? files[0].selector : '',
-    mainImages: taobaoDiagnosticSelector(files, ['主图', '商品图片', '宝贝图片']),
-    ratioImages: taobaoDiagnosticSelector(files, ['3:4', '3-4', '长图', '竖图']),
-    detailImages: taobaoDiagnosticSelector(files, ['详情', '描述', '详情图']),
-    saveDraft: taobaoDiagnosticSelector(buttons, ['保存草稿', '存草稿', '保存'])
-  };
-  let count = 0;
-  for (const [key, value] of Object.entries(next)) {
-    if (!value) continue;
-    const input = form.querySelector(`[name="selector.${CSS.escape(key)}"]`);
-    if (!input || input.value.trim()) continue;
-    input.value = value;
-    count += 1;
-  }
-  toast(count ? `已套用 ${count} 个 selector，请保存类目模板` : '诊断里没有找到新的可套用 selector');
-}
-
-function renderTaobaoCategoryEditor() {
-  const editor = $('#taobaoCategoryEditor');
-  if (!editor) return;
-  const category = activeTaobaoCategory();
-  if (!category) {
-    editor.innerHTML = '<div class="empty-inline">暂无类目模板</div>';
-    return;
-  }
-  const defaults = category.defaults || {};
-  const selectors = defaults.selectors || {};
-  editor.innerHTML = `<details class="taobao-template-details" open><summary>${escapeHtml(category.name)}模板配置</summary><form class="taobao-template-form" id="taobaoCategoryTemplateForm">
-    <label>发布链接<input name="publishUrl" value="${escapeHtml(defaults.publishUrl || '')}" placeholder="淘宝后台发布页链接"></label>
-    <label>淘宝搜索关键词<input name="categoryKeyword" value="${escapeHtml(defaults.categoryKeyword || category.product || category.name || '')}" placeholder="用于搜索淘宝类目"></label>
-    <label>备用类目路径<textarea name="categoryPath" rows="3" placeholder="每行一级，例如：住宅家具&#10;柜类&#10;餐边柜">${escapeHtml((defaults.categoryPath || []).join('\n'))}</textarea></label>
-    <label>品牌候选<input name="brandName" value="${escapeHtml(defaults.brandName || '其他家')}" placeholder="其他家"></label>
-    <label>型号<input name="modelName" value="${escapeHtml(defaults.modelName || '其他')}" placeholder="其他"></label>
-    <label>价格<input name="price" value="${escapeHtml(defaults.price || '')}" placeholder="发布价格"></label>
-    <label>库存<input name="stock" value="${escapeHtml(defaults.stock || '')}" placeholder="999"></label>
-    <label>发货地<input name="shipFrom" value="${escapeHtml(defaults.shipFrom || '')}" placeholder="发货地"></label>
-    <label>运费模板<input name="freightTemplate" value="${escapeHtml(defaults.freightTemplate || '')}" placeholder="运费模板名称"></label>
-    <label>服务模板<input name="serviceTemplate" value="${escapeHtml(defaults.serviceTemplate || '')}" placeholder="服务模板名称"></label>
-    <label>属性 JSON<textarea name="attributes" rows="4" placeholder='{"材质":"实木"}'>${escapeHtml(JSON.stringify(defaults.attributes || {}, null, 2))}</textarea></label>
-    <label>自定义必填字段 JSON<textarea name="customFields" rows="5" placeholder='[{"label":"品牌","value":"其他","type":"text","selector":""}]'>${escapeHtml(JSON.stringify(defaults.customFields || [], null, 2))}</textarea></label>
-    <label>插件诊断 JSON<textarea name="taobaoDiagnosticsImport" rows="5" placeholder="从浏览器插件弹窗复制当前淘宝页诊断后粘贴到这里"></textarea></label>
-    <button type="button" class="secondary" id="importTaobaoDiagnosticsButton">从诊断套用 selector</button>
-    ${renderTaobaoSelectorInputs(selectors)}
-    <label>高级选择器 JSON<textarea name="selectorJson" rows="4" placeholder='{"attribute.材质":"input[name=material]"}'>${escapeHtml(JSON.stringify(Object.fromEntries(Object.entries(selectors).filter(([key]) => !TAOBAO_SELECTOR_FIELDS.some(([field]) => field === key))), null, 2))}</textarea></label>
-    <button type="submit" class="primary">保存类目模板</button>
-  </form></details>`;
-}
-
-function parseJsonField(value, label) {
-  const text = String(value || '').trim();
-  if (!text) return {};
-  try {
-    const parsed = JSON.parse(text);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('must be object');
-    return parsed;
-  } catch {
-    throw new Error(`${label} 必须是 JSON 对象`);
-  }
-}
-
-function parseJsonArrayField(value, label) {
-  const text = String(value || '').trim();
-  if (!text) return [];
-  try {
-    const parsed = JSON.parse(text);
-    if (!Array.isArray(parsed)) throw new Error('must be array');
-    return parsed;
-  } catch {
-    throw new Error(`${label} 必须是 JSON 数组`);
-  }
-}
-
-async function saveActiveTaobaoCategoryTemplate(event) {
-  event?.preventDefault();
-  const category = activeTaobaoCategory();
-  const form = $('#taobaoCategoryTemplateForm');
-  if (!category || !form || !state.taobaoPublishSettings) return;
-  const data = new FormData(form);
-  const categories = (state.taobaoPublishSettings.categories || []).map(item => {
-    if (item.id !== category.id) return item;
-    return {
-      ...item,
-      defaults: {
-        ...(item.defaults || {}),
-        publishUrl: String(data.get('publishUrl') || '').trim(),
-        categoryKeyword: String(data.get('categoryKeyword') || '').trim(),
-        categoryPath: String(data.get('categoryPath') || '').split('\n').map(value => value.trim()).filter(Boolean),
-        brandName: String(data.get('brandName') || '').trim(),
-        modelName: String(data.get('modelName') || '').trim(),
-        price: String(data.get('price') || '').trim(),
-        stock: String(data.get('stock') || '').trim(),
-        shipFrom: String(data.get('shipFrom') || '').trim(),
-        freightTemplate: String(data.get('freightTemplate') || '').trim(),
-        serviceTemplate: String(data.get('serviceTemplate') || '').trim(),
-        attributes: parseJsonField(data.get('attributes'), '属性 JSON'),
-        customFields: parseJsonArrayField(data.get('customFields'), '自定义必填字段 JSON'),
-        selectors: collectTaobaoSelectors(data)
-      }
-    };
-  });
-  try {
-    state.taobaoPublishSettings = await window.caishen.saveTaobaoPublishSettings({
-      ...state.taobaoPublishSettings,
-      categories
-    });
-    toast('类目模板已保存');
-    renderTaobaoPublishPage();
-  } catch (error) {
-    toast(errorText(error), true);
-  }
-}
-
-function renderTaobaoTaskList() {
-  const list = $('#taobaoPublishTaskList');
-  if (!list) return;
-  const blocked = state.taobaoPublishBlockedTasks || [];
-  $('#taobaoPublishSummary').textContent = state.taobaoPublishTasks.length
-    ? `${state.taobaoPublishTasks.length} 个任务可发布`
-    : blocked.length
-      ? `${blocked.length} 个任务暂不可发布`
-      : '暂无整套通过任务';
-  if (state.taobaoPublishTasks.length) {
-    list.innerHTML = state.taobaoPublishTasks.map(task => {
-      const active = (task.id || task.folder) === state.activeTaobaoPublishTaskId;
-      const statusClass = taobaoStatusClass(task.status);
-      return `<article class="taobao-task-card${active ? ' active' : ''}" data-taobao-task="${escapeHtml(task.id || task.folder)}">
-        <div><b>${escapeHtml(task.name)}</b><span>${escapeHtml(task.categoryName || '未选择类目')} · ${task.imageCount || 0} 张 · ${task.titleReady ? '标题已就绪' : '缺少标题'}</span></div>
-        <span>${escapeHtml(taobaoTaskMetaLine(task))}</span>
-        ${task.failureReason ? `<p class="taobao-failure">${escapeHtml(task.failureReason)}</p>` : ''}
-        <em class="${statusClass}">${escapeHtml(task.status || '未配置')}</em>
-      </article>`;
-    }).join('');
-    return;
-  }
-  if (blocked.length) {
-    list.innerHTML = blocked.map(task => `<article class="taobao-task-card blocked">
-      <div><b>${escapeHtml(task.name)}</b><span>${escapeHtml((task.reasons || []).join('、'))}</span></div>
-      <em class="failed">暂不可发布</em>
-    </article>`).join('');
-    return;
-  }
-  list.innerHTML = '<div class="title-empty-state"><span>淘</span><b>暂无可发布任务</b><p>人工筛图整套通过后会自动同步到这里。</p></div>';
-}
-
-function renderTaobaoExecutionSummary(task = {}) {
-  const taskDetail = task?.detail && typeof task.detail === 'object' ? task.detail : {};
-  const stores = taobaoStoresForCurrentUser();
-  const devices = state.taobaoPublishSettings?.devices || [];
-  const store = stores.find(item => item.id === task.storeId);
-  const device = devices.find(item => item.id === task.deviceId);
-  const rows = [
-    ['目标店铺', task.storeName || store?.name || task.storeId],
-    ['执行设备', device?.name || task.deviceId],
-    ['执行通道', task.extensionId],
-    ['尝试次数', String(Number(task.attempts || 0))],
-    ['更新时间', task.updatedAt ? formatLocalDateTime(task.updatedAt) : ''],
-    ['当前步骤', taskDetail.step],
-    ['截图路径', taskDetail.screenshotPath]
-  ].filter(([, value]) => value != null && String(value).trim());
-  const screenshotLink = taskDetail.diagnosticScreenshotUrl
-    ? `<a class="taobao-diagnostic-screenshot-link" href="${escapeHtml(taskDetail.diagnosticScreenshotUrl)}" target="_blank" rel="noopener">查看发布器截图</a>`
-    : '';
-  if (!rows.length && !screenshotLink) return '';
-  return `<section class="taobao-diagnostics taobao-execution-summary">
-    <div class="taobao-diagnostics-head"><b>本地发布器执行信息</b></div>
-    ${screenshotLink}
-    <dl>${rows.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join('')}</dl>
-  </section>`;
-}
-
-function renderTaobaoExecutionTimeline(task = {}) {
-  const timeline = Array.isArray(task.timeline) ? task.timeline : [];
-  const items = timeline.slice(-12).reverse();
-  if (!items.length) return '';
-  return `<section class="taobao-diagnostics taobao-execution-timeline">
-    <div class="taobao-diagnostics-head"><b>本地发布器执行时间线</b><span>${timeline.length} 条</span></div>
-    <ol>${items.map(item => {
-      const screenshotLink = item.diagnosticScreenshotUrl
-        ? `<a href="${escapeHtml(item.diagnosticScreenshotUrl)}" target="_blank" rel="noopener">截图</a>`
-        : '';
-      const meta = [
-        item.at ? formatLocalDateTime(item.at) : '',
-        item.step,
-        item.deviceId ? `设备：${item.deviceId}` : ''
-      ].filter(Boolean).join(' · ');
-      return `<li>
-        <b>${escapeHtml(item.status || '状态更新')}</b>
-        <span>${escapeHtml(meta)}</span>
-        ${item.failureReason ? `<p>${escapeHtml(item.failureReason)}</p>` : ''}
-        ${screenshotLink}
-      </li>`;
-    }).join('')}</ol>
-  </section>`;
-}
-
-function renderTaobaoPublishDiagnostics(task) {
-  const taskDetail = task?.detail && typeof task.detail === 'object' ? task.detail : {};
-  const hasDetail = Object.keys(taskDetail).length > 0;
-  if (!task?.failureReason && !hasDetail) return '';
-  const rows = [
-    ['当前步骤', taskDetail.step],
-    ['页面地址', taskDetail.url],
-    ['页面标题', taskDetail.title],
-    ['页面错误', taskDetail.validationError],
-    ['保存确认', taskDetail.confirmation],
-    ['保存时间', taskDetail.savedAt]
-  ].filter(([, value]) => value != null && String(value).trim());
-  const inputs = Array.isArray(taskDetail.fileInputs) ? taskDetail.fileInputs : [];
-  const fields = Array.isArray(taskDetail.visibleFields) ? taskDetail.visibleFields : [];
-  const selects = Array.isArray(taskDetail.visibleSelects) ? taskDetail.visibleSelects : [];
-  const buttons = Array.isArray(taskDetail.visibleButtons) ? taskDetail.visibleButtons : [];
-  const frame = taskDetail.frame && typeof taskDetail.frame === 'object' ? taskDetail.frame : null;
-  const frames = Array.isArray(taskDetail.frameCandidates) ? taskDetail.frameCandidates : [];
-  return `<section class="taobao-diagnostics">
-    <div class="taobao-diagnostics-head"><b>插件诊断</b>${hasDetail ? '<button type="button" id="copyTaobaoPublishDiagnosticsButton">复制诊断</button>' : ''}</div>
-    ${task.failureReason ? `<p class="taobao-failure">${escapeHtml(task.failureReason)}</p>` : ''}
-    ${rows.length ? `<dl>${rows.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join('')}</dl>` : ''}
-    ${frame ? `<div class="taobao-diagnostics-block"><b>选中 Frame</b><pre>${escapeHtml(JSON.stringify(frame, null, 2))}</pre></div>` : ''}
-    ${frames.length ? `<div class="taobao-diagnostics-block"><b>Frame 候选</b><pre>${escapeHtml(JSON.stringify(frames, null, 2))}</pre></div>` : ''}
-    ${inputs.length ? `<div class="taobao-diagnostics-block"><b>上传控件</b><pre>${escapeHtml(JSON.stringify(inputs, null, 2))}</pre></div>` : ''}
-    ${fields.length ? `<div class="taobao-diagnostics-block"><b>输入控件</b><pre>${escapeHtml(JSON.stringify(fields, null, 2))}</pre></div>` : ''}
-    ${selects.length ? `<div class="taobao-diagnostics-block"><b>下拉控件</b><pre>${escapeHtml(JSON.stringify(selects, null, 2))}</pre></div>` : ''}
-    ${buttons.length ? `<div class="taobao-diagnostics-block"><b>页面按钮</b><pre>${escapeHtml(JSON.stringify(buttons, null, 2))}</pre></div>` : ''}
-  </section>`;
-}
-
-async function copyTaobaoPublishDiagnostics() {
-  const task = state.taobaoPublishTasks.find(item => (item.id || item.folder) === state.activeTaobaoPublishTaskId);
-  if (!task) return toast('请先选择任务', true);
-  await window.caishen.copyText(JSON.stringify({
-    id: task.id,
-    name: task.name,
-    status: task.status,
-    failureReason: task.failureReason,
-    detail: task.detail || {}
-  }, null, 2));
-  toast('插件诊断已复制');
-}
-
-function renderTaobaoPublishDetail() {
-  const detail = $('#taobaoPublishDetail');
-  const title = $('#taobaoPublishDetailTitle');
-  if (!detail || !title) return;
-  const task = state.taobaoPublishTasks.find(item => (item.id || item.folder) === state.activeTaobaoPublishTaskId);
-  if (!task) {
-    title.textContent = '选择一个任务';
-    detail.innerHTML = '<div class="empty-inline">先点击中间任务卡片，再按步骤确认发布信息。</div>';
-    return;
-  }
-  title.textContent = task.name || '发布任务';
-  const selectedCategoryId = state.activeTaobaoCategoryId || task.categoryId;
-  const categories = state.taobaoPublishSettings?.categories || [];
-  const selectedCategory = categories.find(category => category.id === selectedCategoryId) || categories[0] || null;
-  const stores = taobaoStoresForCurrentUser();
-  const candidateStoreIds = [state.activeTaobaoStoreId, task.storeId, state.taobaoPublishSettings?.localPublisher?.activeStoreId].filter(Boolean);
-  state.activeTaobaoStoreId = candidateStoreIds.find(storeId => stores.some(store => store.id === storeId)) || stores[0]?.id || '';
-  const storeOptions = stores.length
-    ? stores.map(store => `<option value="${escapeHtml(store.id)}"${store.id === state.activeTaobaoStoreId ? ' selected' : ''}>${escapeHtml(store.name)}</option>`).join('')
-    : '<option value="">请先在本地发布器添加淘宝店铺</option>';
-  detail.innerHTML = `<div class="taobao-package-summary taobao-publish-steps">
-    <section class="taobao-step"><span>01</span><div><b>确认发布类目</b><p>${escapeHtml(selectedCategory?.name || task.categoryName || '未选择类目')}</p></div></section>
-    <section class="taobao-step"><span>02</span><div><b>目标淘宝店铺</b><label>目标淘宝店铺<select id="taobaoTaskStoreSelect">${storeOptions}</select></label></div></section>
-    <section class="taobao-step"><span>03</span><div><b>确认标题</b><p>${escapeHtml(task.title || '未生成标题')}</p></div></section>
-    <section class="taobao-step"><span>04</span><div><b>确认图片包</b><dl>
-      <div><dt>主图</dt><dd>${task.mainImageCount || 0} 张</dd></div>
-      <div><dt>3:4 主图</dt><dd>${task.ratioImageCount || 0} 张</dd></div>
-      <div><dt>详情图</dt><dd>${task.detailImageCount || 0} 张</dd></div>
-      <div><dt>状态</dt><dd>${escapeHtml(task.status || '未配置')}</dd></div>
-    </dl></div></section>
-    ${renderTaobaoExecutionSummary(task)}
-    ${renderTaobaoExecutionTimeline(task)}
-    ${renderTaobaoPublishDiagnostics(task)}
-    <div class="taobao-publish-actions"><button class="primary" id="queueTaobaoPublishButton" type="button">发布到淘宝草稿</button><button class="secondary" id="openTaobaoTaskFolderButton" type="button">查看任务文件</button></div>
-  </div>`;
-}
-
-function renderTaobaoPublishPage() {
-  $('#taobaoPublishToken').textContent = state.taobaoPublishSettings?.token || '未生成';
-  renderTaobaoPublisherDevices();
-  renderTaobaoCategoryList();
-  renderTaobaoCategoryEditor();
-  renderTaobaoTaskList();
-  renderTaobaoPublishDetail();
-  syncTaobaoExtensionOptions();
-}
-
-function syncTaobaoExtensionOptions() {
-  try {
-    window.postMessage({
-      type: 'CAISHEN_TAOBAO_WEB_SYNC',
-      token: state.taobaoPublishSettings?.token || ''
-    }, window.location.origin);
-  } catch {}
-}
-
-function notifyTaobaoExtensionPoll() {
-  try {
-    window.postMessage({
-      type: 'CAISHEN_TAOBAO_WEB_TRIGGER',
-      baseUrl: window.location.origin,
-      token: state.taobaoPublishSettings?.token || ''
-    }, window.location.origin);
-  } catch {}
-}
-
-async function queueActiveTaobaoPublishTask() {
-  const task = state.taobaoPublishTasks.find(item => (item.id || item.folder) === state.activeTaobaoPublishTaskId);
-  if (!task) return toast('请先选择任务', true);
-  const categoryId = state.activeTaobaoCategoryId || task.categoryId;
-  const storeId = $('#taobaoTaskStoreSelect')?.value || state.activeTaobaoStoreId || '';
-  if (!storeId) return toast('请先在本地发布器添加并选择淘宝店铺', true);
-  try {
-    await window.caishen.queueTaobaoPublishTask({ folder: task.folder, categoryId, storeId });
-    notifyTaobaoExtensionPoll();
-    toast('已提交，等待浏览器插件接收');
-    await loadTaobaoPublishPage();
-  } catch (error) {
-    toast(errorText(error), true);
   }
 }
 
@@ -6098,63 +5255,6 @@ function bindEvents() {
   };
   $('#chooseFreeImageButton').onclick = chooseFreeImage;
   $('#freeGenerateButton').onclick = generateFree;
-  $('#generateTitlesButton').onclick = generateTitles;
-  $('#importTitleLibraryButton').onclick = importTitleLibrary;
-  $('#refreshTitleLibraryButton').onclick = loadTitlePage;
-  $('#saveTitleSetupButton').onclick = () => saveTitleSetup(true);
-  $('#selectAllTitlesButton').onclick = () => { state.generatedTitles.forEach((_, index) => state.selectedTitleIndexes.add(index)); renderTitleResults(); };
-  $('#clearTitleSelectionButton').onclick = () => { state.selectedTitleIndexes.clear(); renderTitleResults(); };
-  $('#exportTitlesButton').onclick = exportSelectedTitles;
-  $('#readyTitleTaskList').onclick = handleReadyTitleTaskAction;
-  if ($('#refreshTaobaoPublishButton')) $('#refreshTaobaoPublishButton').onclick = loadTaobaoPublishPage;
-  if ($('#copyTaobaoPublishTokenButton')) $('#copyTaobaoPublishTokenButton').onclick = async () => {
-    const token = state.taobaoPublishSettings?.token || '';
-    if (!token) return toast('插件连接令牌未生成', true);
-    try {
-      await window.caishen.copyText(token);
-      toast('插件连接令牌已复制');
-    } catch (error) {
-      toast(errorText(error), true);
-    }
-  };
-  if ($('#taobaoCategoryList')) $('#taobaoCategoryList').onchange = event => {
-    const select = event.target.closest('#taobaoCategoryQuickSelect');
-    if (!select) return;
-    state.activeTaobaoCategoryId = select.value;
-    renderTaobaoPublishPage();
-  };
-  if ($('#taobaoCategoryList')) $('#taobaoCategoryList').onclick = event => {
-    const button = event.target.closest('[data-taobao-category]');
-    if (!button) return;
-    state.activeTaobaoCategoryId = button.dataset.taobaoCategory;
-    renderTaobaoPublishPage();
-  };
-  if ($('#taobaoPublishTaskList')) $('#taobaoPublishTaskList').onclick = event => {
-    const card = event.target.closest('[data-taobao-task]');
-    if (!card) return;
-    state.activeTaobaoPublishTaskId = card.dataset.taobaoTask;
-    const task = state.taobaoPublishTasks.find(item => (item.id || item.folder) === state.activeTaobaoPublishTaskId);
-    if (task?.categoryId) state.activeTaobaoCategoryId = task.categoryId;
-    renderTaobaoPublishPage();
-  };
-      if ($('#taobaoPublishDetail')) $('#taobaoPublishDetail').onclick = event => {
-        if (event.target.closest('#queueTaobaoPublishButton')) return queueActiveTaobaoPublishTask();
-        if (event.target.closest('#copyTaobaoPublishDiagnosticsButton')) return copyTaobaoPublishDiagnostics();
-        if (event.target.closest('#openTaobaoTaskFolderButton')) {
-      const task = state.taobaoPublishTasks.find(item => (item.id || item.folder) === state.activeTaobaoPublishTaskId);
-      if (task?.folder) return window.caishen.openFolder(task.folder);
-          return toast('请先选择任务', true);
-        }
-      };
-      if ($('#taobaoPublishDetail')) $('#taobaoPublishDetail').onchange = event => {
-        const storeSelect = event.target.closest('#taobaoTaskStoreSelect');
-        if (!storeSelect) return;
-        state.activeTaobaoStoreId = storeSelect.value;
-      };
-  if ($('#taobaoCategoryEditor')) $('#taobaoCategoryEditor').onclick = event => {
-    if (event.target.closest('#importTaobaoDiagnosticsButton')) applyTaobaoDiagnosticsSelectors();
-  };
-  if ($('#taobaoCategoryEditor')) $('#taobaoCategoryEditor').onsubmit = saveActiveTaobaoCategoryTemplate;
   $('#saveSettingsButton').onclick = saveSettings;
   $('#resetSettingsButton').onclick = resetSettings;
   $('#openBillingDetailButton').onclick = openBillingDetail;
@@ -6164,14 +5264,7 @@ function bindEvents() {
   $('#saveBillingRulesButton').onclick = saveBillingRules;
   $('#refreshBillingButton').onclick = loadBillingAdmin;
   $('#clearBillingLedgerButton').onclick = clearBillingLedger;
-  if ($('#refreshGlobalStatsButton')) $('#refreshGlobalStatsButton').onclick = loadGlobalStats;
   if ($('#refreshMobileStatsButton')) $('#refreshMobileStatsButton').onclick = loadMobileStats;
-  $$('.global-stats-range [data-global-stats-range]').forEach(button => {
-    button.onclick = () => {
-      state.globalStatsRange = button.dataset.globalStatsRange || 'today';
-      loadGlobalStats();
-    };
-  });
   $('#billingUserFilter').onchange = event => {
     state.billingAdminFilter = String(event.target.value || '');
     renderBillingAdmin();
@@ -6380,30 +5473,6 @@ function bindEvents() {
     if (input.checked) state.selectedReviewFolders.add(item.folder); else state.selectedReviewFolders.delete(item.folder);
     renderReviewList();
   };
-  $('#requiredRootPanel').onchange = event => {
-    const input = event.target.closest('[data-required-root]');
-    if (!input) return;
-    if (input.checked) state.requiredTitleRoots.add(input.dataset.requiredRoot);
-    else state.requiredTitleRoots.delete(input.dataset.requiredRoot);
-    $('#titleLibraryStatus').textContent = `当前词库：${state.titleLibrary?.sourceFileName || ''}，${state.titleLibrary?.recordCount || 0} 条关键词；已选择必选词 ${state.requiredTitleRoots.size} 个。`;
-  };
-  $('#titleResults').onclick = async event => {
-    const row = event.target.closest('[data-title-index]');
-    if (!row) return;
-    const index = Number(row.dataset.titleIndex);
-    if (event.target.matches('input')) {
-      if (event.target.checked) state.selectedTitleIndexes.add(index); else state.selectedTitleIndexes.delete(index);
-    } else {
-      state.selectedTitleIndexes.add(index);
-      try {
-        await window.caishen.copyText(state.generatedTitles[index]);
-        toast('标题已复制');
-      } catch (error) {
-        toast(errorText(error), true);
-      }
-    }
-    renderTitleResults();
-  };
   $('#productSearch').oninput = event => { clearTimeout(productSearchTimer); productSearchTimer = setTimeout(() => loadAssets('categoriesPath', event.target.value), 300); };
   $('#printSearch').oninput = event => { clearTimeout(printSearchTimer); printSearchTimer = setTimeout(() => loadAssets('printsPath', event.target.value), 300); };
   $('#reviewSearch').oninput = () => { renderReviewList(); renderReviewStage(); };
@@ -6417,7 +5486,6 @@ async function start() {
     showAuthGate(authStatus.bootstrapRequired);
     return;
   }
-  ensureGlobalStatsPage();
   ensureMobileStatsPage();
   applyCurrentUser(authStatus.user);
   applySidebarCollapsed(loadSidebarCollapsed());
@@ -6442,7 +5510,7 @@ async function start() {
     ...(isTeamAdmin() ? [loadRelayChoices()] : []),
     ...(isSuperAdmin() ? [loadApiSettings()] : [])
   ];
-  await Promise.all([loadTitleLibrary(), loadTemplatePreparation(), loadBillingSummary(), ...adminLoads]);
+  await Promise.all([loadTemplatePreparation(), loadBillingSummary(), ...adminLoads]);
   await Promise.all([loadAssets('categoriesPath'), loadAssets('printsPath')]);
   renderQueue();
 }

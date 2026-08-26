@@ -10,7 +10,6 @@
     "test": "node scripts/run-tests.js"
   },
   "dependencies": {
-    "@e965/xlsx": "0.20.3",
     "dotenv": "17.4.2",
     "express": "5.2.1",
     "helmet": "8.2.0",

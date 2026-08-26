@@ -398,21 +398,5 @@ window.caishen = {
   revealFile: file => openWorkspacePath(file, 'file'),
   openFolder: folder => openWorkspacePath(folder, 'folder'),
   downloadFolder: folder => downloadWorkspaceFolder(folder),
-  copyText,
-  getTitleLibrary: () => rpc('getTitleLibrary'),
-  importTitleLibrary: async () => (await uploadSingle('/api/upload/title-library', '.xlsx,.csv'))?.data || null,
-  listReadyTitleTasks: () => rpc('listReadyTitleTasks'),
-  generateTitleForTask: folder => rpc('generateTitleForTask', folder),
-  saveTitleForTask: payload => rpc('saveTitleForTask', payload),
-  saveTitleSetup: payload => rpc('saveTitleSetup', payload),
-  generateTitles: payload => rpc('generateTitles', payload),
-  getTaobaoPublishSettings: () => rpc('getTaobaoPublishSettings'),
-  saveTaobaoPublishSettings: payload => rpc('saveTaobaoPublishSettings', payload),
-  listTaobaoPublishTasks: () => rpc('listTaobaoPublishTasks'),
-  queueTaobaoPublishTask: payload => rpc('queueTaobaoPublishTask', payload),
-  exportTitles: async payload => {
-    const file = await rpc('exportTitles', payload);
-    if (file) await openWorkspacePath(file, 'file');
-    return file;
-  }
+  copyText
 };

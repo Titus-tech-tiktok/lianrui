@@ -6,24 +6,11 @@ const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const XLSX = require('@e965/xlsx');
 const {
   extractImageResult,
   isImagePath,
   safeFileName
 } = require('./core/business');
-const {
-  generateStandaloneTitles,
-  generateTaobaoTitle,
-  getTitleRootCandidates,
-  mergeImportedTitleLibrary,
-  normalizeHeader,
-  normalizeTitleText,
-  parseTitleKeywordRows,
-  parseTitlePrefixRoots,
-  parseTitleNumber,
-  splitTitleRoots
-} = require('./core/title-engine');
 const {
   createManualTemplateAnalysis,
   deserializeTemplateAnalysis,
@@ -39,7 +26,6 @@ const {
   applyBatchApproval,
   deriveFolderStatus,
   deriveImageStatus,
-  isFolderReadyForTitle,
   metadataPaths,
   normalizeOperationLogs,
   normalizeReviewMetadata,
@@ -51,12 +37,6 @@ const {
   toWpfOperationLogs,
   toWpfSourceMetadata
 } = require('./core/review-engine');
-const {
-  advanceTitleGenerationState,
-  createTitleWorkbookRows,
-  getTitleCategoryForReviewFolder
-} = require('./core/title-task-engine');
-const { createDefaultTitleLibrary } = require('./core/default-title-library');
 const {
   getTaskProductProfileFile,
   normalizeProductProfile,
@@ -71,6 +51,7 @@ const {
 const { isSameOrChildPath } = require('./core/path-utils');
 const {
   AdaptiveImageScheduler,
+  MAX_IMAGE_API_CONCURRENCY,
   RetryableRequestError,
   parseRetryAfterMs
 } = require('./core/adaptive-image-scheduler');
@@ -81,14 +62,6 @@ const {
   detectTemplateLightCabinetPanels,
   hasSemanticPrintableSurfaces
 } = require('./core/template-mask');
-const {
-  TAOBAO_CATEGORY_TEMPLATES,
-  classifyTaobaoImages,
-  isReviewReadyForTaobao,
-  taobaoReviewBlockers,
-  validateTaobaoImagePackage,
-  templateById: taobaoTemplateById
-} = require('./core/taobao-publish');
 const { createBillingService } = require('./billing');
 const { createFinanceLedgerService } = require('./finance-ledger');
 
@@ -212,7 +185,7 @@ function requireApiConfig() {
   return settings;
 }
 
-const DEFAULT_IMAGE_API_CONCURRENCY = Math.min(50, Math.max(1, Number(
+const DEFAULT_IMAGE_API_CONCURRENCY = Math.min(MAX_IMAGE_API_CONCURRENCY, Math.max(1, Number(
   process.env.CAISHEN_IMAGE_API_MAX_CONCURRENCY
   || 30
 )));
@@ -244,6 +217,7 @@ const imageApiScheduler = new AdaptiveImageScheduler({
   baseBackoffMs: IMAGE_API_BACKOFF_BASE_MS,
   maxBackoffMs: IMAGE_API_BACKOFF_MAX_MS
 });
+let appliedImageSchedulerSettingsKey = '';
 const imageReferenceCache = createImageReferenceCache({
   cacheRoot: path.join(SYSTEM_STATE_ROOT, 'image-reference-cache'),
   maxEdge: 2048,
@@ -347,7 +321,7 @@ function normalizeImageConcurrencySettings(value = {}, fallback = {}) {
   const maxValue = Number(value.imageMaxConcurrency ?? value.ImageMaxConcurrency ?? fallback.imageMaxConcurrency ?? DEFAULT_IMAGE_API_CONCURRENCY);
   const initialValue = Number(value.imageInitialConcurrency ?? value.ImageInitialConcurrency ?? fallback.imageInitialConcurrency ?? DEFAULT_IMAGE_API_INITIAL_CONCURRENCY);
   const intervalValue = Number(value.imageStartIntervalMs ?? value.ImageStartIntervalMs ?? fallback.imageStartIntervalMs ?? DEFAULT_IMAGE_API_START_INTERVAL_MS);
-  const maxConcurrency = Math.min(50, Math.max(1, Math.trunc(Number.isFinite(maxValue) ? maxValue : DEFAULT_IMAGE_API_CONCURRENCY)));
+  const maxConcurrency = Math.min(MAX_IMAGE_API_CONCURRENCY, Math.max(1, Math.trunc(Number.isFinite(maxValue) ? maxValue : DEFAULT_IMAGE_API_CONCURRENCY)));
   const initialConcurrency = Math.min(maxConcurrency, Math.max(1, Math.trunc(Number.isFinite(initialValue) ? initialValue : DEFAULT_IMAGE_API_INITIAL_CONCURRENCY)));
   const startInterval = Math.min(60000, Math.max(0, Math.trunc(Number.isFinite(intervalValue) ? intervalValue : DEFAULT_IMAGE_API_START_INTERVAL_MS)));
   return { imageInitialConcurrency: initialConcurrency, imageMaxConcurrency: maxConcurrency, imageStartIntervalMs: startInterval };
@@ -355,11 +329,14 @@ function normalizeImageConcurrencySettings(value = {}, fallback = {}) {
 
 function applyImageSchedulerSettings(settings = {}) {
   const normalized = normalizeImageConcurrencySettings(settings);
+  const settingsKey = `${normalized.imageInitialConcurrency}:${normalized.imageMaxConcurrency}:${normalized.imageStartIntervalMs}`;
+  if (settingsKey === appliedImageSchedulerSettingsKey) return normalized;
   imageApiScheduler.configure({
     initialConcurrency: normalized.imageInitialConcurrency,
     maxConcurrency: normalized.imageMaxConcurrency,
     minStartIntervalMs: normalized.imageStartIntervalMs
   });
+  appliedImageSchedulerSettingsKey = settingsKey;
   return normalized;
 }
 
@@ -375,7 +352,7 @@ function apiConcurrencyLimit(total = Infinity) {
 function imageSchedulerSettingsForRequest(_relay = null, _options = {}, settings = currentApiSettings()) {
   const normalized = normalizeImageConcurrencySettings(settings);
   return {
-    initialConcurrency: normalized.imageMaxConcurrency,
+    initialConcurrency: normalized.imageInitialConcurrency,
     maxConcurrency: normalized.imageMaxConcurrency,
     minStartIntervalMs: normalized.imageStartIntervalMs
   };
@@ -1125,132 +1102,6 @@ async function saveConfig(next) {
   return safe;
 }
 
-function titleLibraryFile() {
-  return path.join(app.getPath('userData'), 'current-title-library.json');
-}
-
-function titleKeywordLibraryRoot() {
-  return path.join(app.getPath('userData'), 'title-keyword-libraries');
-}
-
-function categoryTitleLibraryFile(categoryName) {
-  return path.join(titleKeywordLibraryRoot(), `${safeFileName(categoryName)}.json`);
-}
-
-function titleGenerationStateFile() {
-  return path.join(app.getPath('userData'), 'standalone-title-generation-state.json');
-}
-
-function taobaoPublishSettingsFile() {
-  return path.join(app.getPath('userData'), 'taobao-publish-settings.json');
-}
-
-function taobaoPublishStateFile() {
-  return path.join(app.getPath('userData'), 'taobao-publish-state.json');
-}
-
-function titleGenerationStateKey(library, prefixRoots) {
-  const libraryName = normalizeTitleText(library?.sourceFileName || '');
-  const prefixes = prefixRoots.map(normalizeTitleText).join('|');
-  const required = (library?.requiredRoots || []).map(normalizeTitleText).filter(Boolean).join('|');
-  return `${libraryName}::${prefixes}::${required}`;
-}
-
-async function loadTitleGenerationState() {
-  try {
-    const parsed = JSON.parse(await fsp.readFile(titleGenerationStateFile(), 'utf8'));
-    return parsed && typeof parsed === 'object' ? parsed : { nextIndexes: {} };
-  } catch {
-    return { nextIndexes: {} };
-  }
-}
-
-async function saveTitleGenerationState(state) {
-  await fsp.mkdir(path.dirname(titleGenerationStateFile()), { recursive: true });
-  await fsp.writeFile(titleGenerationStateFile(), JSON.stringify(state, null, 2));
-}
-
-async function loadTitleLibrary() {
-  try {
-    return JSON.parse(await fsp.readFile(titleLibraryFile(), 'utf8'));
-  } catch {
-    const library = createDefaultTitleLibrary();
-    await fsp.mkdir(path.dirname(titleLibraryFile()), { recursive: true });
-    await fsp.writeFile(titleLibraryFile(), JSON.stringify(library, null, 2));
-    await saveCategoryTitleLibrary(library);
-    return library;
-  }
-}
-
-async function saveTitleLibrary(library) {
-  await fsp.mkdir(path.dirname(titleLibraryFile()), { recursive: true });
-  await fsp.writeFile(titleLibraryFile(), JSON.stringify(library, null, 2));
-  return publicTitleLibrary(library);
-}
-
-async function saveCategoryTitleLibrary(library) {
-  if (!library?.categoryName) return;
-  await fsp.mkdir(titleKeywordLibraryRoot(), { recursive: true });
-  await fsp.writeFile(categoryTitleLibraryFile(library.categoryName), JSON.stringify(library, null, 2));
-}
-
-async function loadCategoryTitleLibrary(categoryName) {
-  const category = String(categoryName || '').trim();
-  if (!category) return null;
-  try {
-    return JSON.parse(await fsp.readFile(categoryTitleLibraryFile(category), 'utf8'));
-  } catch {
-    // Earlier Mac builds only stored the currently selected library. Migrate it
-    // lazily so already-imported keyword files also work for approved tasks.
-    const current = await loadTitleLibrary();
-    if (String(current?.categoryName || '').localeCompare(category, 'zh-CN', { sensitivity: 'accent' }) === 0) {
-      await saveCategoryTitleLibrary(current);
-      return current;
-    }
-    return null;
-  }
-}
-
-function titleRootCandidates(library) {
-  return getTitleRootCandidates(library);
-}
-
-function publicTitleLibrary(library) {
-  if (!library) return null;
-  return {
-    categoryName: library.categoryName || '',
-    sourceFileName: library.sourceFileName,
-    recordCount: library.records?.length || 0,
-    prefixRoots: library.prefixRoots || [],
-    requiredRoots: library.requiredRoots || [],
-    rootCandidates: titleRootCandidates(library).slice(0, 80)
-  };
-}
-
-async function importTitleLibrary(fileValue) {
-  const file = path.resolve(String(fileValue || ''));
-  if (!fileValue || !fs.existsSync(file)) throw new Error('请选择 Excel 或 CSV 关键词表');
-  const workbook = path.extname(file).toLowerCase() === '.csv'
-    ? XLSX.read(await fsp.readFile(file, 'utf8'), { type: 'string' })
-    : XLSX.readFile(file);
-  const sheetName = workbook.SheetNames[0];
-  const worksheet = sheetName ? workbook.Sheets[sheetName] : null;
-  if (!worksheet) throw new Error('Excel 没有工作表');
-  const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false, defval: '' });
-  if (!rows.length) throw new Error('Excel 表为空');
-  const imported = parseTitleKeywordRows(rows, {
-    fileName: file,
-    sheetName,
-    importedAt: new Date().toISOString()
-  });
-  if (!imported.records.length) throw new Error('关键词列没有有效数据');
-  const existing = await loadTitleLibrary();
-  const library = { ...mergeImportedTitleLibrary(imported, existing), sourcePath: file };
-  await saveCategoryTitleLibrary(library);
-  await saveTitleLibrary(library);
-  return publicTitleLibrary(library);
-}
-
 function isWorkspacePath(file) {
   return isSameOrChildPath(currentWorkspaceRoot(), file);
 }
@@ -1655,7 +1506,7 @@ async function downloadGeneratedImage(url, signal) {
 
 async function generateImage(prompt, imagePaths, options = {}) {
   const api = await activeApiConfig();
-  imageApiScheduler.configure(imageSchedulerSettingsForRequest(api.activeRelay, options, api));
+  applyImageSchedulerSettings(api);
   const preparedImages = await Promise.all(imagePaths.map(file => {
     if (!isImagePath(file)) throw new Error(`Unsupported image format: ${path.basename(file)}`);
     return imageReferenceCache.prepare(file);
@@ -1739,7 +1590,7 @@ async function generateImage(prompt, imagePaths, options = {}) {
         });
       }
     });
-    const result = extractImageResult(body);
+    const result = extractImageResult(body, api.responseFormat || 'url');
     const downloadStartedAt = Date.now();
     const bytes = result.type === 'base64'
       ? Buffer.from(result.value, 'base64')
@@ -3127,390 +2978,6 @@ async function reviewFolders() {
   return folders.sort((a, b) => b.modifiedAt - a.modifiedAt);
 }
 
-function titleLibraryRecordCount(library) {
-  const records = library?.records || library?.Records;
-  return Array.isArray(records) ? records.length : 0;
-}
-
-async function readFirstTitleFromWorkbook(file) {
-  const workbook = await readTitleWorkbook(file);
-  return workbook.title;
-}
-
-async function readTitleWorkbook(file) {
-  const empty = { category: '', title: '' };
-  if (!fs.existsSync(file)) return empty;
-  try {
-    const workbook = XLSX.readFile(file);
-    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows = worksheet ? XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false, defval: '' }) : [];
-    const header = Array.isArray(rows?.[0]) ? rows[0].map(value => String(value || '').trim()) : [];
-    const categoryIndex = header.findIndex(value => value === '品类' || value.toLocaleLowerCase('en-US') === 'category');
-    const titleIndex = header.findIndex(value => value === '标题' || value.toLocaleLowerCase('en-US') === 'title');
-    const firstDataRow = rows.find((row, index) => index > 0 && Array.isArray(row) && row.some(value => String(value || '').trim()));
-    if (!firstDataRow) return empty;
-    return {
-      category: String(firstDataRow[categoryIndex >= 0 ? categoryIndex : 1] || '').trim(),
-      title: String(firstDataRow[titleIndex >= 0 ? titleIndex : 2] || '').trim()
-    };
-  } catch {
-    return empty;
-  }
-}
-
-async function writeTitlesWorkbook(file, category, titles) {
-  await fsp.mkdir(path.dirname(file), { recursive: true });
-  await fsp.rm(file, { force: true });
-  const workbook = XLSX.utils.book_new();
-  const worksheet = XLSX.utils.aoa_to_sheet(createTitleWorkbookRows(category, titles, localDisplayTimestamp()));
-  worksheet['!cols'] = [{ wch: 8 }, { wch: 16 }, { wch: 56 }, { wch: 20 }];
-  XLSX.utils.book_append_sheet(workbook, worksheet, '标题');
-  XLSX.writeFile(workbook, file);
-  return file;
-}
-
-async function listReadyTitleTasks() {
-  const config = await loadConfig();
-  const ready = (await reviewFolders()).filter(isFolderReadyForTitle);
-  const knownCategories = TAOBAO_CATEGORY_TEMPLATES.flatMap(item => [item.product, item.name]);
-  const tasks = [];
-  for (const item of ready) {
-    const titleFile = path.join(item.folder, '标题.xlsx');
-    const hasTitle = fs.existsSync(titleFile);
-    const workbookTitle = hasTitle ? await readTitleWorkbook(titleFile) : { category: '', title: '' };
-    const derivedCategory = getTitleCategoryForReviewFolder({
-      folder: item.folder,
-      templateFolderPath: item.source?.templateFolderPath,
-      detailSetsPath: config.detailSetsPath,
-      knownCategories,
-      directoryExists: candidate => fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()
-    });
-    const category = workbookTitle.category || derivedCategory;
-    const library = await loadCategoryTitleLibrary(category);
-    tasks.push({
-      folder: item.folder,
-      name: item.name,
-      imageCount: item.jobs.length,
-      category,
-      libraryAvailable: titleLibraryRecordCount(library) > 0,
-      libraryRecordCount: titleLibraryRecordCount(library),
-      hasTitle,
-      titleFile,
-      firstTitle: workbookTitle.title,
-      modifiedAt: item.modifiedAt
-    });
-  }
-  return tasks;
-}
-
-async function generateTitleForTask(folderValue) {
-  const payload = folderValue && typeof folderValue === 'object' ? folderValue : { folder: folderValue };
-  const folder = String(payload.folder || '');
-  if (!folder || !fs.existsSync(folder)) throw new Error('任务文件夹不存在');
-  const task = (await listReadyTitleTasks()).find(item => path.resolve(item.folder) === path.resolve(folder));
-  if (!task) throw new Error('任务图片尚未全部通过，不能生成标题');
-  const category = String(payload.category || task.category || '').trim();
-  const library = await loadCategoryTitleLibrary(category);
-  if (!library || titleLibraryRecordCount(library) === 0) throw new Error(`缺少 ${category} 关键词库，请先导入。`);
-
-  const profile = await readProductProfileFile(getTaskProductProfileFile(folder)) || normalizeProductProfile({});
-  const stateFile = path.join(metadataPaths(folder).metadataFolder, 'title-generation-state.json');
-  const nextState = advanceTitleGenerationState(await readJsonFile(stateFile, {}));
-  await writeJsonFile(stateFile, nextState);
-  const title = generateTaobaoTitle(category, library, profile, nextState.Count);
-  await writeTitlesWorkbook(task.titleFile, category, [title]);
-  return { ...task, category, hasTitle: true, firstTitle: title };
-}
-
-function taobaoCategoryForTitleCategory(categoryValue) {
-  const value = String(categoryValue || '').trim();
-  if (!value) return null;
-  return TAOBAO_CATEGORY_TEMPLATES.find(item =>
-    value === item.product
-    || value === item.name
-    || item.name.includes(value)
-    || value.includes(item.product)
-  ) || null;
-}
-
-async function saveTitleForTask(payload = {}) {
-  const folder = String(payload.folder || '');
-  if (!folder || !fs.existsSync(folder)) throw new Error('任务文件夹不存在');
-  const task = (await listReadyTitleTasks()).find(item => path.resolve(item.folder) === path.resolve(folder));
-  if (!task) throw new Error('任务图片尚未全部通过，不能保存标题');
-  const title = normalizeTitleText(payload.title || '').slice(0, 30);
-  if (!title) throw new Error('请输入标题');
-  const category = String(payload.category || task.category || '').trim();
-  await writeTitlesWorkbook(task.titleFile, category, [title]);
-  return { ...task, category, hasTitle: true, firstTitle: title };
-}
-
-function defaultTaobaoPublishSettings() {
-  return {
-    version: 1,
-    token: crypto.randomBytes(24).toString('hex'),
-    categories: TAOBAO_CATEGORY_TEMPLATES.map(item => ({ ...item, defaults: { ...item.defaults } }))
-  };
-}
-
-function normalizePlainObject(value) {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-}
-
-function normalizeTaobaoCustomFields(value = []) {
-  if (!Array.isArray(value)) return [];
-  return value.map(item => ({
-    label: String(item?.label || '').trim(),
-    value: String(item?.value || '').trim(),
-    type: ['select', 'click'].includes(String(item?.type || '').trim()) ? String(item.type).trim() : 'text',
-    selector: String(item?.selector || '').trim()
-  })).filter(item => item.label && item.value);
-}
-
-function normalizeTaobaoPublishDefaults(templateDefaults = {}, savedDefaults = {}) {
-  const saved = normalizePlainObject(savedDefaults);
-  return {
-    ...templateDefaults,
-    ...saved,
-    attributes: {
-      ...normalizePlainObject(templateDefaults.attributes),
-      ...normalizePlainObject(saved.attributes)
-    },
-    selectors: {
-      ...normalizePlainObject(templateDefaults.selectors),
-      ...normalizePlainObject(saved.selectors)
-    },
-    customFields: normalizeTaobaoCustomFields(saved.customFields || templateDefaults.customFields)
-  };
-}
-
-function normalizeTaobaoPublishSettings(value = {}) {
-  const incoming = Array.isArray(value.categories) ? value.categories : [];
-  const byId = new Map(incoming.map(item => [String(item.id || ''), item]));
-  return {
-    version: 1,
-    token: String(value.token || '').trim() || crypto.randomBytes(24).toString('hex'),
-    categories: TAOBAO_CATEGORY_TEMPLATES.map(template => {
-      const saved = byId.get(template.id) || {};
-      return {
-        ...template,
-        ...saved,
-        id: template.id,
-        name: template.name,
-        product: template.product,
-        defaults: normalizeTaobaoPublishDefaults(template.defaults, saved.defaults)
-      };
-    })
-  };
-}
-
-async function getTaobaoPublishSettings() {
-  const existing = await readJsonFile(taobaoPublishSettingsFile(), null);
-  const settings = normalizeTaobaoPublishSettings(existing || defaultTaobaoPublishSettings());
-  if (!existing) await writeJsonFile(taobaoPublishSettingsFile(), settings);
-  return settings;
-}
-
-async function saveTaobaoPublishSettings(payload = {}) {
-  const current = await getTaobaoPublishSettings();
-  const next = normalizeTaobaoPublishSettings({
-    ...current,
-    ...payload,
-    token: payload.token === '' ? current.token : (payload.token || current.token)
-  });
-  await writeJsonFile(taobaoPublishSettingsFile(), next);
-  return next;
-}
-
-async function readTaobaoPublishState() {
-  const state = await readJsonFile(taobaoPublishStateFile(), {});
-  return {
-    version: 1,
-    tasks: Array.isArray(state?.tasks) ? state.tasks : []
-  };
-}
-
-async function writeTaobaoPublishState(state) {
-  const clean = {
-    version: 1,
-    tasks: Array.isArray(state?.tasks) ? state.tasks.slice(-500) : []
-  };
-  await writeJsonFile(taobaoPublishStateFile(), clean);
-  return clean;
-}
-
-function taobaoPublishTaskId(folder, categoryId) {
-  return crypto.createHash('sha1').update(`${path.resolve(folder)}\u0000${categoryId}`).digest('hex').slice(0, 16);
-}
-
-async function taobaoPublishBaseTasks() {
-  const [reviews, readyTitles, settings, state] = await Promise.all([
-    reviewFolders(),
-    listReadyTitleTasks(),
-    getTaobaoPublishSettings(),
-    readTaobaoPublishState()
-  ]);
-  const titlesByFolder = new Map(readyTitles.map(item => [path.resolve(item.folder), item]));
-  const stateByFolder = new Map(state.tasks.map(item => [path.resolve(item.folder), item]));
-  return reviews.filter(review => {
-    if (!isReviewReadyForTaobao(review)) return false;
-    const titleTask = titlesByFolder.get(path.resolve(review.folder)) || null;
-    return Boolean(titleTask?.firstTitle);
-  }).map(review => {
-    const saved = stateByFolder.get(path.resolve(review.folder)) || {};
-    const titleTask = titlesByFolder.get(path.resolve(review.folder)) || null;
-    const inferredCategory = taobaoCategoryForTitleCategory(titleTask?.category);
-    const categoryId = saved.categoryId || inferredCategory?.id || '';
-    const category = settings.categories.find(item => item.id === categoryId) || null;
-    const images = classifyTaobaoImages(review.jobs || []);
-    return {
-      id: saved.id || (categoryId ? taobaoPublishTaskId(review.folder, categoryId) : ''),
-      folder: review.folder,
-      name: review.name,
-      categoryId,
-      categoryName: category?.name || '',
-      status: saved.status || (categoryId ? '待发布' : '未配置'),
-      failureReason: saved.failureReason || '',
-      detail: saved.detail || {},
-      updatedAt: saved.updatedAt || '',
-      titleReady: Boolean(titleTask?.firstTitle),
-      title: titleTask?.firstTitle || '',
-      imageCount: (review.jobs || []).filter(job => job.outputUrl).length,
-      mainImageCount: images.mainImages.length,
-      ratioImageCount: images.ratioImages.length,
-      detailImageCount: images.detailImages.length,
-      modifiedAt: review.modifiedAt
-    };
-  });
-}
-
-async function taobaoPublishBlockedTasks() {
-  const [reviews, readyTitles] = await Promise.all([
-    reviewFolders(),
-    listReadyTitleTasks()
-  ]);
-  const titlesByFolder = new Map(readyTitles.map(item => [path.resolve(item.folder), item]));
-  return reviews.map(review => {
-    const titleTask = titlesByFolder.get(path.resolve(review.folder)) || null;
-    const images = classifyTaobaoImages(review.jobs || []);
-    const imagePackage = validateTaobaoImagePackage(images);
-    const reasons = [
-      ...taobaoReviewBlockers(review),
-      ...(!titleTask?.firstTitle ? ['缺少淘宝标题'] : []),
-      ...(!imagePackage.ok ? [`缺少${imagePackage.missing.join('、')}`] : [])
-    ];
-    return {
-      folder: review.folder,
-      name: review.name,
-      reasons: [...new Set(reasons)],
-      titleReady: Boolean(titleTask?.firstTitle),
-      imageCount: (review.jobs || []).filter(job => job.outputUrl).length,
-      mainImageCount: images.mainImages.length,
-      ratioImageCount: images.ratioImages.length,
-      detailImageCount: images.detailImages.length,
-      modifiedAt: review.modifiedAt
-    };
-  }).filter(item => item.reasons.length);
-}
-
-async function listTaobaoPublishTasks() {
-  const [settings, tasks, blockedTasks] = await Promise.all([getTaobaoPublishSettings(), taobaoPublishBaseTasks(), taobaoPublishBlockedTasks()]);
-  return {
-    settings,
-    tasks,
-    blockedTasks
-  };
-}
-
-async function queueTaobaoPublishTask(payload = {}) {
-  const folder = String(payload.folder || '');
-  const categoryId = String(payload.categoryId || '');
-  const category = taobaoTemplateById(categoryId);
-  if (!folder || !fs.existsSync(folder)) throw new Error('任务文件夹不存在');
-  if (!category) throw new Error('请选择淘宝发布类目');
-  const review = (await reviewFolders()).find(item => path.resolve(item.folder) === path.resolve(folder));
-  if (!review || !isReviewReadyForTaobao(review)) throw new Error('只有人工筛图整套通过的任务可以发布到淘宝');
-  const titleTask = (await listReadyTitleTasks()).find(item => path.resolve(item.folder) === path.resolve(folder));
-  if (!titleTask?.firstTitle) throw new Error('任务缺少标题，请先生成标题');
-  const images = classifyTaobaoImages(review.jobs || []);
-  const imagePackage = validateTaobaoImagePackage(images);
-  if (!imagePackage.ok) throw new Error(`发布任务缺少${imagePackage.missing.join('、')}`);
-  const now = new Date().toISOString();
-  const id = taobaoPublishTaskId(folder, categoryId);
-  const state = await readTaobaoPublishState();
-  const existingIndex = state.tasks.findIndex(item => item.id === id || path.resolve(item.folder || '') === path.resolve(folder));
-  const record = {
-    id,
-    folder,
-    categoryId,
-    status: '等待插件接收',
-    failureReason: '',
-    queuedAt: now,
-    updatedAt: now,
-    attempts: existingIndex >= 0 ? Number(state.tasks[existingIndex].attempts || 0) + 1 : 1
-  };
-  if (existingIndex >= 0) state.tasks.splice(existingIndex, 1, record);
-  else state.tasks.push(record);
-  await writeTaobaoPublishState(state);
-  return (await taobaoPublishBaseTasks()).find(item => item.id === id) || record;
-}
-
-async function getTaobaoPublishPackage(id) {
-  const state = await readTaobaoPublishState();
-  const record = state.tasks.find(item => item.id === id);
-  if (!record) throw new Error('发布任务不存在');
-  const settings = await getTaobaoPublishSettings();
-  const category = settings.categories.find(item => item.id === record.categoryId);
-  if (!category) throw new Error('发布类目不存在');
-  const review = (await reviewFolders()).find(item => path.resolve(item.folder) === path.resolve(record.folder));
-  if (!review || !isReviewReadyForTaobao(review)) throw new Error('任务不再满足发布条件');
-  const titleTask = (await listReadyTitleTasks()).find(item => path.resolve(item.folder) === path.resolve(record.folder));
-  if (!titleTask?.firstTitle) throw new Error('任务缺少标题');
-  const images = classifyTaobaoImages(review.jobs || []);
-  const imagePackage = validateTaobaoImagePackage(images);
-  if (!imagePackage.ok) throw new Error(`发布任务缺少${imagePackage.missing.join('、')}`);
-  return {
-    id: record.id,
-    folder: record.folder,
-    name: review.name,
-    categoryId: record.categoryId,
-    category,
-    title: titleTask.firstTitle,
-    images,
-    createdAt: record.queuedAt || record.updatedAt || new Date().toISOString()
-  };
-}
-
-async function claimTaobaoPublishTask(payload = {}) {
-  const settings = await getTaobaoPublishSettings();
-  if (String(payload.token || '') !== settings.token) throw new Error('淘宝发布助手令牌无效');
-  const state = await readTaobaoPublishState();
-  const record = state.tasks.find(item => item.status === '等待插件接收');
-  if (!record) return null;
-  const now = new Date().toISOString();
-  record.status = '插件已接收';
-  record.extensionId = String(payload.extensionId || '');
-  record.updatedAt = now;
-  await writeTaobaoPublishState(state);
-  return getTaobaoPublishPackage(record.id);
-}
-
-async function updateTaobaoPublishStatus(id, payload = {}) {
-  const settings = await getTaobaoPublishSettings();
-  if (payload.token != null && String(payload.token || '') !== settings.token) throw new Error('淘宝发布助手令牌无效');
-  const allowed = new Set(['等待插件接收', '插件已接收', '正在打开淘宝页面', '正在填写字段', '正在上传图片', '正在保存草稿', '已保存草稿', '失败']);
-  const state = await readTaobaoPublishState();
-  const record = state.tasks.find(item => item.id === id);
-  if (!record) throw new Error('发布任务不存在');
-  const status = String(payload.status || record.status);
-  if (allowed.has(status)) record.status = status;
-  record.failureReason = String(payload.failureReason || payload.error || '');
-  record.detail = payload.detail && typeof payload.detail === 'object' ? payload.detail : record.detail || {};
-  record.updatedAt = new Date().toISOString();
-  await writeTaobaoPublishState(state);
-  return record;
-}
-
 async function findReviewJob(folder, relativePath) {
   const source = await readSourceMetadata(folder);
   if (!source.templateFolderPath || !fs.existsSync(source.templateFolderPath)) throw new Error('任务缺少套图文件夹');
@@ -3625,47 +3092,6 @@ async function generateFree(payload = {}, options = {}) {
   return { outputPath, url: imageUrl(outputPath) };
 }
 
-async function saveTitleSetup(payload = {}) {
-  const library = await loadTitleLibrary();
-  if (!library) throw new Error('请先导入关键词表');
-  library.prefixRoots = parseTitlePrefixRoots(payload.prefixes || '');
-  library.prefixRoot = library.prefixRoots[0] || '';
-  library.requiredRoots = parseTitlePrefixRoots(payload.requiredRoots || []);
-  if (!library.prefixRoots.length) throw new Error('至少填写一个标题开头词根');
-  await saveCategoryTitleLibrary(library);
-  return saveTitleLibrary(library);
-}
-
-async function generateTitles(payload = {}) {
-  const library = await loadTitleLibrary();
-  if (!library) throw new Error('请先导入关键词表');
-  const prefixRoots = parseTitlePrefixRoots(payload.prefixes || library.prefixRoots || []);
-  const requiredRoots = parseTitlePrefixRoots(payload.requiredRoots || library.requiredRoots || []);
-  if (!prefixRoots.length) throw new Error('请先填写至少一个标题开头词根');
-  library.prefixRoots = prefixRoots;
-  library.prefixRoot = prefixRoots[0];
-  library.requiredRoots = requiredRoots;
-  const generationState = await loadTitleGenerationState();
-  generationState.nextIndexes ||= generationState.NextIndexes || {};
-  const key = titleGenerationStateKey(library, prefixRoots);
-  const startVariantIndex = Number(generationState.nextIndexes[key]) > 0 ? Number(generationState.nextIndexes[key]) : 1;
-  const generated = generateStandaloneTitles({ library, prefixRoots, count: payload.count, startVariantIndex });
-  generationState.nextIndexes[key] = generated.nextVariantIndex;
-  await saveTitleGenerationState(generationState);
-  await saveCategoryTitleLibrary(library);
-  await saveTitleLibrary(library);
-  return generated.titles;
-}
-
-async function exportTitles(payload = {}) {
-  const titles = (payload.titles || []).map(String).filter(Boolean);
-  if (!titles.length) throw new Error('请先选择要导出的标题');
-  const fileName = `${safeFileName(payload.category || '批量')}_标题_${localFileTimestamp()}.xlsx`;
-  const file = path.join(app.getPath('downloads'), fileName);
-  await writeTitlesWorkbook(file, payload.category || '', titles);
-  return file;
-}
-
 async function initializeRuntime() {
   await Promise.all([
     fsp.mkdir(currentUserDataRoot(), { recursive: true }),
@@ -3691,36 +3117,25 @@ const runtimeExports = {
   isOpenDrawerTemplatePrintAnalysis,
   openDrawerRegisteredPrintPrompt,
   deleteReviewFolders,
-  exportTitles,
   fileFromToken,
   fileToken,
   generateFree,
   generateTask,
   generateTemplateTaskMaster,
   generateTemplateSetForFolder,
-  generateTitleForTask,
-  generateTitles,
-  getTaobaoPublishPackage,
   getImageSchedulerSnapshot,
-  getTaobaoPublishSettings,
   getTemplatePreparation,
   imageUrl,
-  importTitleLibrary,
   initializeRuntime,
   isOutputPath,
   isWorkspacePath,
-  listReadyTitleTasks,
-  listTaobaoPublishTasks,
-  normalizeTaobaoPublishSettings,
   listTemplateFolders,
   listTemplates,
   loadApiSettings,
   loadConfig,
   loadPromptSettings,
   loadRelayChoices,
-  loadTitleLibrary,
   planTemplateOutputJobs,
-  publicTitleLibrary,
   runWithWorkspace,
   prepareTemplateFolder,
   prepareTemplateStructure,
@@ -3732,17 +3147,11 @@ const runtimeExports = {
   saveApiSettings,
   saveActiveRelay,
   publicApiConcurrencySettings,
-  queueTaobaoPublishTask,
-  claimTaobaoPublishTask,
   savePromptSetting,
-  saveTaobaoPublishSettings,
-  saveTitleForTask,
   canAdminViewPromptSettings,
   saveTemplateRegions,
-  saveTitleSetup,
   scanImages,
   setTemplateManualStatus,
-  updateTaobaoPublishStatus,
   testApiSettings,
   testRelayHealth,
   validateTemplateOutputLayout,

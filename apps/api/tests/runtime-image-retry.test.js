@@ -183,6 +183,7 @@ test('template-print queue completes all thirty images through the adaptive imag
   process.env.CAISHEN_API_KEY = 'image-key';
   process.env.CAISHEN_IMAGE_API_KEY = 'image-key';
   process.env.CAISHEN_IMAGE_MODEL = 'gpt-image-2';
+  process.env.CAISHEN_IMAGE_RESPONSE_FORMAT = 'b64_json';
   process.env.CAISHEN_IMAGE_API_INITIAL_CONCURRENCY = '4';
   process.env.CAISHEN_IMAGE_API_MAX_CONCURRENCY = '12';
   process.env.CAISHEN_IMAGE_API_START_INTERVAL_MS = '0';
@@ -278,6 +279,7 @@ test('every failed outbound image attempt is billed', { concurrency: false }, as
   process.env.CAISHEN_API_KEY = 'image-key';
   process.env.CAISHEN_IMAGE_API_KEY = 'image-key';
   process.env.CAISHEN_IMAGE_MODEL = 'gpt-image-2';
+  process.env.CAISHEN_IMAGE_RESPONSE_FORMAT = 'b64_json';
   process.env.CAISHEN_IMAGE_API_START_INTERVAL_MS = '0';
   process.env.CAISHEN_IMAGE_API_BACKOFF_BASE_MS = '1';
   process.env.CAISHEN_IMAGE_API_BACKOFF_MAX_MS = '1';
@@ -339,6 +341,7 @@ test('superadmin image requests remain billing exempt', { concurrency: false }, 
   process.env.CAISHEN_API_KEY = 'image-key';
   process.env.CAISHEN_IMAGE_API_KEY = 'image-key';
   process.env.CAISHEN_IMAGE_MODEL = 'gpt-image-2';
+  process.env.CAISHEN_IMAGE_RESPONSE_FORMAT = 'b64_json';
   process.env.CAISHEN_IMAGE_API_START_INTERVAL_MS = '0';
   const runtimePath = require.resolve('../src/runtime');
   delete require.cache[runtimePath];

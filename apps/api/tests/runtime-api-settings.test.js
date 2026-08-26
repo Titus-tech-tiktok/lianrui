@@ -61,9 +61,18 @@ test('API settings migrate to image-only relays and keep credentials private', a
     assert.equal(saved.configured, true);
     assert.equal(saved.imageMaxConcurrency, 21);
 
-    const preserved = await runtime.saveApiSettings({
+    const highConcurrency = await runtime.saveApiSettings({
       ...saved,
-      relays: saved.relays.map(item => ({ ...item, imageApiKey: '' }))
+      relays: saved.relays.map(item => ({ ...item, imageApiKey: '' })),
+      imageInitialConcurrency: 500,
+      imageMaxConcurrency: 20000
+    });
+    assert.equal(highConcurrency.imageInitialConcurrency, 500);
+    assert.equal(highConcurrency.imageMaxConcurrency, 20000);
+
+    const preserved = await runtime.saveApiSettings({
+      ...highConcurrency,
+      relays: highConcurrency.relays.map(item => ({ ...item, imageApiKey: '' }))
     });
     assert.equal(preserved.relays[0].imageKeyConfigured, true);
     await assert.rejects(() => runtime.saveApiSettings({

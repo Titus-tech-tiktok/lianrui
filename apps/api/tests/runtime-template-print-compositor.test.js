@@ -43,6 +43,7 @@ test('template-print planner expands copies and sends replace_print through imag
   process.env.CAISHEN_API_KEY = 'image-key';
   process.env.CAISHEN_IMAGE_API_KEY = 'image-key';
   process.env.CAISHEN_IMAGE_MODEL = 'gpt-image-2';
+  process.env.CAISHEN_IMAGE_RESPONSE_FORMAT = 'b64_json';
   process.env.CAISHEN_IMAGE_API_START_INTERVAL_MS = '0';
   process.env.CAISHEN_API_TIMEOUT_SECONDS = '10';
   const runtimePath = require.resolve('../src/runtime');

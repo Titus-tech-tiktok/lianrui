@@ -984,12 +984,11 @@ const rpc = {
   approveReview: ([folder]) => runtime.approveReviewFolder(managedPath(folder)),
   setReviewStatus: ([payload]) => runtime.setTemplateManualStatus({ ...(payload || {}), folder: managedPath(payload?.folder) }),
   generateTemplates: async ([payload], context) => {
-    const results = [];
-    for (const folder of [...new Set((payload?.folders || []).map(value => managedPath(value)))]) {
+    const folders = [...new Set((payload?.folders || []).map(value => managedPath(value)))];
+    return Promise.all(folders.map(async folder => {
       if (context?.signal?.aborted) throw new Error('任务已停止');
-      results.push(await runtime.generateTemplateSetForFolder(folder, payload?.onlyMissing !== false, null, context || {}));
-    }
-    return results;
+      return runtime.generateTemplateSetForFolder(folder, payload?.onlyMissing !== false, null, context || {});
+    }));
   },
   regenerateTemplate: ([payload], context) => runtime.regenerateSingleTemplate({
     ...(payload || {}),
@@ -999,33 +998,6 @@ const rpc = {
   }, context || {}),
   batchApproveReviews: ([folders]) => runtime.batchApproveReviewFolders((folders || []).map(value => managedPath(value))),
   deleteReviews: ([folders]) => runtime.deleteReviewFolders((folders || []).map(value => managedPath(value))),
-  getTitleLibrary: async () => runtime.publicTitleLibrary(await runtime.loadTitleLibrary()),
-  listReadyTitleTasks: () => runtime.listReadyTitleTasks(),
-  generateTitleForTask: ([payload]) => runtime.generateTitleForTask(
-    payload && typeof payload === 'object'
-      ? { ...payload, folder: managedPath(payload.folder) }
-      : managedPath(payload)
-  ),
-  saveTitleForTask: ([payload]) => runtime.saveTitleForTask({
-    ...(payload || {}),
-    folder: managedPath(payload?.folder)
-  }),
-  saveTitleSetup: ([payload]) => runtime.saveTitleSetup(payload || {}),
-  generateTitles: ([payload]) => runtime.generateTitles(payload || {}),
-  exportTitles: ([payload]) => runtime.exportTitles(payload || {}),
-  getTaobaoPublishSettings: () => runtime.getTaobaoPublishSettings(),
-  saveTaobaoPublishSettings: ([payload]) => runtime.saveTaobaoPublishSettings(payload || {}),
-  listTaobaoPublishTasks: () => runtime.listTaobaoPublishTasks(),
-  queueTaobaoPublishTask: ([payload], context) => runtime.queueTaobaoPublishTask({
-    ...(payload || {}),
-    folder: managedPath(payload?.folder),
-    categoryId: String(payload?.categoryId || ''),
-    ownerUserId: context?.user?.id || '',
-    storeId: String(payload?.storeId || ''),
-    deviceId: String(payload?.deviceId || ''),
-    requireStore: true,
-    requireStoreOwner: true
-  }),
   getFileLink: ([target, kind]) => {
     const file = managedPath(target);
     const token = runtime.fileToken(file);
@@ -1097,135 +1069,6 @@ async function startServer() {
   app.post('/api/auth/logout', (req, res) => {
     res.setHeader('Set-Cookie', auth.clearSessionCookie(requestIsSecure(req)));
     return res.json({ data: { ok: true } });
-  });
-
-  async function runTaobaoPublishWithToken(token, worker) {
-    const wanted = String(token || '');
-    if (!wanted) throw new Error('淘宝发布助手令牌无效');
-    const users = await auth.listUsers();
-    const workspaceIds = [...new Set(users.map(user => user.workspaceId).filter(Boolean))];
-    for (const workspaceId of workspaceIds) {
-      const matched = await runtime.runWithWorkspace(workspaceId, async () => {
-        const settings = await runtime.getTaobaoPublishSettings();
-        return String(settings.token || '') === wanted;
-      });
-      if (matched) return runtime.runWithWorkspace(workspaceId, worker);
-    }
-    throw new Error('淘宝发布助手令牌无效');
-  }
-
-  app.get('/api/taobao/publish/extension-options', async (req, res) => {
-    try {
-      const user = await auth.userFromRequest(req);
-      if (!user) return res.status(401).json({ error: '请先登录 Web 端' });
-      return res.json({ data: await runtime.runWithWorkspace(user.workspaceId, async () => {
-        const settings = await runtime.getTaobaoPublishSettings();
-        return {
-          token: settings.token || '',
-          pollSeconds: 12,
-          userId: user.id,
-          user,
-          localPublisher: settings.localPublisher || {},
-          stores: settings.stores || [],
-          devices: settings.devices || []
-        };
-      }) });
-    } catch (error) {
-      return res.status(400).json({ error: error?.message || String(error) });
-    }
-  });
-
-  app.post('/api/taobao/publish/claim', async (req, res) => {
-    try {
-      const token = String(req.body?.token || '');
-      if (req.body?.userId) {
-        const claimedUser = await auth.userFromRequest(req);
-        if (!claimedUser || claimedUser.id !== req.body?.userId) return res.status(401).json({ error: '本地发布器登录账号不匹配' });
-      }
-      return res.json({ data: await runTaobaoPublishWithToken(token, () => runtime.claimTaobaoPublishTask(req.body || {})) });
-    } catch (error) {
-      return res.status(400).json({ error: error?.message || String(error) });
-    }
-  });
-
-  app.post('/api/taobao/publish/heartbeat', async (req, res) => {
-    try {
-      const user = await auth.userFromRequest(req);
-      if (!user) return res.status(401).json({ error: '请先登录 Web 端' });
-      if (req.body?.userId && String(req.body.userId) !== user.id) return res.status(401).json({ error: '本地发布器登录账号不匹配' });
-      return res.json({ data: await runtime.runWithWorkspace(user.workspaceId, () => runtime.heartbeatTaobaoPublisher({
-        ...(req.body || {}),
-        userId: user.id
-      })) });
-    } catch (error) {
-      return res.status(400).json({ error: error?.message || String(error) });
-    }
-  });
-
-  app.get('/api/taobao/publish/tasks', async (req, res) => {
-    try {
-      const token = String(req.query.token || req.get('x-caishen-taobao-token') || '');
-      const userId = String(req.query.userId || '');
-      if (userId) {
-        const requestedUser = await auth.userFromRequest(req);
-        if (!requestedUser || requestedUser.id !== userId) return res.status(401).json({ error: '本地发布器登录账号不匹配' });
-      }
-      return res.json({ data: await runTaobaoPublishWithToken(token, async () => {
-        const { tasks, blockedTasks } = await runtime.listTaobaoPublishTasks({
-          token,
-          userId,
-          storeId: String(req.query.storeId || ''),
-          deviceId: String(req.query.deviceId || '')
-        });
-        return { tasks, blockedTasks };
-      }) });
-    } catch (error) {
-      return res.status(400).json({ error: error?.message || String(error) });
-    }
-  });
-
-  app.get('/api/taobao/publish/tasks/:id/package', async (req, res) => {
-    try {
-      const token = String(req.query.token || req.get('x-caishen-taobao-token') || '');
-      return res.json({ data: await runTaobaoPublishWithToken(token, () => runtime.getTaobaoPublishPackage(req.params.id)) });
-    } catch (error) {
-      return res.status(400).json({ error: error?.message || String(error) });
-    }
-  });
-
-  app.get('/api/taobao/publish/tasks/:id/images/:group/:index', async (req, res) => {
-    try {
-      const token = String(req.query.token || req.get('x-caishen-taobao-token') || '');
-      const file = await runTaobaoPublishWithToken(token, async () => {
-        const pack = await runtime.getTaobaoPublishPackage(req.params.id);
-        const groupMap = {
-          main: 'mainImages',
-          ratio: 'ratioImages',
-          detail: 'detailImages'
-        };
-        const key = groupMap[String(req.params.group || '')];
-        const index = Math.max(0, Math.trunc(Number(req.params.index) || 0));
-        const image = key ? pack.images?.[key]?.[index] : null;
-        if (!image?.outputPath || !runtime.isOutputPath(image.outputPath)) throw new Error('淘宝发布图片不存在');
-        return image.outputPath;
-      });
-      return res.sendFile(file, { dotfiles: 'allow' });
-    } catch (error) {
-      return res.status(400).json({ error: error?.message || String(error) });
-    }
-  });
-
-  app.post('/api/taobao/publish/tasks/:id/status', async (req, res) => {
-    try {
-      const token = String(req.body?.token || '');
-      if (req.body?.userId) {
-        const requestedUser = await auth.userFromRequest(req);
-        if (!requestedUser || requestedUser.id !== req.body?.userId) return res.status(401).json({ error: '鏈湴鍙戝竷鍣ㄧ櫥褰曡处鍙蜂笉鍖归厤' });
-      }
-      return res.json({ data: await runTaobaoPublishWithToken(token, () => runtime.updateTaobaoPublishStatus(req.params.id, req.body || {})) });
-    } catch (error) {
-      return res.status(400).json({ error: error?.message || String(error) });
-    }
   });
 
   app.use('/api', async (req, res, next) => {
@@ -1694,21 +1537,6 @@ async function startServer() {
       const destination = path.join(assetRoot(), 'free', `${Date.now()}-${crypto.randomBytes(4).toString('hex')}${extension}`);
       await moveUploadedFile(req.file.path, destination);
       return res.json({ path: destination, name: safeSegment(originalName), url: fileUrl(destination) });
-    } catch (error) { next(error); }
-  });
-
-  app.post('/api/upload/title-library', upload.single('file'), async (req, res, next) => {
-    try {
-      if (!req.file) return res.status(400).json({ error: '没有收到词库文件' });
-      const originalName = uploadName(req.file);
-      const extension = path.extname(originalName).toLowerCase();
-      if (!['.xlsx', '.csv'].includes(extension)) {
-        await fsp.rm(req.file.path, { force: true });
-        return res.status(415).json({ error: '仅支持 xlsx 或 csv' });
-      }
-      const destination = path.join(runtime.WORKSPACE_ROOT, 'imports', `${Date.now()}-${crypto.randomBytes(4).toString('hex')}`, safeSegment(originalName));
-      await moveUploadedFile(req.file.path, destination);
-      return res.json({ data: await runtime.importTitleLibrary(destination) });
     } catch (error) { next(error); }
   });
 
