@@ -5886,6 +5886,15 @@ const CHILDRENWEAR_STYLE_PACKAGE_LABELS = Object.freeze({
   childrenwearCombinationAssetsPath: '组合图'
 });
 
+function childrenwearLibraryRoot(key) {
+  const root = state.config[key] || '';
+  return isClientSubPath(state.config.workspaceRoot, root) ? root : '';
+}
+
+function childrenwearLibraryRootName(key) {
+  return `${CHILDRENWEAR_STYLE_PACKAGE_LABELS[key] || '童装'}素材`;
+}
+
 function childrenwearPackageKind(folderName) {
   const normalized = String(folderName || '').replaceAll(' ', '').trim();
   return CHILDRENWEAR_STYLE_PACKAGE_KINDS[normalized] || '';
@@ -5949,7 +5958,16 @@ async function importChildrenwearStylePackage(button) {
     let added = 0;
     let skipped = 0;
     for (const key of activeKeys) {
-      const result = await window.caishen.addAssetFiles(key, state.config[key], parsed.groups.get(key));
+      const result = await window.caishen.syncAssetEntries(key, childrenwearLibraryRoot(key), parsed.groups.get(key), {
+        rootName: childrenwearLibraryRootName(key),
+        onProgress: progress => {
+          const current = Number(progress.current) || 0;
+          const total = Number(progress.total) || parsed.groups.get(key).length;
+          button.textContent = progress.phase === 'compare'
+            ? `正在预检 ${CHILDRENWEAR_STYLE_PACKAGE_LABELS[key]}…`
+            : `正在导入 ${CHILDRENWEAR_STYLE_PACKAGE_LABELS[key]} ${current}/${total}…`;
+        }
+      });
       state.config[key] = result.root;
       completed.push({ key, result });
       added += Number(result.added) || 0;
@@ -5973,7 +5991,8 @@ async function importChildrenwearStylePackage(button) {
     let rollbackFailed = false;
     for (const item of completed.reverse()) {
       try {
-        await window.caishen.deleteAssetFiles(item.key, item.result.root, item.result.paths || []);
+        const uploadedPaths = item.result.uploadedPaths || [];
+        if (uploadedPaths.length) await window.caishen.deleteAssetFiles(item.key, item.result.root, uploadedPaths);
         state.config[item.key] = previousRoots[item.key];
       } catch { rollbackFailed = true; }
     }
@@ -6023,7 +6042,17 @@ async function uploadChildrenwearLibrary(key, source = 'files') {
     button.textContent = isFolder ? `正在导入 ${entries.length} 张…` : '上传中…';
   }
   try {
-    const result = await window.caishen.addAssetFiles(key, state.config[key], entries);
+    const result = await window.caishen.syncAssetEntries(key, childrenwearLibraryRoot(key), entries, {
+      rootName: childrenwearLibraryRootName(key),
+      onProgress: progress => {
+        if (!button) return;
+        const current = Number(progress.current) || 0;
+        const total = Number(progress.total) || entries.length;
+        button.textContent = progress.phase === 'compare'
+          ? `正在预检 ${total} 张…`
+          : `正在导入 ${current}/${total}…`;
+      }
+    });
     state.config[key] = result.root;
     state.config = await window.caishen.saveConfig(state.config);
     if (button) button.textContent = `正在 AI 分析 0/${result.paths?.length || result.added || 0}…`;

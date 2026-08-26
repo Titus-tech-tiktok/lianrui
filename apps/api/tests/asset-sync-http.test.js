@@ -91,6 +91,51 @@ test('multipart asset sync keeps the member workspace context', async () => {
     if (finish.status !== 200) assert.fail(await finish.text());
     const result = (await finish.json()).data;
     assert.equal(result.root.includes(member.workspaceId), true);
+    assert.equal(result.added, 1);
+    assert.deepEqual(result.paths, [path.join(result.root, 'flower.png')]);
+    assert.deepEqual(result.uploadedPaths, result.paths);
+
+    const repeatPrepare = await fetch(`${base}/api/assets/sync/prepare/print`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({
+        currentRoot: result.root,
+        rootName: 'prints',
+        files: [{ name: 'flower.png', relativePath: 'flower.png', size: 5, lastModified: 1000 }]
+      })
+    });
+    assert.equal(repeatPrepare.status, 200);
+    const repeated = (await repeatPrepare.json()).data;
+    assert.deepEqual(repeated.neededRelativePaths, []);
+
+    const repeatFinish = await fetch(`${base}/api/assets/sync/finish/${repeated.sessionId}`, {
+      method: 'POST',
+      headers: { Cookie: cookie }
+    });
+    assert.equal(repeatFinish.status, 200);
+    const repeatResult = (await repeatFinish.json()).data;
+    assert.equal(repeatResult.added, 0);
+    assert.equal(repeatResult.skipped, 1);
+    assert.deepEqual(repeatResult.paths, result.paths);
+    assert.deepEqual(repeatResult.uploadedPaths, []);
+
+    const configResponse = await fetch(`${base}/api/rpc`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ method: 'getConfig', args: [] })
+    });
+    assert.equal(configResponse.status, 200);
+    const config = (await configResponse.json()).data;
+    const saveResponse = await fetch(`${base}/api/rpc`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({
+        method: 'saveConfig',
+        args: [{ ...config, childrenwearRealAssetsPath: path.join(temp, 'stale-workspace', 'assets') }]
+      })
+    });
+    if (saveResponse.status !== 200) assert.fail(await saveResponse.text());
+    assert.equal((await saveResponse.json()).data.childrenwearRealAssetsPath, '');
   } finally {
     await new Promise(resolve => server.close(resolve));
     await removeTempWithRetry(temp);

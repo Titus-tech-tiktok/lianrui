@@ -12,6 +12,8 @@ const sharp = require('sharp');
 const runtime = require('./runtime');
 const { createAuthService } = require('./auth');
 const { createAlipayRechargeService } = require('./alipay-recharge');
+const { verifyBusinessRequest } = require('./business-link');
+const { createBusinessSnapshotService } = require('./business-snapshot');
 const { metadataPaths, normalizeSourceMetadata } = require('./core/review-engine');
 const { isSameOrChildPath } = require('./core/path-utils');
 
@@ -19,6 +21,13 @@ const PORT = Math.max(1, Number(process.env.PORT || 8788));
 const HOST = String(process.env.CAISHEN_HOST || '127.0.0.1');
 const auth = createAuthService(runtime.DATA_ROOT);
 const alipayRecharge = createAlipayRechargeService(runtime.DATA_ROOT, runtime.billing);
+const businessSnapshot = createBusinessSnapshotService({
+  auth,
+  runtime,
+  alipayRecharge,
+  businessId: 'duoxiluka',
+  businessName: '多嘻噜卡科技'
+});
 const tempRoot = () => path.join(runtime.WORKSPACE_ROOT, 'tmp');
 const assetRoot = () => path.join(runtime.WORKSPACE_ROOT, 'assets');
 const jobRoot = () => path.join(runtime.WORKSPACE_ROOT, 'jobs');
@@ -517,6 +526,11 @@ function workspacePath(value, options = {}) {
   return path.resolve(text);
 }
 
+function configAssetPath(value) {
+  const text = String(value || '').trim();
+  return text && runtime.isWorkspacePath(text) ? path.resolve(text) : '';
+}
+
 function managedPath(value, options = {}) {
   const text = String(value || '').trim();
   if (!text && options.allowEmpty) return '';
@@ -555,19 +569,30 @@ function safeConfig(config = {}) {
   }
   return {
     ...config,
-    categoriesPath: workspacePath(config.categoriesPath, { allowEmpty: true }),
-    printsPath: workspacePath(config.printsPath, { allowEmpty: true }),
-    detailSetsPath: workspacePath(config.detailSetsPath, { allowEmpty: true }),
-    childrenwearRealAssetsPath: workspacePath(config.childrenwearRealAssetsPath, { allowEmpty: true }),
-    childrenwearReferenceAssetsPath: workspacePath(config.childrenwearReferenceAssetsPath, { allowEmpty: true }),
-    childrenwearModelAssetsPath: workspacePath(config.childrenwearModelAssetsPath, { allowEmpty: true }),
-    childrenwearCombinationAssetsPath: workspacePath(config.childrenwearCombinationAssetsPath, { allowEmpty: true }),
+    categoriesPath: configAssetPath(config.categoriesPath),
+    printsPath: configAssetPath(config.printsPath),
+    detailSetsPath: configAssetPath(config.detailSetsPath),
+    childrenwearRealAssetsPath: configAssetPath(config.childrenwearRealAssetsPath),
+    childrenwearReferenceAssetsPath: configAssetPath(config.childrenwearReferenceAssetsPath),
+    childrenwearModelAssetsPath: configAssetPath(config.childrenwearModelAssetsPath),
+    childrenwearCombinationAssetsPath: configAssetPath(config.childrenwearCombinationAssetsPath),
     outputPath
   };
 }
 
 function publicConfig(config) {
-  return { ...config, workspaceRoot: runtime.WORKSPACE_ROOT, defaultOutputPath: runtime.OUTPUT_ROOT };
+  return {
+    ...config,
+    categoriesPath: configAssetPath(config.categoriesPath),
+    printsPath: configAssetPath(config.printsPath),
+    detailSetsPath: configAssetPath(config.detailSetsPath),
+    childrenwearRealAssetsPath: configAssetPath(config.childrenwearRealAssetsPath),
+    childrenwearReferenceAssetsPath: configAssetPath(config.childrenwearReferenceAssetsPath),
+    childrenwearModelAssetsPath: configAssetPath(config.childrenwearModelAssetsPath),
+    childrenwearCombinationAssetsPath: configAssetPath(config.childrenwearCombinationAssetsPath),
+    workspaceRoot: runtime.WORKSPACE_ROOT,
+    defaultOutputPath: runtime.OUTPUT_ROOT
+  };
 }
 
 function jobFile(id) {
@@ -915,6 +940,7 @@ async function uploadAssetSyncBatch(sessionId, files, relativePaths, lastModifie
       await fsp.utimes(target, modifiedAt, modifiedAt).catch(() => {});
     }
     entry.needed = false;
+    entry.uploaded = true;
     uploaded += 1;
     session.uploaded += 1;
     session.uploadedBytes += Number(file.size) || 0;
@@ -936,7 +962,12 @@ async function finishAssetSync(sessionId, workspaceId = runtime.WORKSPACE_ID) {
     count: session.entries.size,
     uploaded: session.uploaded,
     skipped: session.entries.size - session.uploaded,
-    uploadedBytes: session.uploadedBytes
+    uploadedBytes: session.uploadedBytes,
+    added: session.uploaded,
+    paths: [...session.entries.values()].map(item => path.join(session.root, item.relativePath)),
+    uploadedPaths: [...session.entries.values()]
+      .filter(item => item.uploaded)
+      .map(item => path.join(session.root, item.relativePath))
   };
 }
 
@@ -1204,6 +1235,26 @@ async function startServer() {
     contentSecurityPolicy: false
   }));
   app.use(express.json({ limit: '25mb' }));
+
+  app.post('/api/internal/business/snapshot', async (req, res) => {
+    const verification = verifyBusinessRequest(req);
+    if (!verification.ok) return res.status(verification.status).json({ error: verification.error });
+    try {
+      return res.json({ data: await businessSnapshot.snapshot(req.body || {}) });
+    } catch (error) {
+      return res.status(400).json({ error: error?.message || String(error) });
+    }
+  });
+
+  app.post('/api/internal/business/recharge-action', async (req, res) => {
+    const verification = verifyBusinessRequest(req);
+    if (!verification.ok) return res.status(verification.status).json({ error: verification.error });
+    try {
+      return res.json({ data: await businessSnapshot.rechargeAction(req.body || {}, 'business-link') });
+    } catch (error) {
+      return res.status(400).json({ error: error?.message || String(error) });
+    }
+  });
 
   app.get('/api/health', (_req, res) => {
     const queue = runtime.getImageSchedulerSnapshot();
@@ -1518,39 +1569,7 @@ async function startServer() {
   app.get('/api/billing/accounting', async (req, res) => {
     if (!isSuperAdmin(req.user)) return res.status(403).json({ error: '只有超级管理员可以查看经营账目' });
     try {
-      const [users, apiSettings] = await Promise.all([auth.listUsers(), runtime.loadApiSettings()]);
-      const userLookup = new Map(users.map(user => [user.workspaceId, user]));
-      const report = await runtime.billing.getAccountingReport(apiSettings.relays || [], userLookup, {
-        range: String(req.query.range || 'month'),
-        startDate: String(req.query.startDate || ''),
-        endDate: String(req.query.endDate || ''),
-        relayId: String(req.query.relayId || '')
-      });
-      const finance = await runtime.financeLedger.listRange({
-        startDate: report.startDate,
-        endDate: report.endDate,
-        relayId: report.relayId
-      });
-      const otherIncomeCnyMinor = Number(finance.summary.otherIncomeCnyMinor) || 0;
-      const customerTopupCnyMinor = Number(report.totals.customerTopupCnyMinor) || 0;
-      const businessRevenueCnyMinor = customerTopupCnyMinor + otherIncomeCnyMinor;
-      const operatingExpensesCnyMinor = Number(finance.summary.operatingExpensesCnyMinor) || 0;
-      const upstreamCostCnyMinor = Number(report.totals.upstreamCostCnyMinor) || 0;
-      const totalExpensesCnyMinor = upstreamCostCnyMinor + operatingExpensesCnyMinor;
-      return res.json({
-        data: {
-          ...report,
-          finance,
-          totals: {
-            ...report.totals,
-            otherIncomeCnyMinor,
-            businessRevenueCnyMinor,
-            operatingExpensesCnyMinor,
-            totalExpensesCnyMinor,
-            netProfitCnyMinor: businessRevenueCnyMinor - totalExpensesCnyMinor
-          }
-        }
-      });
+      return res.json({ data: await businessSnapshot.accounting(req.query || {}) });
     } catch (error) {
       return res.status(400).json({ error: error?.message || String(error) });
     }

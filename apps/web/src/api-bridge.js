@@ -293,14 +293,28 @@ async function responseJson(response, fallbackMessage) {
 async function syncAssetFolder(key, currentRoot, onProgress = () => {}) {
   const stage = stagedAssetFolders.get(key);
   if (!stage) throw new Error('请先选择需要扫描的文件夹');
-  onProgress({ phase: 'compare', current: 0, total: stage.files.length, message: '正在对比本地素材库…' });
-  const prepared = await responseJson(await fetch(`/api/assets/sync/prepare/${stage.kind}`, {
+  return syncAssetEntries(key, currentRoot, stage.files, { rootName: stage.rootName, onProgress });
+}
+
+async function syncAssetEntries(key, currentRoot, entries = [], options = {}) {
+  const files = entries
+    .filter(item => item?.file && supportedImagePattern.test(item.file.name || item.relativePath || ''))
+    .map(item => ({
+      file: item.file,
+      relativePath: String(item.relativePath || item.file.name || '').replaceAll('\\', '/')
+    }))
+    .filter(item => item.relativePath);
+  if (!files.length) throw new Error('请选择支持的图片文件');
+  const onProgress = typeof options.onProgress === 'function' ? options.onProgress : () => {};
+  const rootName = String(options.rootName || '素材').trim() || '素材';
+  onProgress({ phase: 'compare', current: 0, total: files.length, message: '正在对比素材库…' });
+  const prepared = await responseJson(await fetch(`/api/assets/sync/prepare/${assetKindFromKey(key)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       currentRoot: currentRoot || '',
-      rootName: stage.rootName,
-      files: stage.files.map(item => ({
+      rootName,
+      files: files.map(item => ({
         name: item.file.name,
         relativePath: item.relativePath,
         size: item.file.size,
@@ -310,7 +324,7 @@ async function syncAssetFolder(key, currentRoot, onProgress = () => {}) {
   }), '扫描准备失败');
 
   const needed = new Set(prepared.neededRelativePaths || []);
-  const pending = stage.files.filter(item => needed.has(item.relativePath));
+  const pending = files.filter(item => needed.has(item.relativePath));
   const batchSize = 40;
   let uploaded = 0;
   onProgress({ phase: 'upload', current: 0, total: pending.length, skipped: prepared.skipped, message: pending.length ? '开始导入新增和变化素材…' : '素材没有变化' });
@@ -511,6 +525,7 @@ window.caishen = {
   resetPromptSetting: id => rpc('resetPromptSetting', id),
   stageAssetFolder,
   syncAssetFolder,
+  syncAssetEntries,
   chooseAssetFiles,
   chooseAssetFolder,
   filesFromDrop,

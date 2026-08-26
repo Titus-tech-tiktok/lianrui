@@ -27,3 +27,23 @@ test('removed desktop features are not exposed by pages or browser RPC methods',
   }
   assert.doesNotMatch(bridge, /getTitleLibrary|generateTitles|TaobaoPublish/);
 });
+
+test('all childrenwear asset imports reuse the resumable asset sync protocol', async () => {
+  const [renderer, bridge] = await Promise.all([
+    fs.readFile(path.join(root, 'apps/web/src/renderer.js'), 'utf8'),
+    fs.readFile(path.join(root, 'apps/web/src/api-bridge.js'), 'utf8')
+  ]);
+  const styleImport = renderer.slice(
+    renderer.indexOf('async function importChildrenwearStylePackage'),
+    renderer.indexOf('async function renameChildrenwearLibraryFolder')
+  );
+  const libraryImport = renderer.slice(
+    renderer.indexOf('async function uploadChildrenwearLibrary'),
+    renderer.indexOf('function toggleChildrenwearLibraryDelete')
+  );
+  assert.match(styleImport, /window\.caishen\.syncAssetEntries/);
+  assert.match(libraryImport, /window\.caishen\.syncAssetEntries/);
+  assert.doesNotMatch(styleImport + libraryImport, /window\.caishen\.addAssetFiles/);
+  assert.match(bridge, /const batchSize = 40/);
+  assert.match(bridge, /syncAssetEntries,/);
+});
