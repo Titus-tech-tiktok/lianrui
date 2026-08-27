@@ -350,6 +350,8 @@ test('runtime completes master approval, model generation and combination with t
   assert.deepEqual(repairedLegacyTask.assetHealth.missing, []);
   await fs.rm(real, { force: true });
   await fs.rm(reference, { force: true });
+  await runtime.invalidateChildrenwearAnalysisPaths([first.realPhotoPath], 'product');
+  await runtime.invalidateChildrenwearAnalysisPaths([first.referencePath], 'flat_reference');
   const regenerated = await runtime.generateChildrenwearMaster({
     folder: first.folder,
     realPhotoPath: first.realPhotoPath,

@@ -1817,6 +1817,27 @@ async function requireChildrenwearAssetAnalysis(file, roleValue) {
   return { ...cached, path: fingerprint.path };
 }
 
+async function childrenwearAssetAnalysisForTask(file, roleValue, candidates = []) {
+  const role = normalizeAnalysisRole(roleValue);
+  const fingerprint = await childrenwearFileFingerprint(file);
+  for (const candidate of candidates) {
+    const analysis = candidate?.analysis;
+    const contentHash = String(candidate?.contentHash || '');
+    if (!analysis || typeof analysis !== 'object' || !contentHash) continue;
+    if (candidate.schemaVersion && candidate.schemaVersion !== ANALYSIS_SCHEMA_VERSION) continue;
+    if (contentHash !== fingerprint.contentHash) continue;
+    return {
+      schemaVersion: ANALYSIS_SCHEMA_VERSION,
+      role,
+      contentHash,
+      analysis,
+      path: fingerprint.path,
+      embeddedTaskAnalysis: true
+    };
+  }
+  return requireChildrenwearAssetAnalysis(fingerprint.path, role);
+}
+
 function shouldUsePowerShellApiFallback(url, error) {
   if (process.platform !== 'win32') return false;
   let protocol = '';
@@ -4090,18 +4111,26 @@ async function generateChildrenwearMaster(payload = {}, options = {}) {
   const generationStartedAt = new Date();
   if (!payload.realPhotoPath || !fs.existsSync(payload.realPhotoPath)) throw new Error('请上传一张实拍产品图');
   if (!payload.referencePath || !fs.existsSync(payload.referencePath)) throw new Error('请选择一张参考成品图');
+  const folder = payload.folder || await nextChildrenwearTaskFolder(payload.category, payload.taskCode);
+  const existing = await readChildrenwearTask(folder) || {};
   options.reportProgress?.({ phase: 'preparing', percent: 5, message: '正在读取素材 AI 分析缓存' });
   const [productAnalysis, referenceAnalysis] = await Promise.all([
-    requireChildrenwearAssetAnalysis(payload.realPhotoPath, 'product'),
-    requireChildrenwearAssetAnalysis(payload.referencePath, 'flat_reference')
+    childrenwearAssetAnalysisForTask(payload.realPhotoPath, 'product', [{
+      schemaVersion: existing.analysisSchemaVersion,
+      contentHash: existing.productAnalysisHash,
+      analysis: existing.productManifest
+    }]),
+    childrenwearAssetAnalysisForTask(payload.referencePath, 'flat_reference', [{
+      schemaVersion: existing.analysisSchemaVersion,
+      contentHash: existing.flatReferenceAnalysisHash,
+      analysis: existing.flatReferenceSpec
+    }])
   ]);
-  const folder = payload.folder || await nextChildrenwearTaskFolder(payload.category, payload.taskCode);
   await fsp.mkdir(folder, { recursive: true });
   const [realPhotoPath, referencePath] = await Promise.all([
     copyChildrenwearTaskAsset(payload.realPhotoPath, folder, '实拍图'),
     copyChildrenwearTaskAsset(payload.referencePath, folder, '成品参考图')
   ]);
-  const existing = await readChildrenwearTask(folder) || {};
   const version = Math.max(1, Number(existing.masterVersion || 0) + 1);
   const evidenceFolder = path.join(folder, '.evidence', `master-v${version}`);
   await fsp.mkdir(evidenceFolder, { recursive: true });
@@ -4227,7 +4256,15 @@ async function generateChildrenwearModel(payload = {}, options = {}) {
   if (!payload.modelReferencePath || !fs.existsSync(payload.modelReferencePath)) throw new Error('请上传模特或姿势参考图');
   if (!task.masterPath || !fs.existsSync(task.masterPath)) throw new Error('已审核母版文件不存在');
   if (!task.realPhotoPath || !fs.existsSync(task.realPhotoPath)) throw new Error('任务实拍图已丢失，请重新选择实拍图后再生成');
-  const modelReferenceAnalysis = await requireChildrenwearAssetAnalysis(payload.modelReferencePath, 'model_reference');
+  const matchingModelOutputs = (task.modelOutputs || []).filter(output => output.modelReferenceSpec
+    && output.modelReferenceAnalysisHash
+    && output.modelReferencePath
+    && path.resolve(output.modelReferencePath) === path.resolve(payload.modelReferencePath));
+  const modelReferenceAnalysis = await childrenwearAssetAnalysisForTask(payload.modelReferencePath, 'model_reference', matchingModelOutputs.map(output => ({
+    schemaVersion: task.analysisSchemaVersion,
+    contentHash: output.modelReferenceAnalysisHash,
+    analysis: output.modelReferenceSpec
+  })));
   const modelReferencePath = await copyChildrenwearTaskAsset(payload.modelReferencePath, folder, '参考模特图');
   task.taskName = childrenwearTaskDisplayName(task.styleName || task.category || task.taskName, task.taskCode).slice(0, 80);
   const productManifest = task.productManifest || (await requireChildrenwearAssetAnalysis(task.realPhotoPath, 'product')).analysis;
@@ -4373,7 +4410,11 @@ async function generateChildrenwearCombination(payload = {}, options = {}) {
     });
   }
   if (!payload.combinationReferencePath || !fs.existsSync(payload.combinationReferencePath)) throw new Error('请选择一张组合参考图');
-  const combinationReferenceAnalysis = await requireChildrenwearAssetAnalysis(payload.combinationReferencePath, 'combination_reference');
+  const combinationReferenceAnalysis = await childrenwearAssetAnalysisForTask(payload.combinationReferencePath, 'combination_reference', [{
+    schemaVersion: existing.analysisSchemaVersion,
+    contentHash: existing.combinationReferenceAnalysisHash,
+    analysis: existing.combinationReferenceSpec
+  }]);
   const localMasterPaths = [];
   for (let index = 0; index < masterPaths.length; index += 1) {
     const source = masterPaths[index];
