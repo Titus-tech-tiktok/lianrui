@@ -65,6 +65,9 @@ test('childrenwear prompts keep real product and reference roles separate', () =
   assert.match(model, /No dramatic turn, jump, squat/i);
   assert.match(model, /keep the model visually centred/i);
   assert.match(model, /BACKGROUND MICRO-VARIATION/i);
+  assert.match(model, /Lock the reference scene type[\s\S]*depth of field, blur and bokeh/i);
+  assert.match(model, /a stool or small decoration may appear or disappear/i);
+  assert.match(model, /same background and under the same lighting setup/i);
 
   const whiteModel = buildChildrenwearModelPrompt({ productManifest, referenceSpec: {}, backgroundMode: 'white' });
   assert.match(whiteModel, /BACKGROUND MODE: PURE WHITE/i);
