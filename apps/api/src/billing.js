@@ -347,6 +347,8 @@ function createBillingService(dataRoot) {
     let transactionCount = 0;
     let imageSpendMinor = 0;
     let imageCount = 0;
+    let analysisSpendMinor = 0;
+    let analysisCount = 0;
     for (const line of text.trim().split('\n').filter(Boolean)) {
       let entry;
       try { entry = JSON.parse(line); } catch { continue; }
@@ -364,6 +366,10 @@ function createBillingService(dataRoot) {
         imageSpendMinor += Math.abs(amountMinor);
         imageCount += 1;
       }
+      if (entry.kind === 'llm' && amountMinor <= 0) {
+        analysisSpendMinor += Math.abs(amountMinor);
+        analysisCount += 1;
+      }
       transactions.push({ ...entry, relayId: entryRelayId, currency: BILLING_CURRENCY, amountScale: BILLING_SCALE, amountMinor, balanceMinor: sourceScale === BILLING_SCALE ? Math.trunc(Number(entry.balanceMinor) || 0) : migrateMoney(entry.balanceMinor, sourceScale) });
     }
     transactions.reverse();
@@ -374,7 +380,17 @@ function createBillingService(dataRoot) {
       endDate: windowRange.endDate,
       startedAt: new Date(windowRange.startMs).toISOString(),
       endedAt: new Date(windowRange.endMs).toISOString(),
-      metrics: { imageSpendMinor, imageCount, averageImageCostMinor: imageCount ? Math.round(imageSpendMinor / imageCount) : 0, transactionCount, activeUserCount: activeWorkspaces.size },
+      metrics: {
+        imageSpendMinor,
+        imageCount,
+        averageImageCostMinor: imageCount ? Math.round(imageSpendMinor / imageCount) : 0,
+        analysisSpendMinor,
+        analysisCount,
+        averageAnalysisCostMinor: analysisCount ? Math.round(analysisSpendMinor / analysisCount) : 0,
+        totalSpendMinor: imageSpendMinor + analysisSpendMinor,
+        transactionCount,
+        activeUserCount: activeWorkspaces.size
+      },
       transactions: transactions.slice(0, limit),
       truncated: transactions.length > limit
     };

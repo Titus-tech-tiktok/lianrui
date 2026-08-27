@@ -88,7 +88,9 @@ test('多嘻噜卡使用永沙式资产管理、左右任务台和五段生产�
   assert.match(renderer, /options\.liveRefresh\) void scheduleChildrenwearTaskRefresh/);
   assert.match(renderer, /function flushChildrenwearTaskRefresh/);
   assert.match(renderer, /await flushChildrenwearTaskRefresh\(\)/);
-  assert.match(renderer, /scheduleCwQueueRender\(stage\)/);
+  assert.match(renderer, /updateCwQueueProgress\(stage, draft\)/);
+  assert.match(renderer, /prepared: true, deferRender: true/);
+  assert.match(renderer, /options\.resultsOnly/);
   assert.doesNotMatch(renderer, /for \(const draft of drafts\) await runCwDraft\(stage, draft\)/);
   assert.match(renderer, /function regenerateCwReviewItem/);
   assert.match(renderer, /function cwCompareSources/);

@@ -87,3 +87,14 @@ test('管理员线路选择和侧边栏不公开中转站单价', async () => {
   assert.match(adminChoices, /item\.description \|\| '可用中转站'/);
   assert.doesNotMatch(adminChoices, /feeRangeLabel|\/张/);
 });
+
+test('流水明细统计生图和 AI 分析且后台刷新不重绘明细整表', async () => {
+  const renderer = await fs.readFile(path.join(webRoot, 'src/renderer.js'), 'utf8');
+  assert.match(renderer, /AI 分析消费/);
+  assert.match(renderer, /metrics\.analysisSpendMinor/);
+  assert.match(renderer, /AI 分析请求/);
+  assert.match(renderer, /metrics\.analysisCount/);
+  assert.match(renderer, /window\.addEventListener\('caishen:billing-changed', scheduleBillingSummaryRefresh\)/);
+  const summaryRenderer = renderer.slice(renderer.indexOf('function renderBillingSummary()'), renderer.indexOf('function renderBillingDetail()'));
+  assert.doesNotMatch(summaryRenderer, /renderBillingDetail\(\)/);
+});

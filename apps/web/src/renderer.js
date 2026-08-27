@@ -287,9 +287,12 @@ let toastTimer;
 let productSearchTimer;
 let printSearchTimer;
 let reviewRefreshTimer;
-const cwQueueRenderTimers = new Map();
+const cwQueueProgressTimers = new Map();
 let childrenwearTaskRefreshPromise = null;
 let childrenwearTaskRefreshPending = false;
+let billingRefreshTimer = null;
+let billingSummaryPromise = null;
+let billingSummaryRefreshPending = false;
 let currentPage = 'assets';
 const promptSaveTimers = new Map();
 let activeBrandDialogResolve = null;
@@ -1191,11 +1194,13 @@ function renderBillingLedger(entries = [], userMap = new Map()) {
   if (!entries.length) return '<div class="empty-inline">暂无费用流水</div>';
   return entries.map(entry => {
     const amount = Number(entry.amountMinor) || 0;
+    const usageDebit = (entry.kind === 'image' || entry.kind === 'llm') && amount <= 0;
+    const debit = amount < 0 || usageDebit;
     const user = userMap.get(entry.workspaceId);
     const owner = user ? `${user.displayName || user.username} · ` : '';
     const label = entry.description || (entry.kind === 'adjustment' && amount < 0 ? '算力余额扣减' : billingKindName(entry.kind));
     const relayLabel = entry.relayName || entry.relayId || '旧版默认中转站';
-    return `<div class="billing-ledger-row"><div><b>${escapeHtml(label)}</b><span>${escapeHtml(owner + relayLabel + ' · ' + billingKindName(entry.kind))}${entry.reference ? ` · ${escapeHtml(entry.reference)}` : ''}</span><small>${escapeHtml(new Date(entry.createdAt).toLocaleString('zh-CN', { hour12: false }))}</small></div><div class="billing-ledger-amount ${amount >= 0 ? 'credit' : 'debit'}">${amount >= 0 ? '+' : '-'}${formatMoney(Math.abs(amount))}</div></div>`;
+    return `<div class="billing-ledger-row"><div><b>${escapeHtml(label)}</b><span>${escapeHtml(owner + relayLabel + ' · ' + billingKindName(entry.kind))}${entry.reference ? ` · ${escapeHtml(entry.reference)}` : ''}</span><small>${escapeHtml(new Date(entry.createdAt).toLocaleString('zh-CN', { hour12: false }))}</small></div><div class="billing-ledger-amount ${debit ? 'debit' : 'credit'}">${debit ? '-' : '+'}${formatMoney(Math.abs(amount))}</div></div>`;
   }).join('');
 }
 
@@ -1203,8 +1208,10 @@ function renderBillingDetailMetrics(summary) {
   const metrics = summary?.metrics || {};
   return [
     `<div class="billing-rate-item billing-metric-primary"><span>生图消费</span><b>${formatMoney(metrics.imageSpendMinor || 0)}</b><small>所选范围实际扣费</small></div>`,
-    `<div class="billing-rate-item"><span>计费请求</span><b>${Number(metrics.imageCount || 0).toLocaleString('zh-CN')} 次</b><small>实际发往上游的图片请求</small></div>`,
-    `<div class="billing-rate-item"><span>平均费用</span><b>${formatMoney(metrics.averageImageCostMinor || 0)}</b><small>生图消费 ÷ 计费请求数</small></div>`,
+    `<div class="billing-rate-item"><span>生图请求</span><b>${Number(metrics.imageCount || 0).toLocaleString('zh-CN')} 次</b><small>实际完成的图片生成请求</small></div>`,
+    `<div class="billing-rate-item billing-metric-analysis"><span>AI 分析消费</span><b>${formatMoney(metrics.analysisSpendMinor || 0)}</b><small>素材 AI 分析的站内扣费</small></div>`,
+    `<div class="billing-rate-item"><span>AI 分析请求</span><b>${Number(metrics.analysisCount || 0).toLocaleString('zh-CN')} 次</b><small>真实完成并写入流水的分析请求</small></div>`,
+    `<div class="billing-rate-item"><span>合计消费</span><b>${formatMoney(metrics.totalSpendMinor || 0)}</b><small>生图消费 + AI 分析消费</small></div>`,
     `<div class="billing-rate-item"><span>流水记录</span><b>${Number(metrics.transactionCount || 0).toLocaleString('zh-CN')} 条</b><small>${Number(metrics.activeUserCount || 0).toLocaleString('zh-CN')} 个账号有变动</small></div>`
   ].join('');
 }
@@ -1227,7 +1234,6 @@ function renderBillingSummary() {
   $('#currentBalance').textContent = formatMoney(summary.account?.balanceMinor);
   $('#openBillingDetailButton span').textContent = '当前线路算力余额';
   $('#currentBillingHint').textContent = relay.name || '当前中转站';
-  renderBillingDetail();
 }
 
 function renderBillingDetail() {
@@ -1256,13 +1262,33 @@ function renderBillingDetail() {
 }
 
 async function loadBillingSummary() {
+  if (billingSummaryPromise) {
+    billingSummaryRefreshPending = true;
+    return billingSummaryPromise;
+  }
+  billingSummaryPromise = (async () => {
+    do {
+      billingSummaryRefreshPending = false;
+      state.billingSummary = await window.caishen.getBillingSummary(state.billingCustomDays);
+      renderBillingSummary();
+    } while (billingSummaryRefreshPending);
+  })();
   try {
-    state.billingSummary = await window.caishen.getBillingSummary(state.billingCustomDays);
-    renderBillingSummary();
+    await billingSummaryPromise;
   } catch (error) {
     $('#currentBalance').textContent = '读取失败';
     $('#currentBillingHint').textContent = errorText(error);
+  } finally {
+    billingSummaryPromise = null;
   }
+}
+
+function scheduleBillingSummaryRefresh() {
+  clearTimeout(billingRefreshTimer);
+  billingRefreshTimer = setTimeout(() => {
+    billingRefreshTimer = null;
+    void loadBillingSummary();
+  }, 600);
 }
 
 async function openBillingDetail() {
@@ -6675,12 +6701,19 @@ function cwFilteredDrafts(stage) {
   return stage === 'master' && filter !== 'all' ? drafts.filter(draft => cwDraftStatusKey(draft) === filter) : drafts;
 }
 
-function scheduleCwQueueRender(stage) {
-  if (cwQueueRenderTimers.has(stage)) return;
-  cwQueueRenderTimers.set(stage, setTimeout(() => {
-    cwQueueRenderTimers.delete(stage);
-    renderCwQueue(stage);
-  }, 120));
+function updateCwQueueProgress(stage, draft) {
+  const key = `${stage}:${draft.id}`;
+  if (cwQueueProgressTimers.has(key)) return;
+  cwQueueProgressTimers.set(key, setTimeout(() => {
+    cwQueueProgressTimers.delete(key);
+    const panel = $(CW_STAGE_META[stage]?.queue);
+    const card = panel ? [...panel.querySelectorAll('[data-cw-draft]')].find(item => item.dataset.cwDraft === draft.id) : null;
+    const status = card?.querySelector('.cw-task-status');
+    if (!status) return;
+    const next = stage === 'master' ? cwDraftStatusText(draft) : (draft.progress || draft.status || '正在生成');
+    if (status.textContent !== next) status.textContent = next;
+    status.classList.toggle('error', draft.status === '失败' || cwDraftStatusKey(draft) === 'needs_regeneration');
+  }, 200));
 }
 
 function cwReviewItemForDraft(stage, draft) {
@@ -6810,29 +6843,31 @@ function setChildrenwearProductionTab(tab) {
 }
 
 async function runCwDraft(stage, draft, options = {}) {
-  if (!cwDraftReady(draft) || draft.status === '生成中') return;
-  draft.status = '生成中';
-  draft.progress = '正在提交生成任务…';
-  renderCwQueue(stage);
+  if (!cwDraftReady(draft) || (draft.status === '生成中' && !options.prepared)) return;
+  if (!options.prepared) {
+    draft.status = '生成中';
+    draft.progress = '正在提交生成任务…';
+  }
+  if (!options.deferRender) renderCwQueue(stage);
   try {
     if (stage === 'master') {
       const result = await window.caishen.generateChildrenwearMaster({
         folder: draft.taskFolder || '', realPhotoPath: draft.real.path, referencePath: draft.reference.path,
         taskName: draft.title, taskCode: draft.taskCode, category: draft.real.folder || '童装', material: '以实拍图为准', craft: '', extraInstruction: ''
-      }, progress => { draft.progress = progress.message || '正在生成平铺图'; scheduleCwQueueRender(stage); });
+      }, progress => { draft.progress = progress.message || '正在生成平铺图'; updateCwQueueProgress(stage, draft); });
       draft.taskFolder = result.folder;
       draft.taskCode = result.taskCode || draft.taskCode;
       draft.styleName = result.styleName || draft.styleName;
       draft.title = result.taskName || cwTaskDisplayName(draft.styleName, draft.taskCode);
       draft.result = { path: result.masterPath, url: result.masterUrl, thumbnailUrl: result.masterThumbnailUrl, previewUrl: result.masterPreviewUrl, name: `平铺母版 v${result.masterVersion || 1}` };
     } else if (stage === 'model') {
-      const result = await window.caishen.generateChildrenwearModel({ folder: draft.master.taskFolder, taskName: draft.title, modelReferencePath: draft.reference.path, extraInstruction: '' }, progress => { draft.progress = progress.message || '正在生成模特图'; scheduleCwQueueRender(stage); });
+      const result = await window.caishen.generateChildrenwearModel({ folder: draft.master.taskFolder, taskName: draft.title, modelReferencePath: draft.reference.path, extraInstruction: '' }, progress => { draft.progress = progress.message || '正在生成模特图'; updateCwQueueProgress(stage, draft); });
       const output = result.modelOutputs?.at(-1);
       draft.taskFolder = result.folder;
       draft.outputId = output?.id;
       draft.result = output ? { path: output.path, url: output.url, thumbnailUrl: output.thumbnailUrl, previewUrl: output.previewUrl, name: '模特图候选' } : null;
     } else {
-      const result = await window.caishen.generateChildrenwearCombination({ folder: draft.taskFolder || draft.masters[0]?.taskFolder || '', taskName: draft.title, masterPaths: draft.masters.map(item => item.path), combinationReferencePath: draft.reference.path }, progress => { draft.progress = progress.message || '正在生成组合图'; scheduleCwQueueRender(stage); });
+      const result = await window.caishen.generateChildrenwearCombination({ folder: draft.taskFolder || draft.masters[0]?.taskFolder || '', taskName: draft.title, masterPaths: draft.masters.map(item => item.path), combinationReferencePath: draft.reference.path }, progress => { draft.progress = progress.message || '正在生成组合图'; updateCwQueueProgress(stage, draft); });
       const output = result.combinationOutputs?.at(-1);
       draft.taskFolder = result.folder;
       draft.outputId = output?.id;
@@ -6851,7 +6886,8 @@ async function runCwDraft(stage, draft, options = {}) {
     return false;
   }
   finally {
-    renderCwQueue(stage);
+    if (options.deferRender) updateCwQueueProgress(stage, draft);
+    else renderCwQueue(stage);
   }
 }
 
@@ -6875,9 +6911,14 @@ async function runCwBatch(stage) {
   }
   const cwTaskGroups = [...grouped.values()];
   const cwConcurrency = await apiBatchConcurrencyLimit(cwTaskGroups.length);
+  for (const draft of drafts) {
+    draft.status = '生成中';
+    draft.progress = '正在提交生成任务…';
+  }
+  renderCwQueue(stage);
   await runClientConcurrency(cwTaskGroups, cwConcurrency, async group => {
     // 组合图仍按共享任务目录保护写入；模特图每张卡片独立并发。
-    for (const draft of group) await runCwDraft(stage, draft, { deferReload: true, liveRefresh: true, silent: true });
+    for (const draft of group) await runCwDraft(stage, draft, { prepared: true, deferRender: true, deferReload: true, liveRefresh: true, silent: true });
   });
   await flushChildrenwearTaskRefresh();
   const failed = drafts.filter(draft => draft.status === '失败').length;
@@ -7321,7 +7362,12 @@ async function loadChildrenwearTasks(options = {}) {
   try {
     state.childrenwearTasks = await window.caishen.listChildrenwearTasks();
     syncCwMasterDraftsFromTasks();
-    renderChildrenwear();
+    if (options.resultsOnly) {
+      if (currentPage === 'childrenwear') renderCwQueue(state.childrenwearProductionTab);
+      if (currentPage === 'childrenwear-review') renderCwReview();
+    } else {
+      renderChildrenwear();
+    }
     if (!$('#cwCompareModal')?.hidden) renderCwCompare();
     return state.childrenwearTasks;
   } catch (error) {
@@ -7335,11 +7381,11 @@ function scheduleChildrenwearTaskRefresh() {
   childrenwearTaskRefreshPending = true;
   if (childrenwearTaskRefreshPromise) return childrenwearTaskRefreshPromise;
   childrenwearTaskRefreshPromise = (async () => {
-    await sleep(120);
+    await sleep(250);
     while (childrenwearTaskRefreshPending) {
       childrenwearTaskRefreshPending = false;
-      await loadChildrenwearTasks({ silent: true, throwOnError: true });
-      if (childrenwearTaskRefreshPending) await sleep(120);
+      await loadChildrenwearTasks({ silent: true, throwOnError: true, resultsOnly: true });
+      if (childrenwearTaskRefreshPending) await sleep(250);
     }
   })().catch(error => {
     toast(`生成结果刷新失败：${errorText(error)}`, true);
@@ -8143,7 +8189,7 @@ async function start() {
     return;
   }
   setTaskSourceTab(state.taskSourceTab);
-  window.addEventListener('caishen:billing-changed', loadBillingSummary);
+  window.addEventListener('caishen:billing-changed', scheduleBillingSummaryRefresh);
   if (shouldOpenMobileStats()) setPage('mobile-stats');
   bindImageHoverPreview();
   updateGenerationModeUi();
