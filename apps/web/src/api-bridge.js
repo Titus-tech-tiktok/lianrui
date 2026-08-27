@@ -65,6 +65,105 @@ function createClientId() {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
+const activeJobPolls = new Map();
+let activeJobPollTimer = null;
+let activeJobPollRequest = null;
+
+function notifyJobProgress(watcher, job) {
+  const signature = JSON.stringify([job?.status || '', job?.error || '', job?.progress || {}]);
+  if (signature === watcher.lastSignature) return;
+  watcher.lastSignature = signature;
+  try { watcher.onProgress(job?.progress || {}, job || {}); } catch {}
+}
+
+function finishJobPoll(jobId, job) {
+  const watcher = activeJobPolls.get(jobId);
+  if (!watcher) return;
+  activeJobPolls.delete(jobId);
+  window.dispatchEvent(new CustomEvent('caishen:billing-changed'));
+  if (job.status === 'completed') watcher.resolve(job.result);
+  else watcher.reject(new Error(job.error || '后台任务执行失败'));
+}
+
+function scheduleActiveJobPoll(delay = 0) {
+  if (activeJobPollTimer || activeJobPollRequest || !activeJobPolls.size) return;
+  activeJobPollTimer = setTimeout(() => {
+    activeJobPollTimer = null;
+    void pollActiveJobs();
+  }, delay);
+}
+
+async function pollActiveJobs() {
+  if (activeJobPollRequest || !activeJobPolls.size) return;
+  const now = Date.now();
+  for (const [jobId, watcher] of activeJobPolls) {
+    if (now < watcher.deadline) continue;
+    activeJobPolls.delete(jobId);
+    watcher.reject(new Error('后台任务仍在执行，请稍后到对应页面刷新结果'));
+  }
+  const ids = [...activeJobPolls.keys()].slice(0, 500);
+  if (!ids.length) return;
+  activeJobPollRequest = (async () => {
+    const response = await fetchWithRecovery('/api/jobs/status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+      cache: 'no-store'
+    }, 2);
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.error || `任务批量查询失败：HTTP ${response.status}`);
+    return Array.isArray(body.data) ? body.data : [];
+  })();
+  try {
+    const jobs = await activeJobPollRequest;
+    const received = new Set();
+    for (const job of jobs) {
+      if (!job?.id || !activeJobPolls.has(job.id)) continue;
+      received.add(job.id);
+      const watcher = activeJobPolls.get(job.id);
+      watcher.missingCount = 0;
+      notifyJobProgress(watcher, job);
+      if (job.status === 'completed' || job.status === 'failed') finishJobPoll(job.id, job);
+    }
+    for (const jobId of ids) {
+      if (received.has(jobId) || !activeJobPolls.has(jobId)) continue;
+      const watcher = activeJobPolls.get(jobId);
+      watcher.missingCount += 1;
+      if (watcher.missingCount < 3) continue;
+      activeJobPolls.delete(jobId);
+      watcher.reject(new Error('后台任务不存在或已被清理'));
+    }
+  } catch (error) {
+    if (!networkFailure(error?.cause || error)) {
+      for (const jobId of ids) {
+        const watcher = activeJobPolls.get(jobId);
+        if (!watcher) continue;
+        activeJobPolls.delete(jobId);
+        watcher.reject(error);
+      }
+    } else {
+      for (const jobId of ids) {
+        const watcher = activeJobPolls.get(jobId);
+        if (!watcher) continue;
+        notifyJobProgress(watcher, { id: jobId, status: 'running', progress: { phase: 'reconnecting', message: '本机服务短暂断开，正在重连…' } });
+      }
+    }
+  } finally {
+    activeJobPollRequest = null;
+    if (activeJobPolls.size) scheduleActiveJobPoll(1000);
+  }
+}
+
+function waitForJob(job, onProgress) {
+  return new Promise((resolve, reject) => {
+    const watcher = { resolve, reject, onProgress, deadline: Date.now() + 30 * 60 * 1000, lastSignature: '', missingCount: 0 };
+    activeJobPolls.set(job.id, watcher);
+    notifyJobProgress(watcher, job);
+    if (job.status === 'completed' || job.status === 'failed') return finishJobPoll(job.id, job);
+    scheduleActiveJobPoll();
+  });
+}
+
 async function runJob(method, args = [], clientKey = '', onProgress = () => {}) {
   const effectiveClientKey = clientKey || createClientId();
   const response = await fetchWithRecovery('/api/jobs', {
@@ -76,33 +175,7 @@ async function runJob(method, args = [], clientKey = '', onProgress = () => {}) 
   if (!response.ok) throw new Error(body.error || `任务提交失败：HTTP ${response.status}`);
   const jobId = body.data?.id;
   if (!jobId) throw new Error('服务端没有返回任务编号');
-  onProgress(body.data?.progress || {}, body.data || {});
-  const deadline = Date.now() + 30 * 60 * 1000;
-  while (Date.now() < deadline) {
-    let currentResponse;
-    try {
-      currentResponse = await fetchWithRecovery(`/api/jobs/${encodeURIComponent(jobId)}`, { cache: 'no-store' }, 2);
-    } catch (error) {
-      if (!networkFailure(error?.cause || error)) throw error;
-      onProgress({ phase: 'reconnecting', message: '本机服务短暂断开，正在重连…' }, { id: jobId, status: 'running' });
-      await sleep(1200);
-      continue;
-    }
-    const currentBody = await currentResponse.json().catch(() => ({}));
-    if (!currentResponse.ok) throw new Error(currentBody.error || `任务查询失败：HTTP ${currentResponse.status}`);
-    const job = currentBody.data;
-    onProgress(job?.progress || {}, job || {});
-    if (job?.status === 'completed') {
-      window.dispatchEvent(new CustomEvent('caishen:billing-changed'));
-      return job.result;
-    }
-    if (job?.status === 'failed') {
-      window.dispatchEvent(new CustomEvent('caishen:billing-changed'));
-      throw new Error(job.error || '后台任务执行失败');
-    }
-    await sleep(1000);
-  }
-  throw new Error('后台任务仍在执行，请稍后到对应页面刷新结果');
+  return waitForJob(body.data, onProgress);
 }
 
 async function cancelJob(jobId) {

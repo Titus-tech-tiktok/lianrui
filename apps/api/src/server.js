@@ -135,6 +135,7 @@ const UPLOAD_FILE_LIMIT_MB = Math.max(1, Number(process.env.CAISHEN_UPLOAD_FILE_
 const UPLOAD_FILE_LIMIT_BYTES = Math.round(UPLOAD_FILE_LIMIT_MB * 1024 * 1024);
 const pendingJobs = [];
 const jobsByClientKey = new Map();
+const jobsById = new Map();
 const activeJobControllers = new Map();
 const jobRateWindows = new Map();
 const loginRateWindows = new Map();
@@ -590,11 +591,22 @@ function jobFile(id) {
   return path.join(jobRoot(), `${String(id).replace(/[^a-zA-Z0-9-]/g, '')}.json`);
 }
 
+function cacheJob(job) {
+  if (!job?.id) return job;
+  jobsById.set(job.id, job);
+  if (jobsById.size > 5000) jobsById.delete(jobsById.keys().next().value);
+  return job;
+}
+
 async function readJob(id) {
-  try { return JSON.parse(await fsp.readFile(jobFile(id), 'utf8')); } catch { return null; }
+  const normalizedId = String(id || '').replace(/[^a-zA-Z0-9-]/g, '');
+  if (!normalizedId) return null;
+  if (jobsById.has(normalizedId)) return jobsById.get(normalizedId);
+  try { return cacheJob(JSON.parse(await fsp.readFile(jobFile(normalizedId), 'utf8'))); } catch { return null; }
 }
 
 async function writeJob(job) {
+  cacheJob(job);
   await fsp.mkdir(jobRoot(), { recursive: true });
   const file = jobFile(job.id);
   const temporary = `${file}.${process.pid}.tmp`;
@@ -1741,6 +1753,15 @@ async function startServer() {
     } catch (error) {
       return res.status(400).json({ error: error?.message || String(error) });
     }
+  });
+
+  app.post('/api/jobs/status', async (req, res) => {
+    const ids = [...new Set((Array.isArray(req.body?.ids) ? req.body.ids : [])
+      .map(value => String(value || '').replace(/[^a-zA-Z0-9-]/g, ''))
+      .filter(Boolean))].slice(0, 500);
+    if (!ids.length) return res.json({ data: [] });
+    const jobs = await Promise.all(ids.map(id => readJob(id)));
+    return res.json({ data: jobs.filter(job => job?.workspaceId === req.user.workspaceId).map(publicJob) });
   });
 
   app.get('/api/jobs/:id', async (req, res) => {
