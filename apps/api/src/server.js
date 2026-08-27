@@ -1208,6 +1208,9 @@ const rpc = {
     return runtime.generateChildrenwearBatch({ stage, items }, context || {});
   },
   listChildrenwearTasks: () => runtime.listChildrenwearTasks(),
+  getChildrenwearTask: ([folder]) => runtime.getChildrenwearTask(
+    managedPath(folder, { message: '童装任务不属于当前输出目录' })
+  ),
   renameChildrenwearTask: ([payload]) => runtime.renameChildrenwearTask({
     ...(payload || {}),
     folder: managedPath(payload?.folder, { message: '款式任务不属于当前输出目录' })

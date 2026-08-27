@@ -7932,6 +7932,8 @@ label input, label textarea {
 }
 
 .image-hover-lens.show { opacity: 1; visibility: visible; transition-delay: 0s; }
+.childrenwear-generation-active .image-hover-preview,
+.childrenwear-generation-active .image-hover-lens { display: none !important; }
 
 .image-hover-preview span {
   color: var(--ink);

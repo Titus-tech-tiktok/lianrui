@@ -660,6 +660,7 @@ window.caishen = {
     onProgress
   ),
   listChildrenwearTasks: () => rpc('listChildrenwearTasks'),
+  getChildrenwearTask: folder => rpc('getChildrenwearTask', folder),
   renameChildrenwearTask: payload => rpc('renameChildrenwearTask', payload),
   deleteChildrenwearTasks: folders => rpc('deleteChildrenwearTasks', folders),
   listReviews: () => rpc('listReviews'),

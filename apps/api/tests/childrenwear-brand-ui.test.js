@@ -91,11 +91,16 @@ test('多嘻噜卡使用永沙式资产管理、左右任务台和五段生产�
   assert.match(renderer, /正在提交整批任务/);
   assert.doesNotMatch(renderer, /runClientConcurrency\(cwTaskGroups, cwConcurrency/);
   assert.match(bridge, /generateChildrenwearBatch/);
+  assert.match(bridge, /getChildrenwearTask/);
   assert.match(server, /'generateChildrenwearBatch'/);
+  assert.match(server, /getChildrenwearTask/);
   assert.match(renderer, /function scheduleChildrenwearTaskRefresh/);
   assert.match(renderer, /function cwReviewItemForDraft/);
   assert.match(renderer, /reviewIndex\.byId\.get/);
   assert.match(renderer, /void scheduleChildrenwearTaskRefresh\(\)/);
+  assert.match(renderer, /scheduleChildrenwearTaskRefresh\(completed\.folder\)/);
+  assert.match(renderer, /window\.caishen\.getChildrenwearTask\(value\)/);
+  assert.match(renderer, /function applyChildrenwearTaskSnapshots/);
   assert.match(renderer, /function flushChildrenwearTaskRefresh/);
   assert.match(renderer, /await flushChildrenwearTaskRefresh\(\)/);
   assert.match(renderer, /updateCwQueueProgress\(stage, draft\)/);

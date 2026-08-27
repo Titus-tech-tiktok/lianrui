@@ -292,6 +292,8 @@ let reviewRefreshTimer;
 const cwQueueProgressTimers = new Map();
 let childrenwearTaskRefreshPromise = null;
 let childrenwearTaskRefreshPending = false;
+let childrenwearTaskRefreshNeedsFull = false;
+const childrenwearTaskRefreshFolders = new Set();
 let billingRefreshTimer = null;
 let billingSummaryPromise = null;
 let billingSummaryRefreshPending = false;
@@ -1566,6 +1568,7 @@ function bindImageHoverPreview() {
   };
 
   document.addEventListener('mouseover', event => {
+    if (document.documentElement.classList.contains('childrenwear-generation-active')) return;
     const image = event.target.closest?.('img');
     if (!image || image.closest('.brand') || image.closest('#imageHoverPreview') || image.closest('#cwCompareModal')) return;
     const source = image.dataset.previewSrc || image.currentSrc || image.src;
@@ -6839,6 +6842,12 @@ function renderCwQueue(stage) {
   const panel = $(meta.queue);
   if (!panel) return;
   const drafts = state.childrenwearDrafts[stage];
+  const generationActive = Object.values(state.childrenwearDrafts).some(items => items.some(item => item.status === '生成中'));
+  document.documentElement.classList.toggle('childrenwear-generation-active', generationActive);
+  if (generationActive) {
+    $('#imageHoverPreview')?.classList.remove('show', 'positioning');
+    $('#imageHoverLens')?.classList.remove('show');
+  }
   const filter = state.childrenwearQueueFilters[stage] || 'all';
   const visibleDrafts = cwFilteredDrafts(stage);
   const visibleLimit = Math.max(12, Number(state.childrenwearQueueVisibleLimits[stage]) || 36);
@@ -7014,8 +7023,9 @@ async function runCwDraft(stage, draft, options = {}) {
       updateCwQueueProgress(stage, draft);
     });
     applyCwDraftGenerationResult(stage, draft, result);
-    if (options.liveRefresh) void scheduleChildrenwearTaskRefresh();
-    else if (!options.deferReload) await loadChildrenwearTasks();
+    applyChildrenwearTaskSnapshots([result]);
+    if (options.liveRefresh && result?.folder) void scheduleChildrenwearTaskRefresh(result.folder);
+    else if (!options.deferReload && !result?.folder) await loadChildrenwearTasks();
     if (!options.silent) toast(stage === 'master' ? '平铺图生成完成，请在当前页面审核' : `${CW_STAGE_META[stage].label}生成完成，已进入 05 成品审核与下载`);
     return true;
   } catch (error) {
@@ -7038,25 +7048,34 @@ async function runCwBatch(stage) {
     draft.progress = '正在提交整批任务…';
   }
   renderCwQueue(stage);
+  const queuedRefreshFolders = new Set();
+  const processedCompletedIndexes = new Set();
   try {
     const batch = await window.caishen.generateChildrenwearBatch({
       stage,
       items: drafts.map(draft => cwDraftGenerationPayload(stage, draft))
     }, progress => {
+      for (const completed of Array.isArray(progress.completedItems) ? progress.completedItems : []) {
+        if (processedCompletedIndexes.has(Number(completed.index))) continue;
+        processedCompletedIndexes.add(Number(completed.index));
+        const completedDraft = drafts[Number(completed.index)];
+        if (!completedDraft || completed.failed) continue;
+        if (completed.folder) completedDraft.taskFolder = completed.folder;
+        completedDraft.status = '等待成品审核';
+        completedDraft.progress = '生成完成，正在同步审核结果…';
+        if (completed.folder && !queuedRefreshFolders.has(completed.folder)) {
+          queuedRefreshFolders.add(completed.folder);
+          void scheduleChildrenwearTaskRefresh(completed.folder);
+        }
+      }
       const index = Number(progress.itemIndex);
       const draft = Number.isInteger(index) ? drafts[index] : null;
       if (!draft) return;
       if (progress.itemState === 'failed') {
         draft.status = '失败';
         draft.progress = childrenwearFriendlyError(progress.itemError || progress.message);
-      } else {
-        draft.progress = progress.itemState === 'completed'
-          ? '生成完成，正在同步审核结果…'
-          : (progress.message || `服务端并发处理中（${progress.concurrency || '-'} 路）`);
-        if (progress.itemState === 'completed') {
-          draft.status = '等待成品审核';
-          void scheduleChildrenwearTaskRefresh();
-        }
+      } else if (progress.itemState !== 'completed') {
+        draft.progress = progress.message || `服务端并发处理中（${progress.concurrency || '-'} 路）`;
       }
       updateCwQueueProgress(stage, draft);
     });
@@ -7070,6 +7089,7 @@ async function runCwBatch(stage) {
       }
       updateCwQueueProgress(stage, draft);
     }
+    applyChildrenwearTaskSnapshots((batch.results || []).filter(record => record.ok && record.value).map(record => record.value));
     await flushChildrenwearTaskRefresh();
     const failed = Number(batch.failed) || drafts.filter(draft => draft.status === '失败').length;
     const succeeded = drafts.length - failed;
@@ -7531,6 +7551,30 @@ function renderChildrenwear() {
   if (currentPage === 'childrenwear-review') renderCwReview();
 }
 
+function mergeChildrenwearTaskSnapshot(task) {
+  if (!task?.folder) return false;
+  const key = cwFolderKey(task.folder);
+  const index = state.childrenwearTasks.findIndex(item => cwFolderKey(item.folder) === key);
+  if (index >= 0) state.childrenwearTasks[index] = task;
+  else state.childrenwearTasks.push(task);
+  return true;
+}
+
+function renderChildrenwearTaskResults() {
+  if (currentPage === 'childrenwear') renderCwQueue(state.childrenwearProductionTab);
+  if (currentPage === 'childrenwear-review') renderCwReview();
+  if (!$('#cwCompareModal')?.hidden) renderCwCompare();
+}
+
+function applyChildrenwearTaskSnapshots(tasks = []) {
+  let changed = false;
+  for (const task of tasks) changed = mergeChildrenwearTaskSnapshot(task) || changed;
+  if (!changed) return false;
+  syncCwDraftsFromTasks();
+  renderChildrenwearTaskResults();
+  return true;
+}
+
 async function loadChildrenwearTasks(options = {}) {
   try {
     state.childrenwearTasks = await window.caishen.listChildrenwearTasks();
@@ -7550,30 +7594,41 @@ async function loadChildrenwearTasks(options = {}) {
   }
 }
 
-function scheduleChildrenwearTaskRefresh() {
+function scheduleChildrenwearTaskRefresh(folder) {
+  if (typeof folder === 'string' && folder) childrenwearTaskRefreshFolders.add(folder);
+  else if (folder === undefined) childrenwearTaskRefreshNeedsFull = true;
   childrenwearTaskRefreshPending = true;
   if (childrenwearTaskRefreshPromise) return childrenwearTaskRefreshPromise;
   childrenwearTaskRefreshPromise = (async () => {
     await sleep(250);
     while (childrenwearTaskRefreshPending) {
       childrenwearTaskRefreshPending = false;
-      await loadChildrenwearTasks({ silent: true, throwOnError: true, resultsOnly: true });
+      const needsFull = childrenwearTaskRefreshNeedsFull;
+      childrenwearTaskRefreshNeedsFull = false;
+      const folders = [...childrenwearTaskRefreshFolders];
+      childrenwearTaskRefreshFolders.clear();
+      if (needsFull) {
+        await loadChildrenwearTasks({ silent: true, throwOnError: true, resultsOnly: true });
+      } else if (folders.length) {
+        const snapshots = await Promise.all(folders.map(value => window.caishen.getChildrenwearTask(value)));
+        applyChildrenwearTaskSnapshots(snapshots.filter(Boolean));
+      }
       if (childrenwearTaskRefreshPending) await sleep(250);
     }
   })().catch(error => {
     toast(`生成结果刷新失败：${errorText(error)}`, true);
   }).finally(() => {
     childrenwearTaskRefreshPromise = null;
-    if (childrenwearTaskRefreshPending) void scheduleChildrenwearTaskRefresh();
+    if (childrenwearTaskRefreshPending) void scheduleChildrenwearTaskRefresh(false);
   });
   return childrenwearTaskRefreshPromise;
 }
 
 async function flushChildrenwearTaskRefresh() {
-  childrenwearTaskRefreshPending = true;
-  do {
-    await scheduleChildrenwearTaskRefresh();
-  } while (childrenwearTaskRefreshPromise || childrenwearTaskRefreshPending);
+  while (childrenwearTaskRefreshPromise || childrenwearTaskRefreshPending) {
+    if (!childrenwearTaskRefreshPromise) scheduleChildrenwearTaskRefresh(false);
+    await childrenwearTaskRefreshPromise;
+  }
 }
 
 function bindChildrenwearEvents() {

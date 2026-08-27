@@ -4455,6 +4455,11 @@ async function generateChildrenwearCombination(payload = {}, options = {}) {
   return writeChildrenwearTask(folder, task);
 }
 
+async function getChildrenwearTask(folder) {
+  const task = await readChildrenwearTask(String(folder || ''));
+  return task ? publicChildrenwearTask(task) : null;
+}
+
 async function generateChildrenwearBatch(payload = {}, options = {}) {
   const stage = ['master', 'model', 'combination'].includes(payload.stage) ? payload.stage : '';
   if (!stage) throw new Error('童装批量生成阶段无效');
@@ -4473,6 +4478,7 @@ async function generateChildrenwearBatch(payload = {}, options = {}) {
     groups.get(key).push(record);
   }
   const results = new Array(records.length);
+  const completedItems = [];
   let completed = 0;
   let failed = 0;
   const total = records.length;
@@ -4499,9 +4505,11 @@ async function generateChildrenwearBatch(payload = {}, options = {}) {
         const value = await generate(record.item, { signal: options.signal, reportProgress: itemProgress });
         completed += 1;
         results[record.index] = { index: record.index, ok: true, value };
+        completedItems.push({ index: record.index, folder: value?.folder || '' });
         await options.reportProgress?.({
           phase: 'generating', current: completed, total, concurrency,
           itemIndex: record.index, itemState: 'completed',
+          itemFolder: value?.folder || '', completedItems: completedItems.slice(),
           percent: Math.round((completed / total) * 100),
           message: `已完成 ${completed}/${total}`
         });
@@ -4509,9 +4517,11 @@ async function generateChildrenwearBatch(payload = {}, options = {}) {
         completed += 1;
         failed += 1;
         results[record.index] = { index: record.index, ok: false, error: error?.message || String(error) };
+        completedItems.push({ index: record.index, folder: '', failed: true });
         await options.reportProgress?.({
           phase: 'generating', current: completed, total, concurrency,
           itemIndex: record.index, itemState: 'failed', itemError: error?.message || String(error),
+          completedItems: completedItems.slice(),
           percent: Math.round((completed / total) * 100),
           message: `已完成 ${completed}/${total}，失败 ${failed}`
         });
@@ -4562,6 +4572,7 @@ const runtimeExports = {
   generateTemplateTaskMaster,
   generateTemplateSetForFolder,
   getImageSchedulerSnapshot,
+  getChildrenwearTask,
   getTemplatePreparation,
   imageUrl,
   invalidateImageLibraryIndex,

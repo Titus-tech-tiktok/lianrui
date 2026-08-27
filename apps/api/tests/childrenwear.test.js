@@ -280,8 +280,13 @@ test('runtime completes master approval, model generation and combination with t
   assert.equal(modelBatch.failed, 0);
   assert.equal(modelBatch.results.every(item => item.ok), true);
   assert.equal(modelBatchProgress.filter(item => item.itemState === 'completed').length, 3);
+  assert.deepEqual(
+    modelBatchProgress.at(-1).completedItems.map(item => item.index).sort((a, b) => a - b),
+    [0, 1, 2]
+  );
   assert.ok(maxActiveImageRequests >= 3, `expected concurrent model calls, observed ${maxActiveImageRequests}`);
   const afterConcurrentModels = (await runtime.listChildrenwearTasks()).find(item => item.folder === first.folder);
+  assert.equal((await runtime.getChildrenwearTask(first.folder)).folder, first.folder);
   assert.equal(afterConcurrentModels.modelOutputs.length, 4);
   assert.equal(new Set(afterConcurrentModels.modelOutputs.map(item => item.id)).size, 4);
 
