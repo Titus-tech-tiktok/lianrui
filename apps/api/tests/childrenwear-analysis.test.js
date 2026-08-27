@@ -25,14 +25,20 @@ test('analysis prompts keep product identity separate from presentation referenc
   assert.match(product, /what exact product is being sold/i);
   assert.match(product, /selling_identity/);
   assert.match(product, /visible_selling_points/);
+  assert.match(product, /pattern-cut/i);
+  assert.match(product, /fibre\/yarn character/i);
   assert.match(flat, /not the target SKU/i);
   assert.match(flat, /why was this reference selected/i);
   assert.match(flat, /reference_value/);
   assert.match(flat, /natural fold flow/i);
+  assert.match(flat, /background colour\/gradient\/texture/i);
+  assert.match(flat, /shadow footprint/i);
   assert.match(model, /protected person\/scene region/i);
   assert.match(model, /which action should the real product perform/i);
+  assert.match(model, /exact presentation targets/i);
   assert.match(combination, /one supplied SKU per slot/i);
   assert.match(combination, /which action should each supplied SKU perform/i);
+  assert.match(combination, /displayed outer outline/i);
 });
 
 test('analysis JSON is normalized to the current cache schema', () => {

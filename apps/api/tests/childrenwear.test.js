@@ -39,6 +39,13 @@ test('childrenwear prompts keep real product and reference roles separate', () =
   assert.match(master, /WHY image 1 was selected/i);
   assert.match(master, /WHY image 2 was selected/i);
   assert.match(master, /Transfer the reference action and fold flow/i);
+  assert.match(master, /REFERENCE PRESENTATION LOCK/i);
+  assert.match(master, /PRODUCT IDENTITY LOCK/i);
+  assert.match(master, /complete background colour, gradient and texture/i);
+  assert.match(master, /“Reference silhouette” means only the visible ecommerce display outline/i);
+  assert.match(master, /Fold geometry comes from image 2/i);
+  assert.match(master, /garment style, construction, fabric, colour, material, artwork/i);
+  assert.match(master, /do not blend, average or trade attributes/i);
   assert.doesNotMatch(master, /automatic detail crops/i);
 
   const model = buildChildrenwearModelPrompt({ productManifest, referenceSpec: { model: { pose: '站立' } } });
@@ -51,6 +58,9 @@ test('childrenwear prompts keep real product and reference roles separate', () =
   assert.match(model, /fold flow and wrinkle zones/i);
   assert.match(model, /Never paste a rigid flat-lay silhouette/i);
   assert.match(model, /Never convert the real SKU into the reference garment type/i);
+  assert.match(model, /REFERENCE PRESENTATION LOCK/i);
+  assert.match(model, /PRODUCT IDENTITY LOCK/i);
+  assert.match(model, /pose\/background\/folds\/shadows\/detail-display action/i);
 });
 
 test('combination prompts use the real reference index for two to four masters', () => {
@@ -70,6 +80,9 @@ test('combination prompts use the real reference index for two to four masters',
     assert.match(prompt, /action blueprint/i);
     assert.match(prompt, /sleeve and leg direction/i);
     assert.match(prompt, /stiff cut-outs/i);
+    assert.match(prompt, /REFERENCE PRESENTATION LOCK/i);
+    assert.match(prompt, /PRODUCT IDENTITY LOCK/i);
+    assert.match(prompt, /layout\/background\/fold\/shadow\/action/i);
   }
 });
 

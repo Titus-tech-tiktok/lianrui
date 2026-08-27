@@ -44,7 +44,7 @@ const PROMPT_DEFINITIONS = Object.freeze([
     id: 'childrenwearMasterGeneration',
     title: '平铺母版图生成',
     group: '多嘻噜卡生图',
-    description: '本板块统一使用开放品类主提示词。实拍图回答“卖什么”，锁定商品细节、材质特征和卖点；成品参考图回答“为什么学它”，锁定展示动作、自然褶皱和商业呈现。',
+    description: '双源硬锁：实拍图100%锁定商品款式、裁片结构、面料、颜色、材质、图案和细节；成品参考图100%锁定摆姿形成的外轮廓、背景、褶皱位置、阴影、构图和细节摆放动作。两者禁止混用。',
     placeholders: [],
     defaultValue: buildChildrenwearMasterPrompt({})
   },
@@ -52,7 +52,7 @@ const PROMPT_DEFINITIONS = Object.freeze([
     id: 'childrenwearModelGeneration',
     title: '模特上身图生成',
     group: '多嘻噜卡生图',
-    description: '本板块统一使用这一套开放品类主提示词。已审核母版决定商品身份；模特参考图严格决定人物动作、姿势、穿着形变、自然褶皱位置与场景，面料质感仍以母版为准。',
+    description: '双源硬锁：已审核母版锁定真实商品款式、面料、颜色、材质、图案和结构；模特参考图锁定人物、动作、背景、上身外轮廓、褶皱位置、阴影和细节展示姿势。',
     placeholders: [],
     defaultValue: buildChildrenwearModelPrompt({})
   },
@@ -60,7 +60,7 @@ const PROMPT_DEFINITIONS = Object.freeze([
     id: 'childrenwearCombinationGeneration',
     title: '多 SKU 组合图生成',
     group: '多嘻噜卡生图',
-    description: '本板块统一使用这一套开放品类主提示词。每张已审核母版分别锁定一个 SKU；组合参考图严格控制每件衣服的摆放动作、袖腿弯曲、自然褶皱、间距和层级，但不提供商品身份。',
+    description: '双源硬锁：每张已审核母版分别锁定一个SKU的真实款式、面料、颜色、材质、图案和结构；组合参考图锁定背景、槽位外轮廓、摆放动作、褶皱、阴影、间距和层级。',
     placeholders: [],
     defaultValue: buildChildrenwearCombinationPrompt({ count: 4 })
   }
