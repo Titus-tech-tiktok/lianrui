@@ -6588,8 +6588,8 @@ function cwNextTaskCode() {
 }
 
 function cwTaskDisplayName(styleName, taskCode) {
-  const style = String(styleName || '童装款式').trim().replace(/\d{4}-\d{3}\s*$/, '').trim() || '童装款式';
-  return `${style}${taskCode || ''}`;
+  const style = String(styleName || '童装款式').trim().replace(/^\d{4}-\d{3}\s*[-·｜|]?\s*/, '').replace(/\d{4}-\d{3}\s*$/, '').trim() || '童装款式';
+  return taskCode ? `${taskCode} ${style}` : style;
 }
 
 function cwNewDraft(stage) {
@@ -6657,7 +6657,32 @@ function cwDraftStatusText(draft) {
   return draft.status || '待补齐素材';
 }
 
-function syncCwMasterDraftsFromTasks() {
+function cwPersistedOutputKey(stage, folder, outputId) {
+  return `${stage}\u0000${String(folder || '').toLocaleLowerCase('en-US')}\u0000${String(outputId || '')}`;
+}
+
+function cwPersistedStatus(approved, reviewStatus) {
+  if (approved) return '已通过';
+  return reviewStatus === 'needs_regeneration' ? '需重生成' : '等待成品审核';
+}
+
+function cwTaskMasterImage(task, masterPath = task?.masterPath, index = -1) {
+  if (!masterPath) return null;
+  const sourceTask = state.childrenwearTasks.find(item => item.masterPath === masterPath);
+  const taskIndex = index >= 0 ? index : (task?.masterPaths || []).indexOf(masterPath);
+  return {
+    path: masterPath,
+    url: sourceTask?.masterUrl || (taskIndex >= 0 ? task?.masterUrls?.[taskIndex] : '') || (masterPath === task?.masterPath ? task?.masterUrl : ''),
+    thumbnailUrl: sourceTask?.masterThumbnailUrl || (taskIndex >= 0 ? task?.masterThumbnailUrls?.[taskIndex] : '') || (masterPath === task?.masterPath ? task?.masterThumbnailUrl : ''),
+    previewUrl: sourceTask?.masterPreviewUrl || (taskIndex >= 0 ? task?.masterPreviewUrls?.[taskIndex] : '') || (masterPath === task?.masterPath ? task?.masterPreviewUrl : ''),
+    name: sourceTask?.taskName || task?.taskName || `已审核平铺图${taskIndex >= 0 ? ` ${taskIndex + 1}` : ''}`,
+    folder: sourceTask?.material || task?.material || '',
+    taskFolder: sourceTask?.folder || task?.folder || '',
+    taskName: sourceTask?.taskName || task?.taskName || ''
+  };
+}
+
+function syncCwDraftsFromTasks() {
   const taskFolders = new Set(state.childrenwearTasks.map(task => String(task.folder || '').toLocaleLowerCase('en-US')));
   state.childrenwearDrafts.master = state.childrenwearDrafts.master.filter(draft => {
     if (!draft.taskFolder || draft.status === '生成中') return true;
@@ -6689,10 +6714,81 @@ function syncCwMasterDraftsFromTasks() {
       draft.real = { path: task.realPhotoPath, url: task.realPhotoUrl, thumbnailUrl: task.realPhotoThumbnailUrl, previewUrl: task.realPhotoPreviewUrl, name: task.realPhotoPath?.split(/[\\/]/).at(-1) || '实拍产品图', folder: task.category || '' };
       draft.reference = { path: task.referencePath, url: task.referenceUrl, thumbnailUrl: task.referenceThumbnailUrl, previewUrl: task.referencePreviewUrl, name: task.referencePath?.split(/[\\/]/).at(-1) || '成品参考图', folder: '' };
       draft.result = { path: task.masterPath, url: task.masterUrl, thumbnailUrl: task.masterThumbnailUrl, previewUrl: task.masterPreviewUrl, name: `平铺母版 v${task.masterVersion || 1}` };
-      draft.status = task.masterApproved ? '已通过' : (task.masterReviewStatus === 'needs_regeneration' ? '需重生成' : '等待成品审核');
+      draft.status = cwPersistedStatus(task.masterApproved, task.masterReviewStatus);
       draft.progress = '';
     }
   }
+
+  for (const stage of ['model', 'combination']) {
+    const records = state.childrenwearTasks.flatMap(task => ((stage === 'model' ? task.modelOutputs : task.combinationOutputs) || []).map(output => ({ task, output })));
+    const outputKeys = new Set(records.map(({ task, output }) => cwPersistedOutputKey(stage, task.folder, output.id)));
+    state.childrenwearDrafts[stage] = state.childrenwearDrafts[stage].filter(draft => {
+      if (!draft.outputId || draft.status === '生成中') return true;
+      return outputKeys.has(cwPersistedOutputKey(stage, draft.taskFolder, draft.outputId));
+    });
+    const stageDrafts = state.childrenwearDrafts[stage];
+    for (const { task, output } of records) {
+      if (!output?.id || !output.path || !output.url) continue;
+      let draft = stageDrafts.find(item => item.taskFolder === task.folder && (item.outputId === output.id || item.result?.path === output.path));
+      if (!draft) {
+        draft = {
+          id: `saved-${stage}:${task.folder}:${output.id}`,
+          stage,
+          title: output.taskName || task.taskName || task.category || CW_STAGE_META[stage].label,
+          taskCode: task.taskCode || '',
+          styleName: task.styleName || task.category || '',
+          selected: false,
+          status: '等待成品审核',
+          progress: '',
+          result: null,
+          taskFolder: task.folder,
+          outputId: output.id
+        };
+        if (stage === 'combination') draft.masters = [];
+        stageDrafts.push(draft);
+      }
+      if (draft.status === '生成中') continue;
+      draft.title = output.taskName || task.taskName || draft.title;
+      draft.taskCode = task.taskCode || draft.taskCode;
+      draft.styleName = task.styleName || task.category || draft.styleName;
+      draft.taskFolder = task.folder;
+      draft.outputId = output.id;
+      draft.result = { path: output.path, url: output.url, thumbnailUrl: output.thumbnailUrl, previewUrl: output.previewUrl, name: stage === 'model' ? '模特图候选' : '组合图候选' };
+      draft.status = cwPersistedStatus(output.approved, output.reviewStatus);
+      draft.progress = '';
+      if (stage === 'model') {
+        draft.master = cwTaskMasterImage(task, output.masterPath || task.masterPath);
+        draft.reference = {
+          path: output.modelReferencePath,
+          url: output.modelReferenceUrl,
+          thumbnailUrl: output.modelReferenceThumbnailUrl,
+          previewUrl: output.modelReferencePreviewUrl,
+          name: output.modelReferencePath?.split(/[\\/]/).at(-1) || '参考模特图',
+          folder: ''
+        };
+      } else {
+        const masterPaths = output.masterPaths?.length ? output.masterPaths : (task.masterPaths || []);
+        const imageTask = output.masterPaths?.length ? {
+          ...task,
+          masterPaths,
+          masterUrls: output.masterUrls,
+          masterThumbnailUrls: output.masterThumbnailUrls,
+          masterPreviewUrls: output.masterPreviewUrls
+        } : task;
+        draft.masters = masterPaths.map((masterPath, index) => cwTaskMasterImage(imageTask, masterPath, index)).filter(Boolean);
+        draft.reference = {
+          path: output.combinationReferencePath || task.combinationReferencePath,
+          url: output.combinationReferenceUrl || task.combinationReferenceUrl,
+          thumbnailUrl: output.combinationReferenceThumbnailUrl || task.combinationReferenceThumbnailUrl,
+          previewUrl: output.combinationReferencePreviewUrl || task.combinationReferencePreviewUrl,
+          name: (output.combinationReferencePath || task.combinationReferencePath)?.split(/[\\/]/).at(-1) || '组合参考图',
+          folder: ''
+        };
+      }
+    }
+    if (!stageDrafts.some(draft => draft.id === state.childrenwearActiveDraft[stage])) state.childrenwearActiveDraft[stage] = stageDrafts.at(-1)?.id || '';
+  }
+  if (!state.childrenwearDrafts.master.some(draft => draft.id === state.childrenwearActiveDraft.master)) state.childrenwearActiveDraft.master = state.childrenwearDrafts.master.at(-1)?.id || '';
 }
 
 function cwFilteredDrafts(stage) {
@@ -7055,21 +7151,22 @@ function cwCompareQueue() {
 function cwCompareSources(item) {
   const task = item.task || {};
   const sources = [];
-  const add = (key, label, url, kind = 'source') => { if (url) sources.push({ key, label, url, kind }); };
+  const add = (key, label, url, kind = 'source', primary = false) => { if (url) sources.push({ key, label, url, kind, primary }); };
   if (item.stage === 'master') {
+    add('result', '生成平铺母版图', item.url, 'result', true);
     add('real', '实拍产品图', task.realPhotoUrl);
     add('reference', '成品参考图', task.referenceUrl);
     (task.masterHistory || []).filter(history => history.url && history.path !== item.path).slice().reverse().forEach(history => add(`history-${history.version}`, `历史平铺图 v${history.version}`, history.url, 'history'));
-    add('result', '生成平铺母版图', item.url, 'result');
   } else if (item.stage === 'model') {
+    add('master', '已审核平铺母版', item.output?.masterUrl || task.masterUrl, 'source', true);
     add('real', '实拍产品图', task.realPhotoUrl);
     add('reference', '成品参考图', task.referenceUrl);
-    add('master', '已审核平铺母版', task.masterUrl);
     add('model-reference', '参考模特图', item.output?.modelReferenceUrl);
     add('result', '生成模特上身图', item.url, 'result');
   } else {
-    (task.masterUrls || []).forEach((url, index) => add(`master-${index}`, `已审核平铺图 ${String.fromCharCode(65 + index)}`, url));
-    add('combination-reference', '组合参考图', task.combinationReferenceUrl);
+    const masterUrls = item.output?.masterUrls?.length ? item.output.masterUrls : (task.masterUrls || []);
+    masterUrls.forEach((url, index) => add(`master-${index}`, `已审核平铺图 ${String.fromCharCode(65 + index)}`, url, 'source', index === 0));
+    add('combination-reference', '组合参考图', item.output?.combinationReferenceUrl || task.combinationReferenceUrl);
     add('result', '生成多 SKU 组合图', item.url, 'result');
   }
   return sources;
@@ -7079,7 +7176,8 @@ function orderedCwCompareSources(item) {
   const sources = cwCompareSources(item);
   const sourceMap = new Map(sources.map(source => [source.key, source]));
   const savedOrder = Array.isArray(state.childrenwearCompareOrder[item.stage]) ? state.childrenwearCompareOrder[item.stage] : [];
-  const order = [...savedOrder.filter(key => sourceMap.has(key)), ...sources.map(source => source.key).filter(key => !savedOrder.includes(key))];
+  const primaryKey = sources.find(source => source.primary)?.key;
+  const order = [primaryKey, ...savedOrder.filter(key => key !== primaryKey && sourceMap.has(key)), ...sources.map(source => source.key).filter(key => key !== primaryKey && !savedOrder.includes(key))].filter(Boolean);
   state.childrenwearCompareOrder[item.stage] = order;
   return order.map(key => sourceMap.get(key)).filter(Boolean);
 }
@@ -7361,7 +7459,7 @@ function renderChildrenwear() {
 async function loadChildrenwearTasks(options = {}) {
   try {
     state.childrenwearTasks = await window.caishen.listChildrenwearTasks();
-    syncCwMasterDraftsFromTasks();
+    syncCwDraftsFromTasks();
     if (options.resultsOnly) {
       if (currentPage === 'childrenwear') renderCwQueue(state.childrenwearProductionTab);
       if (currentPage === 'childrenwear-review') renderCwReview();

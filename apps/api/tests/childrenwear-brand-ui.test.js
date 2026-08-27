@@ -72,7 +72,11 @@ test('多嘻噜卡使用永沙式资产管理、左右任务台和五段生产�
   assert.match(renderer, /function renameChildrenwearLibraryFolder/);
   assert.match(renderer, /避免素材被合并/);
   assert.match(renderer, /function renderCwQueue/);
-  assert.match(renderer, /function syncCwMasterDraftsFromTasks/);
+  assert.match(renderer, /function syncCwDraftsFromTasks/);
+  assert.match(renderer, /task\.modelOutputs/);
+  assert.match(renderer, /task\.combinationOutputs/);
+  assert.match(renderer, /saved-\$\{stage\}:\$\{task\.folder\}:\$\{output\.id\}/);
+  assert.match(renderer, /output\.masterPaths\?\.length/);
   assert.match(renderer, /function cwFilteredDrafts/);
   assert.match(renderer, /function markCwReviewItemNeedsRegeneration/);
   assert.match(renderer, /function cwCompareQueue/);
@@ -94,6 +98,8 @@ test('多嘻噜卡使用永沙式资产管理、左右任务台和五段生产�
   assert.doesNotMatch(renderer, /for \(const draft of drafts\) await runCwDraft\(stage, draft\)/);
   assert.match(renderer, /function regenerateCwReviewItem/);
   assert.match(renderer, /function cwCompareSources/);
+  assert.match(renderer, /add\('result', '生成平铺母版图', item\.url, 'result', true\)/);
+  assert.match(renderer, /const primaryKey = sources\.find\(source => source\.primary\)/);
   assert.match(renderer, /function toggleCwCompareSource/);
   assert.match(renderer, /function reorderCwCompareSource/);
   assert.match(renderer, /data-cw-compare-toggle/);

@@ -97,11 +97,11 @@ test('童装任务 ZIP 只交付生成图并使用短文件名', async t => {
   await fs.mkdir(path.join(root, '素材', '实拍图'), { recursive: true });
   await fs.writeFile(path.join(root, '素材', '实拍图', 'real.jpg'), Buffer.from('source'));
   await fs.writeFile(path.join(root, 'childrenwear-task.json'), JSON.stringify({
-    taskName: '纯棉梭织裤0824-001', taskCode: '0824-001', masterPath: master,
+    taskName: '0824-001 纯棉梭织裤', taskCode: '0824-001', masterPath: master,
     modelOutputs: [{ id: 'model-1', path: model }], combinationOutputs: [{ id: 'combo-1', path: combo }]
   }), 'utf8');
 
-  assert.equal(await buildZipDownloadName(root), '纯棉梭织裤0824-001');
+  assert.equal(await buildZipDownloadName(root), '0824-001 纯棉梭织裤');
   const names = zipLocalEntries(await createFolderZip(root)).map(entry => entry.name);
   assert.deepEqual(names, ['平铺图/平铺图01.png', '模特图/模特图01.png', '多组合SKU图/多组合SKU01.png']);
   assert.equal(names.some(name => name.startsWith('.evidence/') || name.startsWith('素材/') || name.endsWith('.json')), false);

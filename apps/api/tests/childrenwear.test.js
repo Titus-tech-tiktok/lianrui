@@ -36,14 +36,20 @@ test('childrenwear prompts keep real product and reference roles separate', () =
   assert.match(master, /纯棉梭织裤/);
   assert.match(master, /刺绣贴布/);
   assert.match(master, /Never copy product identity from image 2/i);
+  assert.match(master, /WHY image 1 was selected/i);
+  assert.match(master, /WHY image 2 was selected/i);
+  assert.match(master, /Transfer the reference action and fold flow/i);
   assert.doesNotMatch(master, /automatic detail crops/i);
 
   const model = buildChildrenwearModelPrompt({ productManifest, referenceSpec: { model: { pose: '站立' } } });
   assert.match(model, /image 1 is the approved flat-lay master/i);
-  assert.match(model, /final model, pose and scene reference/i);
+  assert.match(model, /final model, action, pose, garment-deformation and scene reference/i);
   assert.match(model, /纯棉梭织/);
   assert.match(model, /Preserve the model identity/i);
   assert.match(model, /Natural occlusion/i);
+  assert.match(model, /action blueprint/i);
+  assert.match(model, /fold flow and wrinkle zones/i);
+  assert.match(model, /Never paste a rigid flat-lay silhouette/i);
   assert.match(model, /Never convert the real SKU into the reference garment type/i);
 });
 
@@ -59,8 +65,11 @@ test('combination prompts use the real reference index for two to four masters',
       }))
     });
     assert.match(prompt, new RegExp(`Images 1 to ${count} are approved`, 'i'));
-    assert.match(prompt, new RegExp(`Image ${count + 1} is the target composition blueprint`, 'i'));
+    assert.match(prompt, new RegExp(`Image ${count + 1} is the target composition action blueprint`, 'i'));
     assert.match(prompt, /SKU 2[\s\S]*"piece_count": 2/i);
+    assert.match(prompt, /action blueprint/i);
+    assert.match(prompt, /sleeve and leg direction/i);
+    assert.match(prompt, /stiff cut-outs/i);
   }
 });
 
@@ -228,7 +237,7 @@ test('runtime completes master approval, model generation and combination with t
   await fs.access(first.realPhotoPath);
   await fs.access(first.referencePath);
   assert.match(first.taskCode, /^\d{4}-001$/);
-  assert.equal(first.taskName, `纯棉梭织裤${first.taskCode}`);
+  assert.equal(first.taskName, `${first.taskCode} 纯棉梭织裤`);
   await fs.access(first.masterPath);
   assert.equal(path.basename(path.dirname(first.masterPath)), '平铺图');
   await assert.rejects(
@@ -252,6 +261,9 @@ test('runtime completes master approval, model generation and combination with t
   assert.match(withModel.modelOutputs[0].modelReferenceThumbnailUrl, /^\/api\/thumbnails\//);
   assert.ok(withModel.modelOutputs[0].modelReferencePath.startsWith(path.join(first.folder, '素材', '参考模特图')));
   assert.ok(withModel.modelOutputs[0].modelReferenceUrl);
+  assert.equal(withModel.modelOutputs[0].masterPath, first.masterPath);
+  assert.match(withModel.modelOutputs[0].masterThumbnailUrl, /^\/api\/thumbnails\//);
+  assert.equal(withModel.modelOutputs[0].taskName, first.taskName);
   await fs.access(withModel.modelOutputs[0].path);
   assert.equal(path.basename(path.dirname(withModel.modelOutputs[0].path)), '模特图');
 
@@ -280,7 +292,7 @@ test('runtime completes master approval, model generation and combination with t
   });
   assert.equal(combo.combinationOutputs.length, 1);
   assert.match(requestBodies[6], /Images 1 to 2 are approved flat-lay masters/);
-  assert.match(requestBodies[6], /Image 3 is the target composition blueprint/);
+  assert.match(requestBodies[6], /Image 3 is the target composition action blueprint/);
   assert.match(requestBodies[6], /SKU 2[\s\S]*"piece_count": 1/);
   assert.equal(combo.combinationOutputs[0].reviewStatus, 'pending');
   assert.ok(combo.combinationOutputs[0].elapsedMs >= 0);
@@ -289,6 +301,11 @@ test('runtime completes master approval, model generation and combination with t
   assert.ok(combo.combinationReferencePath.startsWith(path.join(first.folder, '素材', '组合参考图')));
   assert.ok(combo.masterPaths.every(item => item.startsWith(path.join(first.folder, '素材', '组合平铺图'))));
   assert.equal(combo.masterUrls.length, 2);
+  assert.equal(combo.combinationOutputs[0].masterPaths.length, 2);
+  assert.equal(combo.combinationOutputs[0].masterThumbnailUrls.length, 2);
+  assert.equal(combo.combinationOutputs[0].combinationReferencePath, combo.combinationReferencePath);
+  assert.match(combo.combinationOutputs[0].combinationReferenceThumbnailUrl, /^\/api\/thumbnails\//);
+  assert.equal(combo.combinationOutputs[0].taskName, `${combo.taskCode} 纯棉梭织裤款式 A`);
   await fs.access(combo.combinationOutputs[0].path);
   assert.equal(path.basename(path.dirname(combo.combinationOutputs[0].path)), '组合图');
   assert.equal(combo.taskName, first.taskName);

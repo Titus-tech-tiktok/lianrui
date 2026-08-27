@@ -96,6 +96,7 @@ const configuredOutputRoots = new Map();
 const templateRegenerationQueues = new Map();
 const childrenwearAnalysisBatchQueues = new Map();
 const childrenwearTaskUpdateQueues = new Map();
+const childrenwearAssetCopyQueues = new Map();
 
 function waitForTemplateRegenerationTurn(previous, signal) {
   if (!signal) return previous;
@@ -3768,14 +3769,20 @@ function childrenwearTaskCodeFromFolder(folder) {
 }
 
 function childrenwearStyleName(value, fallback = '童装款式') {
-  const text = String(value || '').trim().replace(/\d{4}-\d{3}\s*$/, '').replace(/[·｜|]\s*[^·｜|]+$/, '').trim();
+  const text = String(value || '').trim().replace(/^\d{4}-\d{3}\s*[-·｜|]?\s*/, '').replace(/\d{4}-\d{3}\s*$/, '').replace(/[·｜|]\s*[^·｜|]+$/, '').trim();
   return (text || fallback).slice(0, 50);
 }
 
 function childrenwearTaskDisplayName(styleName, taskCode) {
   const style = childrenwearStyleName(styleName);
   const code = normalizedChildrenwearTaskCode(taskCode);
-  return code ? `${style}${code}` : style;
+  return code ? `${code} ${style}` : style;
+}
+
+function childrenwearOutputDisplayName(value, taskCode, fallback = '童装款式') {
+  const code = normalizedChildrenwearTaskCode(taskCode);
+  const text = String(value || fallback).trim().replace(/^\d{4}-\d{3}\s*[-·｜|]?\s*/, '').replace(/\d{4}-\d{3}\s*$/, '').trim() || fallback;
+  return code ? `${code} ${text}` : text;
 }
 
 function publicChildrenwearTask(value = {}) {
@@ -3807,6 +3814,9 @@ function publicChildrenwearTask(value = {}) {
       url: item.path ? imageUrl(item.path) : '',
       thumbnailUrl: item.path ? thumbnailUrl(item.path, 480, '') : '',
       previewUrl: item.path ? thumbnailUrl(item.path, 1200, '') : '',
+      masterUrl: item.masterPath ? imageUrl(item.masterPath) : '',
+      masterThumbnailUrl: item.masterPath ? thumbnailUrl(item.masterPath, 480, '') : '',
+      masterPreviewUrl: item.masterPath ? thumbnailUrl(item.masterPath, 1200, '') : '',
       modelReferenceUrl: item.modelReferencePath ? imageUrl(item.modelReferencePath) : '',
       modelReferenceThumbnailUrl: item.modelReferencePath ? thumbnailUrl(item.modelReferencePath, 480, '') : '',
       modelReferencePreviewUrl: item.modelReferencePath ? thumbnailUrl(item.modelReferencePath, 1200, '') : ''
@@ -3818,7 +3828,13 @@ function publicChildrenwearTask(value = {}) {
       ...item,
       url: item.path ? imageUrl(item.path) : '',
       thumbnailUrl: item.path ? thumbnailUrl(item.path, 480, '') : '',
-      previewUrl: item.path ? thumbnailUrl(item.path, 1200, '') : ''
+      previewUrl: item.path ? thumbnailUrl(item.path, 1200, '') : '',
+      masterUrls: (item.masterPaths || []).map(masterPath => masterPath ? imageUrl(masterPath) : ''),
+      masterThumbnailUrls: (item.masterPaths || []).map(masterPath => masterPath ? thumbnailUrl(masterPath, 480, '') : ''),
+      masterPreviewUrls: (item.masterPaths || []).map(masterPath => masterPath ? thumbnailUrl(masterPath, 1200, '') : ''),
+      combinationReferenceUrl: item.combinationReferencePath ? imageUrl(item.combinationReferencePath) : '',
+      combinationReferenceThumbnailUrl: item.combinationReferencePath ? thumbnailUrl(item.combinationReferencePath, 480, '') : '',
+      combinationReferencePreviewUrl: item.combinationReferencePath ? thumbnailUrl(item.combinationReferencePath, 1200, '') : ''
     }))
   };
 }
@@ -3929,13 +3945,52 @@ async function nextChildrenwearTaskFolder(category = '', requestedCode = '') {
   throw new Error('当天任务编号已达到 999，请联系管理员');
 }
 
+async function fileContentDigest(filePath) {
+  const hash = crypto.createHash('sha256');
+  await new Promise((resolve, reject) => {
+    const stream = fs.createReadStream(filePath);
+    stream.on('data', chunk => hash.update(chunk));
+    stream.once('error', reject);
+    stream.once('end', resolve);
+  });
+  return hash.digest('hex');
+}
+
+async function sameFileContent(firstPath, secondPath) {
+  const [first, second] = await Promise.all([
+    fsp.stat(firstPath).catch(() => null),
+    fsp.stat(secondPath).catch(() => null)
+  ]);
+  if (!first?.isFile() || !second?.isFile() || first.size !== second.size) return false;
+  const [firstDigest, secondDigest] = await Promise.all([
+    fileContentDigest(firstPath),
+    fileContentDigest(secondPath)
+  ]);
+  return firstDigest === secondDigest;
+}
+
 async function copyChildrenwearTaskAsset(sourcePath, folder, groupName, targetName = '') {
   if (!sourcePath || !fs.existsSync(sourcePath)) return '';
   const targetFolder = path.join(folder, '素材', safeFileName(groupName || '参考素材'));
   await fsp.mkdir(targetFolder, { recursive: true });
   const target = path.join(targetFolder, safeFileName(targetName || path.basename(sourcePath)));
-  if (path.resolve(sourcePath) !== path.resolve(target)) await fsp.copyFile(sourcePath, target);
-  return target;
+  if (path.resolve(sourcePath) === path.resolve(target)) return target;
+  const queueKey = path.resolve(target).toLocaleLowerCase('en-US');
+  const sourceKey = path.resolve(sourcePath).toLocaleLowerCase('en-US');
+  const activeCopy = childrenwearAssetCopyQueues.get(queueKey);
+  if (activeCopy?.sourceKey === sourceKey) return activeCopy.promise;
+  const previous = activeCopy?.promise || Promise.resolve();
+  const operation = previous.catch(() => undefined).then(async () => {
+    if (await sameFileContent(sourcePath, target)) return target;
+    await fsp.copyFile(sourcePath, target);
+    return target;
+  });
+  childrenwearAssetCopyQueues.set(queueKey, { sourceKey, promise: operation });
+  try {
+    return await operation;
+  } finally {
+    if (childrenwearAssetCopyQueues.get(queueKey)?.promise === operation) childrenwearAssetCopyQueues.delete(queueKey);
+  }
 }
 
 function childrenwearAssetFolderHint(file) {
@@ -4207,6 +4262,8 @@ async function generateChildrenwearModel(payload = {}, options = {}) {
   const output = {
     id: outputId,
     path: outputPath,
+    taskName: childrenwearOutputDisplayName(payload.taskName || task.taskName, task.taskCode, task.styleName || task.category).slice(0, 80),
+    masterPath: task.masterPath,
     modelReferencePath,
     modelReferenceSpec: modelReferenceAnalysis.analysis,
     modelReferenceAnalysisHash: modelReferenceAnalysis.contentHash,
@@ -4357,6 +4414,9 @@ async function generateChildrenwearCombination(payload = {}, options = {}) {
   const output = {
     id: outputId,
     path: outputPath,
+    taskName: childrenwearOutputDisplayName(payload.taskName || existing.taskName, existing.taskCode || childrenwearTaskCodeFromFolder(folder), existing.styleName || existing.category || '多SKU组合').slice(0, 80),
+    masterPaths: localMasterPaths,
+    combinationReferencePath,
     approved: false,
     approvedAt: '',
     reviewStatus: 'pending',
