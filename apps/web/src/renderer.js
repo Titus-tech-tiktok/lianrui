@@ -287,6 +287,9 @@ let toastTimer;
 let productSearchTimer;
 let printSearchTimer;
 let reviewRefreshTimer;
+const cwQueueRenderTimers = new Map();
+let childrenwearTaskRefreshPromise = null;
+let childrenwearTaskRefreshPending = false;
 let currentPage = 'assets';
 const promptSaveTimers = new Map();
 let activeBrandDialogResolve = null;
@@ -5638,7 +5641,7 @@ function applyChildrenwearPicker() {
   toast(`已选择${meta.selected}`);
 }
 
-async function loadChildrenwearLibrary(key) {
+async function loadChildrenwearLibrary(key, options = {}) {
   const meta = CHILDRENWEAR_LIBRARY_META[key];
   if (!meta || !state.config) return;
   const root = state.config[key] || '';
@@ -5658,7 +5661,8 @@ async function loadChildrenwearLibrary(key) {
         folder: state.childrenwearLibraryFolder[key],
         page: state.childrenwearLibraryPage[key],
         pageSize: 48,
-        analysisRole: meta.analysisRole
+        analysisRole: meta.analysisRole,
+        refresh: options.refresh === true
       }),
       window.caishen.listImageLibrary(root, {
         folder: state.childrenwearLibraryFolder[key],
@@ -5666,7 +5670,8 @@ async function loadChildrenwearLibrary(key) {
         pageSize: 120,
         analysisRole: meta.analysisRole,
         analysisOnly: true,
-        strictFolder: true
+        strictFolder: true,
+        refresh: options.refresh === true
       })
     ]);
     state.childrenwearLibraries[key] = result.items || [];
@@ -5685,9 +5690,30 @@ async function loadChildrenwearLibrary(key) {
     state.childrenwearProductionLibraries[key] = [];
     const summary = $(meta.summary);
     if (summary) summary.textContent = `读取失败：${errorText(error)}`;
+    if (options.throwOnError === true) throw error;
   }
   renderChildrenwearLibrary(key);
   if (state.childrenwearPickerKey === key) renderChildrenwearPicker();
+  return {
+    items: state.childrenwearLibraries[key] || [],
+    folders: state.childrenwearLibraryFolders[key] || [],
+    totals: state.childrenwearLibraryTotals[key] || { total: 0 }
+  };
+}
+
+async function refreshChildrenwearLibraryAfterImport(key) {
+  let result;
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      result = await loadChildrenwearLibrary(key, { refresh: true, throwOnError: true });
+      return result;
+    } catch (error) {
+      lastError = error;
+      if (attempt < 2) await sleep(150 * (attempt + 1));
+    }
+  }
+  throw lastError || new Error('素材已导入，但页面刷新失败，请稍后重试');
 }
 
 async function selectChildrenwearLibraryFolder(key, folderId) {
@@ -5953,20 +5979,13 @@ async function importChildrenwearStylePackage(button) {
   const completed = [];
   activeKeys.forEach(key => state.childrenwearLibraryUploading.add(key));
   button.disabled = true;
-  button.textContent = `正在导入 ${recognized} 张…`;
+  button.textContent = `正在处理 ${recognized} 张，请稍候…`;
   try {
     let added = 0;
     let skipped = 0;
     for (const key of activeKeys) {
       const result = await window.caishen.syncAssetEntries(key, childrenwearLibraryRoot(key), parsed.groups.get(key), {
-        rootName: childrenwearLibraryRootName(key),
-        onProgress: progress => {
-          const current = Number(progress.current) || 0;
-          const total = Number(progress.total) || parsed.groups.get(key).length;
-          button.textContent = progress.phase === 'compare'
-            ? `正在预检 ${CHILDRENWEAR_STYLE_PACKAGE_LABELS[key]}…`
-            : `正在导入 ${CHILDRENWEAR_STYLE_PACKAGE_LABELS[key]} ${current}/${total}…`;
-        }
+        rootName: childrenwearLibraryRootName(key)
       });
       state.config[key] = result.root;
       completed.push({ key, result });
@@ -5979,13 +5998,11 @@ async function importChildrenwearStylePackage(button) {
       state.childrenwearLibraryFolder[key] = onlyStyle ? `folder:${onlyStyle}` : 'auto';
       state.childrenwearLibraryPage[key] = 1;
     }
-    button.textContent = `正在并发 AI 分析 ${added} 张素材…`;
-    const analysis = await window.caishen.scanPendingChildrenwearAnalysis({ includeFailed: false }, progress => {
-      button.textContent = progress.message || `正在并发 AI 分析 ${progress.current || 0}/${progress.total || added}…`;
-    });
+    await Promise.all(activeKeys.map(refreshChildrenwearLibraryAfterImport));
+    const analysis = await window.caishen.scanPendingChildrenwearAnalysis({ includeFailed: false });
     const analyzed = Number(analysis.analyzed) || 0;
     const failed = Number(analysis.failed) || 0;
-    await loadChildrenwearLibraries();
+    await Promise.all(activeKeys.map(refreshChildrenwearLibraryAfterImport));
     toast(`款式整包导入完成：${parsed.styles.size} 个款式，${added} 张素材，AI 已分析 ${analyzed} 张${failed ? `，失败 ${failed} 张（不会进入生成选材区）` : ''}${skipped ? `，跳过 ${skipped} 张` : ''}`, failed > 0);
   } catch (error) {
     let rollbackFailed = false;
@@ -6039,32 +6056,23 @@ async function uploadChildrenwearLibrary(key, source = 'files') {
   const button = $(`[data-childrenwear-library-${isFolder ? 'folder' : 'upload'}="${key}"]`);
   if (button) {
     button.disabled = true;
-    button.textContent = isFolder ? `正在导入 ${entries.length} 张…` : '上传中…';
+    button.textContent = `正在处理 ${entries.length} 张，请稍候…`;
   }
   try {
     const result = await window.caishen.syncAssetEntries(key, childrenwearLibraryRoot(key), entries, {
-      rootName: childrenwearLibraryRootName(key),
-      onProgress: progress => {
-        if (!button) return;
-        const current = Number(progress.current) || 0;
-        const total = Number(progress.total) || entries.length;
-        button.textContent = progress.phase === 'compare'
-          ? `正在预检 ${total} 张…`
-          : `正在导入 ${current}/${total}…`;
-      }
+      rootName: childrenwearLibraryRootName(key)
     });
     state.config[key] = result.root;
     state.config = await window.caishen.saveConfig(state.config);
-    if (button) button.textContent = `正在 AI 分析 0/${result.paths?.length || result.added || 0}…`;
-    const analysis = await analyzeChildrenwearPaths(key, result.paths || [], { button });
     if (isFolder) state.childrenwearLibraryFolder[key] = uploadedFolderName ? `folder:${uploadedFolderName}` : 'root';
     else state.childrenwearLibraryFolder[key] = 'root';
     state.childrenwearLibraryPage[key] = 1;
-    await loadChildrenwearLibrary(key);
+    await refreshChildrenwearLibraryAfterImport(key);
+    const analysis = await analyzeChildrenwearPaths(key, result.paths || []);
+    await refreshChildrenwearLibraryAfterImport(key);
     const latest = (state.childrenwearLibraries[key] || []).find(item => result.paths?.includes?.(item.path))
       || state.childrenwearLibraries[key]?.at(-1);
     if (latest && meta.stateKey && !state[meta.stateKey]) state[meta.stateKey] = latest;
-    renderChildrenwearLibrary(key);
     renderChildrenwear();
     toast(`${isFolder ? '文件夹导入完成' : '上传完成'}：${result.added} 张素材，AI 已分析 ${analysis.analyzed} 张${analysis.failed ? `，失败 ${analysis.failed} 张（不会进入生成选材区）` : ''}${result.skipped ? `，跳过 ${result.skipped} 个文件` : ''}`, analysis.failed > 0);
   } catch (error) {
@@ -6667,6 +6675,23 @@ function cwFilteredDrafts(stage) {
   return stage === 'master' && filter !== 'all' ? drafts.filter(draft => cwDraftStatusKey(draft) === filter) : drafts;
 }
 
+function scheduleCwQueueRender(stage) {
+  if (cwQueueRenderTimers.has(stage)) return;
+  cwQueueRenderTimers.set(stage, setTimeout(() => {
+    cwQueueRenderTimers.delete(stage);
+    renderCwQueue(stage);
+  }, 120));
+}
+
+function cwReviewItemForDraft(stage, draft) {
+  if (!draft?.taskFolder) return null;
+  return cwReviewItems().find(item => item.stage === stage
+    && item.folder === draft.taskFolder
+    && (stage === 'master'
+      || (draft.outputId && item.outputId === draft.outputId)
+      || (draft.result?.path && item.path === draft.result.path)));
+}
+
 function renderCwQueue(stage) {
   const meta = CW_STAGE_META[stage];
   const panel = $(meta.queue);
@@ -6678,13 +6703,13 @@ function renderCwQueue(stage) {
   panel.innerHTML = visibleDrafts.length ? visibleDrafts.map((draft, index) => {
     const running = draft.status === '生成中';
     const ready = cwDraftReady(draft);
-    const reviewItem = stage === 'master' && draft.taskFolder ? cwReviewItems().find(item => item.stage === 'master' && item.folder === draft.taskFolder) : null;
+    const reviewItem = cwReviewItemForDraft(stage, draft);
     const reviewStatus = reviewItem ? cwReviewStatus(reviewItem) : '';
     const title = draft.title || `${meta.label}任务 ${index + 1}`;
     return `<article class="cw-task-card${draft.selected ? ' selected' : ''}${draft.id === state.childrenwearActiveDraft[stage] ? ' editing' : ''}${reviewStatus === 'approved' ? ' approved' : ''}${reviewStatus === 'needs_regeneration' ? ' needs-regeneration' : ''}" data-cw-draft="${escapeHtml(draft.id)}" data-stage="${stage}">
       <header><label><input type="checkbox" data-cw-select-draft="${escapeHtml(draft.id)}"${draft.selected ? ' checked' : ''}><span></span><b title="${escapeHtml(title)}">${escapeHtml(title)}</b></label><div><button class="secondary mini" type="button" data-cw-edit="${escapeHtml(draft.id)}">改名</button><button class="link-danger" type="button" data-cw-remove="${escapeHtml(draft.id)}"${running ? ' disabled' : ''}>删除</button></div></header>
       <div class="cw-task-flow">${cwDraftFlow(draft)}</div>
-      <footer><span class="cw-task-status${cwDraftStatusKey(draft) === 'needs_regeneration' ? ' error' : ''}">${escapeHtml(stage === 'master' ? cwDraftStatusText(draft) : (draft.progress || (ready ? '素材已齐全，可以生成' : draft.status)))}</span><div class="cw-task-card-actions">${reviewItem ? `<button class="secondary" type="button" data-cw-inline-compare="${escapeHtml(reviewItem.id)}">高清审核</button>${!reviewItem.approved ? `<button class="secondary" type="button" data-cw-inline-approve="${escapeHtml(reviewItem.id)}">通过</button><button class="secondary danger-soft" type="button" data-cw-inline-flag="${escapeHtml(reviewItem.id)}"${reviewStatus === 'needs_regeneration' ? ' disabled' : ''}>${reviewStatus === 'needs_regeneration' ? '已标记问题' : '标记问题'}</button>` : ''}` : ''}<button class="secondary" type="button" data-cw-generate-one="${escapeHtml(draft.id)}"${!ready || running ? ' disabled' : ''}>${draft.result || draft.status === '失败' ? '重新生成' : `生成${escapeHtml(meta.label)}`}</button></div></footer>
+      <footer><span class="cw-task-status${cwDraftStatusKey(draft) === 'needs_regeneration' ? ' error' : ''}">${escapeHtml(stage === 'master' ? cwDraftStatusText(draft) : (draft.progress || (ready ? '素材已齐全，可以生成' : draft.status)))}</span><div class="cw-task-card-actions">${reviewItem ? `<button class="secondary" type="button" data-cw-inline-compare="${escapeHtml(reviewItem.id)}">高清审核</button>${stage === 'master' && !reviewItem.approved ? `<button class="secondary" type="button" data-cw-inline-approve="${escapeHtml(reviewItem.id)}">通过</button><button class="secondary danger-soft" type="button" data-cw-inline-flag="${escapeHtml(reviewItem.id)}"${reviewStatus === 'needs_regeneration' ? ' disabled' : ''}>${reviewStatus === 'needs_regeneration' ? '已标记问题' : '标记问题'}</button>` : ''}` : ''}<button class="secondary" type="button" data-cw-generate-one="${escapeHtml(draft.id)}"${!ready || running ? ' disabled' : ''}>${draft.result || draft.status === '失败' ? '重新生成' : `生成${escapeHtml(meta.label)}`}</button></div></footer>
     </article>`;
   }).join('') : `<div class="cw-task-empty"><b>${drafts.length ? '当前筛选没有任务' : `还没有${escapeHtml(meta.label)}任务`}</b><span>${drafts.length ? '切换其他状态查看任务。' : '点击左侧素材，系统会自动创建并补齐任务卡片。'}</span></div>`;
 }
@@ -6794,20 +6819,20 @@ async function runCwDraft(stage, draft, options = {}) {
       const result = await window.caishen.generateChildrenwearMaster({
         folder: draft.taskFolder || '', realPhotoPath: draft.real.path, referencePath: draft.reference.path,
         taskName: draft.title, taskCode: draft.taskCode, category: draft.real.folder || '童装', material: '以实拍图为准', craft: '', extraInstruction: ''
-      }, progress => { draft.progress = progress.message || '正在生成平铺图'; renderCwQueue(stage); });
+      }, progress => { draft.progress = progress.message || '正在生成平铺图'; scheduleCwQueueRender(stage); });
       draft.taskFolder = result.folder;
       draft.taskCode = result.taskCode || draft.taskCode;
       draft.styleName = result.styleName || draft.styleName;
       draft.title = result.taskName || cwTaskDisplayName(draft.styleName, draft.taskCode);
       draft.result = { path: result.masterPath, url: result.masterUrl, thumbnailUrl: result.masterThumbnailUrl, previewUrl: result.masterPreviewUrl, name: `平铺母版 v${result.masterVersion || 1}` };
     } else if (stage === 'model') {
-      const result = await window.caishen.generateChildrenwearModel({ folder: draft.master.taskFolder, taskName: draft.title, modelReferencePath: draft.reference.path, extraInstruction: '' }, progress => { draft.progress = progress.message || '正在生成模特图'; renderCwQueue(stage); });
+      const result = await window.caishen.generateChildrenwearModel({ folder: draft.master.taskFolder, taskName: draft.title, modelReferencePath: draft.reference.path, extraInstruction: '' }, progress => { draft.progress = progress.message || '正在生成模特图'; scheduleCwQueueRender(stage); });
       const output = result.modelOutputs?.at(-1);
       draft.taskFolder = result.folder;
       draft.outputId = output?.id;
       draft.result = output ? { path: output.path, url: output.url, thumbnailUrl: output.thumbnailUrl, previewUrl: output.previewUrl, name: '模特图候选' } : null;
     } else {
-      const result = await window.caishen.generateChildrenwearCombination({ folder: draft.taskFolder || draft.masters[0]?.taskFolder || '', taskName: draft.title, masterPaths: draft.masters.map(item => item.path), combinationReferencePath: draft.reference.path }, progress => { draft.progress = progress.message || '正在生成组合图'; renderCwQueue(stage); });
+      const result = await window.caishen.generateChildrenwearCombination({ folder: draft.taskFolder || draft.masters[0]?.taskFolder || '', taskName: draft.title, masterPaths: draft.masters.map(item => item.path), combinationReferencePath: draft.reference.path }, progress => { draft.progress = progress.message || '正在生成组合图'; scheduleCwQueueRender(stage); });
       const output = result.combinationOutputs?.at(-1);
       draft.taskFolder = result.folder;
       draft.outputId = output?.id;
@@ -6815,7 +6840,8 @@ async function runCwDraft(stage, draft, options = {}) {
     }
     draft.status = '等待成品审核';
     draft.progress = stage === 'master' ? '平铺图已生成，请在当前页面高清审核' : '已进入 05 成品审核与下载';
-    if (!options.deferReload) await loadChildrenwearTasks();
+    if (options.liveRefresh) void scheduleChildrenwearTaskRefresh();
+    else if (!options.deferReload) await loadChildrenwearTasks();
     if (!options.silent) toast(stage === 'master' ? '平铺图生成完成，请在当前页面审核' : `${CW_STAGE_META[stage].label}生成完成，已进入 05 成品审核与下载`);
     return true;
   } catch (error) {
@@ -6851,9 +6877,9 @@ async function runCwBatch(stage) {
   const cwConcurrency = await apiBatchConcurrencyLimit(cwTaskGroups.length);
   await runClientConcurrency(cwTaskGroups, cwConcurrency, async group => {
     // 组合图仍按共享任务目录保护写入；模特图每张卡片独立并发。
-    for (const draft of group) await runCwDraft(stage, draft, { deferReload: true, silent: true });
+    for (const draft of group) await runCwDraft(stage, draft, { deferReload: true, liveRefresh: true, silent: true });
   });
-  await loadChildrenwearTasks();
+  await flushChildrenwearTaskRefresh();
   const failed = drafts.filter(draft => draft.status === '失败').length;
   const succeeded = drafts.length - failed;
   if (failed) return toast(`批量任务完成：成功 ${succeeded} 个，失败 ${failed} 个；失败卡片可单独重新生成`, true);
@@ -7291,13 +7317,44 @@ function renderChildrenwear() {
   renderCwReview();
 }
 
-async function loadChildrenwearTasks() {
+async function loadChildrenwearTasks(options = {}) {
   try {
     state.childrenwearTasks = await window.caishen.listChildrenwearTasks();
     syncCwMasterDraftsFromTasks();
     renderChildrenwear();
     if (!$('#cwCompareModal')?.hidden) renderCwCompare();
-  } catch (error) { toast(`任务读取失败：${errorText(error)}`, true); }
+    return state.childrenwearTasks;
+  } catch (error) {
+    if (options.silent !== true) toast(`任务读取失败：${errorText(error)}`, true);
+    if (options.throwOnError === true) throw error;
+    return state.childrenwearTasks;
+  }
+}
+
+function scheduleChildrenwearTaskRefresh() {
+  childrenwearTaskRefreshPending = true;
+  if (childrenwearTaskRefreshPromise) return childrenwearTaskRefreshPromise;
+  childrenwearTaskRefreshPromise = (async () => {
+    await sleep(120);
+    while (childrenwearTaskRefreshPending) {
+      childrenwearTaskRefreshPending = false;
+      await loadChildrenwearTasks({ silent: true, throwOnError: true });
+      if (childrenwearTaskRefreshPending) await sleep(120);
+    }
+  })().catch(error => {
+    toast(`生成结果刷新失败：${errorText(error)}`, true);
+  }).finally(() => {
+    childrenwearTaskRefreshPromise = null;
+    if (childrenwearTaskRefreshPending) void scheduleChildrenwearTaskRefresh();
+  });
+  return childrenwearTaskRefreshPromise;
+}
+
+async function flushChildrenwearTaskRefresh() {
+  childrenwearTaskRefreshPending = true;
+  do {
+    await scheduleChildrenwearTaskRefresh();
+  } while (childrenwearTaskRefreshPromise || childrenwearTaskRefreshPending);
 }
 
 function bindChildrenwearEvents() {
@@ -7462,8 +7519,14 @@ function bindChildrenwearEvents() {
   };
   $('#cwReviewRegenerateSelected').onclick = async () => {
     const items = cwReviewItems().filter(item => state.childrenwearReviewSelection.has(item.id));
-    for (const item of items) await regenerateCwReviewItem(item);
-    state.childrenwearReviewSelection.clear(); await loadChildrenwearTasks(); toast(`已重新生成 ${items.length} 张图片`);
+    const concurrency = await apiBatchConcurrencyLimit(items.length);
+    await runClientConcurrency(items, concurrency, async item => {
+      await regenerateCwReviewItem(item);
+      void scheduleChildrenwearTaskRefresh();
+    });
+    state.childrenwearReviewSelection.clear();
+    await flushChildrenwearTaskRefresh();
+    toast(`已重新生成 ${items.length} 张图片`);
   };
   $('#cwReviewDownloadSelected').onclick = async () => {
     const folders = [...new Set(cwReviewItems().filter(item => state.childrenwearReviewSelection.has(item.id)).map(item => item.folder))];

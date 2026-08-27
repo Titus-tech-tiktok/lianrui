@@ -1316,6 +1316,7 @@ async function scanImageLibraryPage(root, options = {}) {
   if (!root) return { items: [], folders: [], folder: 'root', total: 0, page: 1, pageSize: 48, totalPages: 0 };
   const rootStat = await fsp.stat(root).catch(() => null);
   if (!rootStat?.isDirectory()) return { items: [], folders: [], folder: 'root', total: 0, page: 1, pageSize: 48, totalPages: 0 };
+  if (options.refresh === true) invalidateImageLibraryIndex(root);
   const pageSize = Math.max(12, Math.min(120, Math.trunc(Number(options.pageSize) || 48)));
   const requestedPage = Math.max(1, Math.trunc(Number(options.page) || 1));
   const requestedGroupId = String(options.folder || 'auto');

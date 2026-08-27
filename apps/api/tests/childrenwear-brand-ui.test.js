@@ -82,7 +82,13 @@ test('多嘻噜卡使用永沙式资产管理、左右任务台和五段生产�
   assert.match(renderer, /function cwBatchGroupKey/);
   assert.match(renderer, /if \(stage === 'model'\) return `model:\$\{draft\.id\}`/);
   assert.match(renderer, /runClientConcurrency\(cwTaskGroups, cwConcurrency/);
-  assert.match(renderer, /deferReload: true, silent: true/);
+  assert.match(renderer, /deferReload: true, liveRefresh: true, silent: true/);
+  assert.match(renderer, /function scheduleChildrenwearTaskRefresh/);
+  assert.match(renderer, /function cwReviewItemForDraft/);
+  assert.match(renderer, /options\.liveRefresh\) void scheduleChildrenwearTaskRefresh/);
+  assert.match(renderer, /function flushChildrenwearTaskRefresh/);
+  assert.match(renderer, /await flushChildrenwearTaskRefresh\(\)/);
+  assert.match(renderer, /scheduleCwQueueRender\(stage\)/);
   assert.doesNotMatch(renderer, /for \(const draft of drafts\) await runCwDraft\(stage, draft\)/);
   assert.match(renderer, /function regenerateCwReviewItem/);
   assert.match(renderer, /function cwCompareSources/);
@@ -123,6 +129,9 @@ test('多嘻噜卡使用永沙式资产管理、左右任务台和五段生产�
   assert.match(bridge, /downloadChildrenwearFolders/);
   assert.match(renderer, /chooseAssetFolder/);
   assert.match(renderer, /listImageLibrary/);
+  assert.match(renderer, /function refreshChildrenwearLibraryAfterImport/);
+  assert.match(renderer, /refresh: true, throwOnError: true/);
+  assert.match(renderer, /await refreshChildrenwearLibraryAfterImport\(key\)/);
   assert.match(renderer, /function setImagePreviewSize/);
   assert.match(index, /id="imageHoverPreviewViewport"/);
   assert.match(index, /id="imageHoverLens"/);

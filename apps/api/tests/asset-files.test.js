@@ -79,6 +79,11 @@ test('素材库支持追加同名文件并只删除当前素材库内的选中�
   assert.equal(rootPage.total, 13);
   assert.equal(rootPage.totalPages, 2);
   assert.equal(rootPage.items.length, 1);
+  await fs.writeFile(path.join(childrenwearRealLibrary.root, '刚导入.jpg'), 'fresh');
+  const staleRootPage = await runtime.scanImageLibraryPage(childrenwearRealLibrary.root, { folder: 'root', page: 1, pageSize: 12 });
+  assert.equal(staleRootPage.total, 13);
+  const refreshedRootPage = await runtime.scanImageLibraryPage(childrenwearRealLibrary.root, { folder: 'root', page: 1, pageSize: 12, refresh: true });
+  assert.equal(refreshedRootPage.total, 14);
 
   const originalRm = fs.rm;
   let simulatedLock = true;
