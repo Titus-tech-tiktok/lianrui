@@ -6890,24 +6890,50 @@ function patchCwQueueTaskResults(stage, changedFolderKeys) {
   const meta = CW_STAGE_META[stage];
   const panel = $(meta.queue);
   if (!panel || !(changedFolderKeys instanceof Set) || !changedFolderKeys.size) return renderCwQueue(stage);
-  if ((state.childrenwearQueueFilters[stage] || 'all') !== 'all') return renderCwQueue(stage);
   const drafts = state.childrenwearDrafts[stage];
+  const visibleDrafts = cwFilteredDrafts(stage);
   const visibleLimit = Math.max(12, Number(state.childrenwearQueueVisibleLimits[stage]) || 36);
-  const renderedDrafts = drafts.slice(0, visibleLimit);
+  const renderedDrafts = visibleDrafts.slice(0, visibleLimit);
   const reviewIndex = cwTaskReviewIndex();
   const currentCards = new Map([...panel.querySelectorAll('[data-cw-draft]')].map(card => [card.dataset.cwDraft, card]));
+  const renderedIds = new Set(renderedDrafts.map(draft => draft.id));
+  for (const [id, card] of currentCards) {
+    if (renderedIds.has(id)) continue;
+    const draft = drafts.find(item => item.id === id);
+    if (draft && changedFolderKeys.has(cwFolderKey(draft.taskFolder))) card.remove();
+  }
   for (let index = 0; index < renderedDrafts.length; index += 1) {
     const draft = renderedDrafts[index];
     if (!changedFolderKeys.has(cwFolderKey(draft.taskFolder))) continue;
     const current = currentCards.get(draft.id);
-    if (!current) return renderCwQueue(stage);
     const holder = document.createElement('template');
     holder.innerHTML = cwTaskCardMarkup(stage, draft, index, reviewIndex).trim();
     const replacement = holder.content.firstElementChild;
-    if (replacement) current.replaceWith(replacement);
+    if (!replacement) continue;
+    if (!current) {
+      const nextDraft = renderedDrafts.slice(index + 1).find(item => currentCards.has(item.id));
+      const nextCard = nextDraft ? currentCards.get(nextDraft.id) : panel.querySelector('[data-cw-queue-more]');
+      panel.insertBefore(replacement, nextCard || null);
+      currentCards.set(draft.id, replacement);
+      continue;
+    }
+    // Preserve source <img> nodes whose URL did not change. Replacing the whole
+    // card forced Chromium to decode every source/reference image again whenever
+    // one result completed, which was especially costly during concurrent runs.
+    const oldFigures = [...current.querySelectorAll('.cw-flow-figure')];
+    const newFigures = [...replacement.querySelectorAll('.cw-flow-figure')];
+    for (let figureIndex = 0; figureIndex < Math.min(oldFigures.length, newFigures.length); figureIndex += 1) {
+      const oldImage = oldFigures[figureIndex].querySelector('img');
+      const newImage = newFigures[figureIndex].querySelector('img');
+      if (!oldImage || !newImage || oldImage.getAttribute('src') !== newImage.getAttribute('src')) continue;
+      newImage.replaceWith(oldImage);
+    }
+    current.replaceWith(replacement);
+    currentCards.set(draft.id, replacement);
   }
   syncCwGenerationPreviewState();
-  $(meta.count).textContent = `${drafts.length} 项`;
+  const filter = state.childrenwearQueueFilters[stage] || 'all';
+  $(meta.count).textContent = stage === 'master' && filter !== 'all' ? `${visibleDrafts.length} / ${drafts.length} 项` : `${drafts.length} 项`;
 }
 
 function cwLibrarySource(stage) {
@@ -7039,6 +7065,33 @@ function applyCwDraftGenerationResult(stage, draft, result) {
   draft.progress = stage === 'master' ? '平铺图已生成，请在当前页面高清审核' : '已进入 05 成品审核与下载';
 }
 
+function mergeCwGeneratedTaskSnapshot(snapshot) {
+  if (!snapshot?.folder) return;
+  const key = cwFolderKey(snapshot.folder);
+  const index = state.childrenwearTasks.findIndex(item => cwFolderKey(item.folder) === key);
+  const previous = index >= 0 ? state.childrenwearTasks[index] : {};
+  const mergeOutputs = (oldItems, newItems) => {
+    const merged = new Map((Array.isArray(oldItems) ? oldItems : []).filter(item => item?.id).map(item => [item.id, item]));
+    for (const item of Array.isArray(newItems) ? newItems : []) if (item?.id) merged.set(item.id, item);
+    return [...merged.values()];
+  };
+  const next = {
+    ...previous,
+    ...snapshot,
+    modelOutputs: mergeOutputs(previous.modelOutputs, snapshot.modelOutputs),
+    combinationOutputs: mergeOutputs(previous.combinationOutputs, snapshot.combinationOutputs)
+  };
+  if (index >= 0) state.childrenwearTasks[index] = next;
+  else state.childrenwearTasks.push(next);
+}
+
+function applyCwBatchTaskResult(stage, draft, result) {
+  if (!draft || !result?.folder) return;
+  applyCwDraftGenerationResult(stage, draft, result);
+  mergeCwGeneratedTaskSnapshot(result);
+  patchCwQueueTaskResults(stage, new Set([cwFolderKey(result.folder)]));
+}
+
 async function runCwDraft(stage, draft, options = {}) {
   if (!cwDraftReady(draft) || (draft.status === '生成中' && !options.prepared)) return;
   if (!options.prepared) {
@@ -7082,25 +7135,16 @@ async function runCwBatch(stage) {
     draft.progress = '正在提交整批任务…';
   }
   renderCwQueue(stage);
-  const queuedRefreshFolders = new Set();
   const processedCompletedIndexes = new Set();
   try {
-    const batch = await window.caishen.generateChildrenwearBatch({
-      stage,
-      items: drafts.map(draft => cwDraftGenerationPayload(stage, draft))
-    }, progress => {
+    const progressHandler = progress => {
       for (const completed of Array.isArray(progress.completedItems) ? progress.completedItems : []) {
         if (processedCompletedIndexes.has(Number(completed.index))) continue;
-        processedCompletedIndexes.add(Number(completed.index));
         const completedDraft = drafts[Number(completed.index)];
         if (!completedDraft || completed.failed) continue;
-        if (completed.folder) completedDraft.taskFolder = completed.folder;
-        completedDraft.status = '等待成品审核';
-        completedDraft.progress = '生成完成，正在同步审核结果…';
-        if (completed.folder && !queuedRefreshFolders.has(completed.folder)) {
-          queuedRefreshFolders.add(completed.folder);
-          void scheduleChildrenwearTaskRefresh(completed.folder);
-        }
+        if (Number(progress.itemIndex) !== Number(completed.index) || !progress.itemResult) continue;
+        processedCompletedIndexes.add(Number(completed.index));
+        applyCwBatchTaskResult(stage, completedDraft, progress.itemResult);
       }
       const index = Number(progress.itemIndex);
       const draft = Number.isInteger(index) ? drafts[index] : null;
@@ -7112,19 +7156,22 @@ async function runCwBatch(stage) {
         draft.progress = progress.message || `服务端并发处理中（${progress.concurrency || '-'} 路）`;
       }
       updateCwQueueProgress(stage, draft);
-    });
+    };
+    const batch = await window.caishen.generateChildrenwearBatch({
+      stage,
+      items: drafts.map(draft => cwDraftGenerationPayload(stage, draft))
+    }, progressHandler);
     for (const record of batch.results || []) {
       const draft = drafts[record.index];
       if (!draft) continue;
-      if (record.ok) applyCwDraftGenerationResult(stage, draft, record.value);
-      else {
+      if (record.ok) {
+        if (!processedCompletedIndexes.has(Number(record.index))) applyCwBatchTaskResult(stage, draft, record.value);
+      } else {
         draft.status = '失败';
         draft.progress = childrenwearFriendlyError(record.error);
+        updateCwQueueProgress(stage, draft);
       }
-      updateCwQueueProgress(stage, draft);
     }
-    applyChildrenwearTaskSnapshots((batch.results || []).filter(record => record.ok && record.value).map(record => record.value));
-    await flushChildrenwearTaskRefresh();
     const failed = Number(batch.failed) || drafts.filter(draft => draft.status === '失败').length;
     const succeeded = drafts.length - failed;
     if (failed) return toast(`批量任务完成：成功 ${succeeded} 个，失败 ${failed} 个；失败卡片可单独重新生成`, true);

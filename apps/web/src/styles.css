@@ -8826,7 +8826,7 @@ body.production-scroll-lock { height: 100vh; overflow: hidden; overflow-anchor: 
 .cw-queue-filters button.active { color: var(--ink); }
 .cw-queue-filters button.active::after { content: ""; background: var(--teal); height: 2px; position: absolute; right: 0; bottom: 0; left: 0; }
 .cw-task-list { min-height: 0; padding: 12px 14px 30px; overflow: auto; }
-.cw-task-card { background: #fff; border: 1px solid var(--line); border-radius: 9px; padding: 12px; content-visibility: auto; contain: layout paint style; contain-intrinsic-size: auto 220px; }
+.cw-task-card { background: #fff; border: 1px solid var(--line); border-radius: 9px; padding: 12px; contain: layout paint; }
 .cw-task-card + .cw-task-card { margin-top: 10px; }
 .cw-task-card.selected { border-color: #88aaa5; }
 .cw-task-card.approved { border-color: #93ae8d; box-shadow: inset 3px 0 0 #76966f; }

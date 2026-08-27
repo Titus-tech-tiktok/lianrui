@@ -133,8 +133,6 @@ test('runtime completes master approval, model generation and combination with t
   const generated = await productImage('#f6f6f3', '#e6be79');
   let requests = 0;
   let analysisRequests = 0;
-  let activeImageRequests = 0;
-  let maxActiveImageRequests = 0;
   const requestBodies = [];
   const analysisSystemPrompts = [];
   const server = http.createServer((req, res) => {
@@ -160,10 +158,7 @@ test('runtime completes master approval, model generation and combination with t
       if (req.url !== '/v1/images/edits') return res.writeHead(404).end();
       requests += 1;
       requestBodies.push(bodyText);
-      activeImageRequests += 1;
-      maxActiveImageRequests = Math.max(maxActiveImageRequests, activeImageRequests);
       setTimeout(() => {
-        activeImageRequests -= 1;
         res.end(JSON.stringify({ data: [{ b64_json: generated.toString('base64') }] }));
       }, 25);
     });
@@ -181,6 +176,8 @@ test('runtime completes master approval, model generation and combination with t
   process.env.CAISHEN_IMAGE_API_KEY = 'test-key';
   process.env.CAISHEN_IMAGE_MODEL = 'gpt-image-2';
   process.env.CAISHEN_IMAGE_RESPONSE_FORMAT = 'b64_json';
+  process.env.CAISHEN_IMAGE_API_INITIAL_CONCURRENCY = '8';
+  process.env.CAISHEN_IMAGE_API_MAX_CONCURRENCY = '500';
   process.env.CAISHEN_IMAGE_API_START_INTERVAL_MS = '0';
   const runtimePath = require.resolve('../src/runtime');
   delete require.cache[runtimePath];
@@ -279,12 +276,19 @@ test('runtime completes master approval, model generation and combination with t
   assert.equal(modelBatch.completed, 3);
   assert.equal(modelBatch.failed, 0);
   assert.equal(modelBatch.results.every(item => item.ok), true);
+  assert.equal(modelBatch.results[0].value.folder, first.folder);
+  assert.equal(modelBatch.results[0].value.modelOutputs.length, 1);
+  assert.equal(
+    modelBatch.results[0].value.modelOutputs[0].path,
+    modelBatchProgress.find(item => item.itemIndex === 0 && item.itemResult)?.itemResult.modelOutputs[0].path
+  );
+  assert.equal('productManifest' in modelBatch.results[0].value, false);
   assert.equal(modelBatchProgress.filter(item => item.itemState === 'completed').length, 3);
   assert.deepEqual(
     modelBatchProgress.at(-1).completedItems.map(item => item.index).sort((a, b) => a - b),
     [0, 1, 2]
   );
-  assert.ok(maxActiveImageRequests >= 3, `expected concurrent model calls, observed ${maxActiveImageRequests}`);
+  assert.ok(modelBatchProgress[0].concurrency >= 3, `expected configured model concurrency, observed ${modelBatchProgress[0].concurrency}`);
   const afterConcurrentModels = (await runtime.listChildrenwearTasks()).find(item => item.folder === first.folder);
   assert.equal((await runtime.getChildrenwearTask(first.folder)).folder, first.folder);
   assert.equal(afterConcurrentModels.modelOutputs.length, 4);

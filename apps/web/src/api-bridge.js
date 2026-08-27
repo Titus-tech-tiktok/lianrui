@@ -70,7 +70,15 @@ let activeJobPollTimer = null;
 let activeJobPollRequest = null;
 
 function notifyJobProgress(watcher, job) {
-  const signature = JSON.stringify([job?.status || '', job?.error || '', job?.progress || {}]);
+  const progress = job?.progress || {};
+  const completed = Array.isArray(progress.completedItems) ? progress.completedItems : [];
+  const lastCompleted = completed.at(-1) || {};
+  const signature = [
+    job?.status || '', job?.error || '', progress.phase || '', progress.current || 0,
+    progress.total || 0, progress.itemIndex ?? '', progress.itemState || '',
+    progress.percent || 0, progress.message || '', completed.length,
+    lastCompleted.index ?? '', lastCompleted.failed ? 1 : 0
+  ].join('\u0000');
   if (signature === watcher.lastSignature) return;
   watcher.lastSignature = signature;
   try { watcher.onProgress(job?.progress || {}, job || {}); } catch {}

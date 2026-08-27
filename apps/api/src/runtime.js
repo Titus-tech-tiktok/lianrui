@@ -4501,6 +4501,61 @@ async function getChildrenwearTask(folder) {
   return task ? publicChildrenwearTask(task) : null;
 }
 
+function compactChildrenwearBatchTask(stage, value = {}) {
+  const common = {
+    id: value.id || '',
+    folder: value.folder || '',
+    type: value.type || '',
+    taskCode: value.taskCode || '',
+    styleName: value.styleName || '',
+    taskName: value.taskName || '',
+    category: value.category || '',
+    material: value.material || '',
+    craft: value.craft || '',
+    createdAt: value.createdAt || '',
+    updatedAt: value.updatedAt || ''
+  };
+  if (stage === 'master') return {
+    ...common,
+    realPhotoPath: value.realPhotoPath || '',
+    realPhotoUrl: value.realPhotoUrl || '',
+    realPhotoThumbnailUrl: value.realPhotoThumbnailUrl || '',
+    realPhotoPreviewUrl: value.realPhotoPreviewUrl || '',
+    referencePath: value.referencePath || '',
+    referenceUrl: value.referenceUrl || '',
+    referenceThumbnailUrl: value.referenceThumbnailUrl || '',
+    referencePreviewUrl: value.referencePreviewUrl || '',
+    masterPath: value.masterPath || '',
+    masterUrl: value.masterUrl || '',
+    masterThumbnailUrl: value.masterThumbnailUrl || '',
+    masterPreviewUrl: value.masterPreviewUrl || '',
+    masterVersion: Number(value.masterVersion) || 1,
+    masterApproved: value.masterApproved === true,
+    masterApprovedAt: value.masterApprovedAt || '',
+    masterReviewStatus: value.masterReviewStatus || 'pending'
+  };
+  if (stage === 'model') return {
+    ...common,
+    masterPath: value.masterPath || '',
+    masterUrl: value.masterUrl || '',
+    masterThumbnailUrl: value.masterThumbnailUrl || '',
+    masterPreviewUrl: value.masterPreviewUrl || '',
+    modelOutputs: Array.isArray(value.modelOutputs) && value.modelOutputs.length ? [value.modelOutputs.at(-1)] : []
+  };
+  return {
+    ...common,
+    masterPaths: Array.isArray(value.masterPaths) ? value.masterPaths : [],
+    masterUrls: Array.isArray(value.masterUrls) ? value.masterUrls : [],
+    masterThumbnailUrls: Array.isArray(value.masterThumbnailUrls) ? value.masterThumbnailUrls : [],
+    masterPreviewUrls: Array.isArray(value.masterPreviewUrls) ? value.masterPreviewUrls : [],
+    combinationReferencePath: value.combinationReferencePath || '',
+    combinationReferenceUrl: value.combinationReferenceUrl || '',
+    combinationReferenceThumbnailUrl: value.combinationReferenceThumbnailUrl || '',
+    combinationReferencePreviewUrl: value.combinationReferencePreviewUrl || '',
+    combinationOutputs: Array.isArray(value.combinationOutputs) && value.combinationOutputs.length ? [value.combinationOutputs.at(-1)] : []
+  };
+}
+
 async function generateChildrenwearBatch(payload = {}, options = {}) {
   const stage = ['master', 'model', 'combination'].includes(payload.stage) ? payload.stage : '';
   if (!stage) throw new Error('童装批量生成阶段无效');
@@ -4545,12 +4600,22 @@ async function generateChildrenwearBatch(payload = {}, options = {}) {
       try {
         const value = await generate(record.item, { signal: options.signal, reportProgress: itemProgress });
         completed += 1;
-        results[record.index] = { index: record.index, ok: true, value };
+        // The complete public task can contain the AI analysis manifests and all
+        // historical outputs. Returning that object for every item makes the
+        // browser parse a rapidly growing multi-megabyte job response. Return
+        // only the current stage result so the UI can patch that one card in
+        // place without another full-task request.
+        const compactValue = compactChildrenwearBatchTask(stage, value);
+        results[record.index] = {
+          index: record.index,
+          ok: true,
+          value: compactValue
+        };
         completedItems.push({ index: record.index, folder: value?.folder || '' });
         await options.reportProgress?.({
           phase: 'generating', current: completed, total, concurrency,
           itemIndex: record.index, itemState: 'completed',
-          itemFolder: value?.folder || '', completedItems: completedItems.slice(),
+          itemFolder: value?.folder || '', itemResult: compactValue, completedItems: completedItems.slice(),
           percent: Math.round((completed / total) * 100),
           message: `已完成 ${completed}/${total}`
         });
