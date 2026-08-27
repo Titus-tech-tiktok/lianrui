@@ -36,6 +36,7 @@ test('本地工作区配置可以保存并重新读取', async () => {
     'childrenwearProductAnalysis',
     'childrenwearFlatReferenceAnalysis',
     'childrenwearModelReferenceAnalysis',
+    'childrenwearSceneReferenceAnalysis',
     'childrenwearCombinationReferenceAnalysis',
     'childrenwearMasterGeneration',
     'childrenwearModelGeneration',

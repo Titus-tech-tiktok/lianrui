@@ -11,6 +11,7 @@ test('each childrenwear asset library has one independent AI analysis role', () 
   assert.equal(analysisRoleForLibraryKey('childrenwearRealAssetsPath'), 'product');
   assert.equal(analysisRoleForLibraryKey('childrenwearReferenceAssetsPath'), 'flat_reference');
   assert.equal(analysisRoleForLibraryKey('childrenwearModelAssetsPath'), 'model_reference');
+  assert.equal(analysisRoleForLibraryKey('childrenwearSceneAssetsPath'), 'scene_reference');
   assert.equal(analysisRoleForLibraryKey('childrenwearCombinationAssetsPath'), 'combination_reference');
 });
 
@@ -18,6 +19,7 @@ test('analysis prompts keep product identity separate from presentation referenc
   const product = buildChildrenwearAssetAnalysisPrompt('product');
   const flat = buildChildrenwearAssetAnalysisPrompt('flat_reference');
   const model = buildChildrenwearAssetAnalysisPrompt('model_reference');
+  const scene = buildChildrenwearAssetAnalysisPrompt('scene_reference');
   const combination = buildChildrenwearAssetAnalysisPrompt('combination_reference');
   assert.match(product, /open-ended/i);
   assert.match(product, /piece_count/);
@@ -36,6 +38,8 @@ test('analysis prompts keep product identity separate from presentation referenc
   assert.match(model, /protected person\/scene region/i);
   assert.match(model, /which action should the real product perform/i);
   assert.match(model, /exact presentation targets/i);
+  assert.match(scene, /environment reference/i);
+  assert.match(scene, /never controls the product, model identity, model pose or garment folds/i);
   assert.match(combination, /one supplied SKU per slot/i);
   assert.match(combination, /which action should each supplied SKU perform/i);
   assert.match(combination, /displayed outer outline/i);

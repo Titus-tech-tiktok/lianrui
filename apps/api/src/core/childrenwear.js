@@ -103,34 +103,60 @@ function buildChildrenwearMasterPrompt(input = {}) {
 
 function buildChildrenwearModelPrompt(input = {}) {
   const extra = cleanText(input.extraInstruction);
+  const variationSeed = cleanText(input.variationSeed) || 'auto';
+  const backgroundMode = ['white', 'scene_reference'].includes(input.backgroundMode) ? input.backgroundMode : 'model_reference';
+  const backgroundContract = backgroundMode === 'white'
+    ? [
+        'BACKGROUND MODE: PURE WHITE.',
+        'Ignore the environment/background identity in image 2. Output a uniform RGB(255,255,255) ecommerce background, with only a subtle physically correct contact shadow. Do not add props, floor seams, gradients or scenery.'
+      ]
+    : backgroundMode === 'scene_reference'
+      ? [
+          'BACKGROUND MODE: INDEPENDENT SCENE REFERENCE.',
+          '- image 3 is the only environment/background, props, camera-mood, lighting and ground-shadow reference. It never controls the person, pose, garment identity or garment folds.',
+          structuredAnalysisBlock('SCENE_REFERENCE_SPEC — environment only:', input.sceneSpec),
+          'Keep the person identity, body action, crop and garment deformation from image 2, but place that result naturally into image 3’s environment. Preserve physically valid occlusion and contact shadows. Never copy a person or garment from image 3.'
+        ]
+      : [
+          'BACKGROUND MODE: FOLLOW MODEL REFERENCE.',
+          'Image 2 controls the complete background, environment, props, camera mood, lighting and shadow as well as the person/action reference.'
+        ];
   return [
     'CHILDRENSWEAR_STRUCTURED_MODEL_DRESSING_EXECUTION',
-    'TASK: replace only the garment worn in image 2 with the exact approved SKU from image 1. This is controlled virtual dressing, not a new outfit design and not a model recreation.',
+    'TASK: dress a model based on image 2 in the exact approved SKU from image 1, while applying one controlled small natural variation to the model. This is not a new outfit design and not an unrelated pose redesign.',
     '',
     'INPUT ROLES — never swap them:',
     '- image 1 is the approved flat-lay master and is the primary source of truth for the exact SKU.',
-    '- image 2 is the final model, action, pose, garment-deformation and scene reference. Its original garment identity must be replaced.',
+    `- image 2 is the final model, action, pose and garment-deformation reference.${backgroundMode === 'model_reference' ? ' It also controls the scene.' : ' Its background is not authoritative in this mode.'} Its original garment identity must be replaced.`,
     '- WHY image 1 was selected: it is the approved proof of the exact product being sold, including construction, artwork, craft and material behaviour.',
-    '- WHY image 2 was selected: it demonstrates the desired selling action—model pose, body interaction, garment deformation, natural fold flow, crop, scene and commercial mood.',
+    `- WHY image 2 was selected: it demonstrates the desired selling-action family—body orientation, pose scale, body interaction, garment deformation, natural fold flow and crop.${backgroundMode === 'model_reference' ? ' It also supplies the scene and commercial mood.' : ''}`,
+    `- CONTROLLED VARIATION ID: ${variationSeed}. Use it to choose a fresh but restrained expression-and-pose variation for this generation.`,
     '',
     structuredAnalysisBlock('PRODUCT_MANIFEST — immutable SKU identity inherited from the approved flat-lay task:', input.productManifest),
     '',
-    structuredAnalysisBlock('MODEL_REFERENCE_SPEC — person, pose, scene, deformation and occlusion blueprint:', input.referenceSpec),
+    structuredAnalysisBlock('MODEL_REFERENCE_SPEC — person, pose, deformation and occlusion blueprint; scene fields apply only in follow-model-reference mode:', input.referenceSpec),
+    '',
+    ...backgroundContract,
     '',
     'NON-NEGOTIABLE TWO-SOURCE LOCK — never blend the reference outfit with the sold SKU:',
-    'REFERENCE PRESENTATION LOCK (image 2): keep the same person, anatomy, action, body orientation, crop, camera, complete background colour and scene, lighting, shadow, garment occupancy, on-body outer envelope, detail-display pose, occlusion order, fold locations, fold directions, tension points, compression zones and relaxed asymmetry.',
+    `REFERENCE PRESENTATION LOCK (image 2): keep the same model identity/type, anatomy, overall action category, body orientation, crop, garment occupancy, on-body outer envelope, detail-display intent, occlusion logic, fold-flow logic, tension/compression zones and relaxed asymmetry. Do not copy the exact expression or exact joint coordinates; apply only the controlled variation below.${backgroundMode === 'model_reference' ? ' Also keep its camera, complete background, lighting and shadow.' : ''}`,
     'PRODUCT IDENTITY LOCK (image 1 plus PRODUCT_MANIFEST): keep the exact sold garment style and cut, construction, component count, fabric, material, base colour, colour blocking, pattern, print, embroidery, applique, labels, pockets, seams, bindings, trims and closures.',
     'The on-body outline and fold map are controlled by the reference pose; the garment pattern-cut and merchandise identity are controlled by the approved product. Render the reference deformation using the real product material behaviour. Do not borrow the reference outfit’s colour, fabric, artwork, construction or style, and do not borrow the flat-lay background from image 1.',
     '',
     'EXECUTION CONTRACT:',
-    'Treat image 2 as an action blueprint, not a loose style suggestion. Preserve the model identity, face, hair, expression, body proportions, hands, feet, exact body orientation, weight bearing, limb bends, pose, crop, scene, camera and lighting.',
-    'Replace only the garment region and physically necessary contact shadows. Keep all non-garment pixels and foreground occluders protected.',
-    'Transfer the reference garment action to the real SKU: reproduce where the garment hangs, bends, gathers, compresses, overlaps or is pulled by the pose. Match the visible fold flow and wrinkle zones from image 2, while deriving fold scale, softness, thickness, drape and surface texture from the real SKU in image 1.',
+    `Treat image 2 as an action blueprint, not a loose style suggestion. Preserve model identity/type, hair styling, body proportions, overall body orientation, action category and crop.${backgroundMode === 'model_reference' ? ' Preserve its scene, camera and lighting too.' : ' Obtain the background/environment under the selected structured background mode above.'}`,
+    'CONTROLLED RANDOM MICRO-VARIATION: choose a natural facial expression, gaze direction and small head-angle variation; also make a restrained change to shoulder line, hand gesture, weight distribution, stance or one limb bend. The change must remain within the same action category and camera framing. No dramatic turn, jump, squat, wide limb movement, large step, new prop interaction or different viewpoint. Keep anatomy realistic and ecommerce-friendly.',
+    'COMPOSITION LOCK: keep the model visually centred in the final canvas and keep the garment-selling area clear, complete and unobstructed. Do not push the person to an edge, crop away important garment parts or let scenery dominate the frame.',
+    backgroundMode === 'white'
+      ? 'BACKGROUND VARIATION: none. Keep the required pure-white background uniform and unchanged.'
+      : 'BACKGROUND MICRO-VARIATION: preserve the selected reference environment type, dominant background colours, camera mood and commercial identity, but make a subtle natural variation in lighting nuance, depth of field or the position of non-critical background props. Never change the main scene category, introduce a distracting object, cover the product or move the centred person off-axis.',
+    'Regenerate only the person/garment pixels required by that small variation and its physically necessary contact shadows. Protect the selected background source and unrelated scene elements.',
+    'Transfer the reference garment-action logic to the real SKU, then adapt it physically to the chosen small pose variation: reproduce the reference fold flow and wrinkle zones—where the garment hangs, bends, gathers, compresses, overlaps or is pulled. Preserve the reference fold-flow character while recalculating exact wrinkle positions from the varied joints, gravity and contact points; derive fold scale, softness, thickness, drape and surface texture from the real SKU in image 1.',
     'The result must look naturally worn, with gravity-driven drape, body-contact folds, joint compression and believable tension. Never paste a rigid flat-lay silhouette onto the body, over-smooth the fabric, or create decorative wrinkles unrelated to the pose.',
     'Natural occlusion by the body, hair, hands or another garment is allowed. Hidden details may remain hidden; never relocate, duplicate or invent a detail merely to show it.',
     'Image 1 and PRODUCT_MANIFEST control every garment-specific fact. Never copy colour, material, print, label, pocket, seam, trim or construction from the original garment in image 2.',
     'If the reference garment type or piece count differs, dress the model in the real SKU using the closest physically valid local placement while preserving every compatible part of the model pose, on-body presentation outline, fold map, scene and shadow. Never convert the real SKU into the reference garment type.',
-    'Before output, silently audit two columns: pose/background/folds/shadows/detail-display action must match image 2; style/fabric/colour/material/artwork/construction must match image 1. Correct any cross-contamination.',
+    `Before output, silently audit the locked sources: the pose stays within image 2's action family but has a visible small natural expression/pose variation; folds remain physically consistent with that variation and the reference fold-flow logic; style/fabric/colour/material/artwork/construction match image 1; ${backgroundMode === 'scene_reference' ? 'background/props/lighting match image 3' : backgroundMode === 'white' ? 'background is uniform pure white' : 'background/shadows match image 2'}. Correct any cross-contamination.`,
     'No extra fingers or limbs, no warped anatomy, no floating garment, no duplicated motif, no melted seam and no invented accessory.',
     '',
     'OUTPUT:',

@@ -33,6 +33,14 @@ const PROMPT_DEFINITIONS = Object.freeze([
     defaultValue: buildChildrenwearAssetAnalysisPrompt('model_reference')
   },
   {
+    id: 'childrenwearSceneReferenceAnalysis',
+    title: '场景参考图 AI 分析',
+    group: '多嘻噜卡 AI 分析',
+    description: '只分析可选的背景环境、道具、镜头氛围、灯光与接地阴影；不决定人物、动作、服装身份或服装褶皱。',
+    placeholders: [],
+    defaultValue: buildChildrenwearAssetAnalysisPrompt('scene_reference')
+  },
+  {
     id: 'childrenwearCombinationReferenceAnalysis',
     title: '组合参考图 AI 分析',
     group: '多嘻噜卡 AI 分析',
@@ -52,7 +60,7 @@ const PROMPT_DEFINITIONS = Object.freeze([
     id: 'childrenwearModelGeneration',
     title: '模特上身图生成',
     group: '多嘻噜卡生图',
-    description: '双源硬锁：已审核母版锁定真实商品款式、面料、颜色、材质、图案和结构；模特参考图锁定人物、动作、背景、上身外轮廓、褶皱位置、阴影和细节展示姿势。',
+    description: '结构化三源锁定：已审核母版锁定商品；模特参考图锁定人物与动作类型、上身轮廓、褶皱逻辑和细节展示意图，并在每次生成时小幅随机变化表情、视线、头部角度、肩线、手势或站姿；人物始终居中，背景可选择跟随模特参考、纯白或独立场景参考图，非纯白背景只做轻微自然变化。',
     placeholders: [],
     defaultValue: buildChildrenwearModelPrompt({})
   },

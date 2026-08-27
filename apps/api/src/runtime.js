@@ -1085,6 +1085,7 @@ const CHILDRENWEAR_ANALYSIS_PROMPT_ID_BY_ROLE = Object.freeze({
   product: 'childrenwearProductAnalysis',
   flat_reference: 'childrenwearFlatReferenceAnalysis',
   model_reference: 'childrenwearModelReferenceAnalysis',
+  scene_reference: 'childrenwearSceneReferenceAnalysis',
   combination_reference: 'childrenwearCombinationReferenceAnalysis'
 });
 
@@ -1142,6 +1143,7 @@ function defaultConfig() {
     childrenwearRealAssetsPath: '',
     childrenwearReferenceAssetsPath: '',
     childrenwearModelAssetsPath: '',
+    childrenwearSceneAssetsPath: '',
     childrenwearCombinationAssetsPath: '',
     childrenwearAutoAnalysisEnabled: false,
     childrenwearAutoAnalysisIntervalMinutes: 5,
@@ -1174,6 +1176,7 @@ async function saveConfig(next) {
     childrenwearRealAssetsPath: String(next.childrenwearRealAssetsPath || '').trim(),
     childrenwearReferenceAssetsPath: String(next.childrenwearReferenceAssetsPath || '').trim(),
     childrenwearModelAssetsPath: String(next.childrenwearModelAssetsPath || '').trim(),
+    childrenwearSceneAssetsPath: String(next.childrenwearSceneAssetsPath || '').trim(),
     childrenwearCombinationAssetsPath: String(next.childrenwearCombinationAssetsPath || '').trim(),
     childrenwearAutoAnalysisEnabled: next.childrenwearAutoAnalysisEnabled === true,
     childrenwearAutoAnalysisIntervalMinutes: [1, 5, 10, 30, 60].includes(Number(next.childrenwearAutoAnalysisIntervalMinutes))
@@ -3840,7 +3843,10 @@ function publicChildrenwearTask(value = {}) {
       masterPreviewUrl: item.masterPath ? thumbnailUrl(item.masterPath, 1200, '') : '',
       modelReferenceUrl: item.modelReferencePath ? imageUrl(item.modelReferencePath) : '',
       modelReferenceThumbnailUrl: item.modelReferencePath ? thumbnailUrl(item.modelReferencePath, 480, '') : '',
-      modelReferencePreviewUrl: item.modelReferencePath ? thumbnailUrl(item.modelReferencePath, 1200, '') : ''
+      modelReferencePreviewUrl: item.modelReferencePath ? thumbnailUrl(item.modelReferencePath, 1200, '') : '',
+      sceneReferenceUrl: item.sceneReferencePath ? imageUrl(item.sceneReferencePath) : '',
+      sceneReferenceThumbnailUrl: item.sceneReferencePath ? thumbnailUrl(item.sceneReferencePath, 480, '') : '',
+      sceneReferencePreviewUrl: item.sceneReferencePath ? thumbnailUrl(item.sceneReferencePath, 1200, '') : ''
     })),
     combinationReferenceUrl: value.combinationReferencePath ? imageUrl(value.combinationReferencePath) : '',
     combinationReferenceThumbnailUrl: value.combinationReferencePath ? thumbnailUrl(value.combinationReferencePath, 480, '') : '',
@@ -4069,6 +4075,7 @@ async function repairChildrenwearTaskAssets(task, config = {}) {
     real: [config.childrenwearRealAssetsPath, path.join(workspaceAssets, 'childrenwear-real')],
     reference: [config.childrenwearReferenceAssetsPath, path.join(workspaceAssets, 'childrenwear-reference')],
     model: [config.childrenwearModelAssetsPath, path.join(workspaceAssets, 'childrenwear-model')],
+    scene: [config.childrenwearSceneAssetsPath, path.join(workspaceAssets, 'childrenwear-scene')],
     combination: [config.childrenwearCombinationAssetsPath, path.join(workspaceAssets, 'childrenwear-combination')]
   };
   let changed = false;
@@ -4088,7 +4095,10 @@ async function repairChildrenwearTaskAssets(task, config = {}) {
   };
   await repairField(task, 'realPhotoPath', '实拍图', roots.real);
   await repairField(task, 'referencePath', '成品参考图', roots.reference);
-  for (const output of task.modelOutputs || []) await repairField(output, 'modelReferencePath', '参考模特图', roots.model);
+  for (const output of task.modelOutputs || []) {
+    await repairField(output, 'modelReferencePath', '参考模特图', roots.model);
+    await repairField(output, 'sceneReferencePath', '场景参考图', roots.scene);
+  }
   await repairField(task, 'combinationReferencePath', '组合参考图', roots.combination);
   if (Array.isArray(task.masterPaths)) {
     const repairedMasters = [];
@@ -4256,6 +4266,8 @@ async function generateChildrenwearModel(payload = {}, options = {}) {
   if (!payload.modelReferencePath || !fs.existsSync(payload.modelReferencePath)) throw new Error('请上传模特或姿势参考图');
   if (!task.masterPath || !fs.existsSync(task.masterPath)) throw new Error('已审核母版文件不存在');
   if (!task.realPhotoPath || !fs.existsSync(task.realPhotoPath)) throw new Error('任务实拍图已丢失，请重新选择实拍图后再生成');
+  const backgroundMode = ['white', 'scene_reference'].includes(String(payload.backgroundMode || '')) ? String(payload.backgroundMode) : 'model_reference';
+  if (backgroundMode === 'scene_reference' && (!payload.sceneReferencePath || !fs.existsSync(payload.sceneReferencePath))) throw new Error('场景背景模式需要选择一张场景参考图');
   const matchingModelOutputs = (task.modelOutputs || []).filter(output => output.modelReferenceSpec
     && output.modelReferenceAnalysisHash
     && output.modelReferencePath
@@ -4266,11 +4278,29 @@ async function generateChildrenwearModel(payload = {}, options = {}) {
     analysis: output.modelReferenceSpec
   })));
   const modelReferencePath = await copyChildrenwearTaskAsset(payload.modelReferencePath, folder, '参考模特图');
+  let sceneReferenceAnalysis = null;
+  let sceneReferencePath = '';
+  if (backgroundMode === 'scene_reference') {
+    const matchingSceneOutputs = (task.modelOutputs || []).filter(output => output.sceneReferenceSpec
+      && output.sceneReferenceAnalysisHash
+      && output.sceneReferencePath
+      && path.resolve(output.sceneReferencePath) === path.resolve(payload.sceneReferencePath));
+    sceneReferenceAnalysis = await childrenwearAssetAnalysisForTask(payload.sceneReferencePath, 'scene_reference', matchingSceneOutputs.map(output => ({
+      schemaVersion: task.analysisSchemaVersion,
+      contentHash: output.sceneReferenceAnalysisHash,
+      analysis: output.sceneReferenceSpec
+    })));
+    sceneReferencePath = await copyChildrenwearTaskAsset(payload.sceneReferencePath, folder, '场景参考图');
+  }
   task.taskName = childrenwearTaskDisplayName(task.styleName || task.category || task.taskName, task.taskCode).slice(0, 80);
   const productManifest = task.productManifest || (await requireChildrenwearAssetAnalysis(task.realPhotoPath, 'product')).analysis;
+  const variationSeed = crypto.randomBytes(6).toString('hex');
   const prompt = await buildConfiguredChildrenwearPrompt('childrenwearModelGeneration', buildChildrenwearModelPrompt({
     productManifest,
     referenceSpec: modelReferenceAnalysis.analysis,
+    backgroundMode,
+    sceneSpec: sceneReferenceAnalysis?.analysis,
+    variationSeed,
     extraInstruction: payload.extraInstruction
   }));
   const outputId = `model-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
@@ -4278,7 +4308,8 @@ async function generateChildrenwearModel(payload = {}, options = {}) {
   await fsp.mkdir(evidenceFolder, { recursive: true });
   await fsp.writeFile(path.join(evidenceFolder, 'prompt.txt'), prompt, 'utf8');
   options.reportProgress?.({ phase: 'generating', percent: 15, message: '正在将已审核母版生成模特上身图' });
-  const bytes = await generateImage(prompt, [task.masterPath, modelReferencePath], {
+  const inputImages = [task.masterPath, modelReferencePath, ...(sceneReferencePath ? [sceneReferencePath] : [])];
+  const bytes = await generateImage(prompt, inputImages, {
     size: config.imageSize || '1024x1024',
     quality: config.imageQuality || 'high',
     billingDescription: '童装模特上身图生成',
@@ -4304,6 +4335,11 @@ async function generateChildrenwearModel(payload = {}, options = {}) {
     modelReferencePath,
     modelReferenceSpec: modelReferenceAnalysis.analysis,
     modelReferenceAnalysisHash: modelReferenceAnalysis.contentHash,
+    backgroundMode,
+    sceneReferencePath,
+    sceneReferenceSpec: sceneReferenceAnalysis?.analysis || null,
+    sceneReferenceAnalysisHash: sceneReferenceAnalysis?.contentHash || '',
+    variationSeed,
     approved: false,
     approvedAt: '',
     reviewStatus: 'pending',
@@ -4415,6 +4451,10 @@ async function generateChildrenwearCombination(payload = {}, options = {}) {
     contentHash: existing.combinationReferenceAnalysisHash,
     analysis: existing.combinationReferenceSpec
   }]);
+  const requiredSlotCount = Number(combinationReferenceAnalysis.analysis?.slot_count);
+  if (Number.isInteger(requiredSlotCount) && requiredSlotCount >= 1 && requiredSlotCount !== masterPaths.length) {
+    throw new Error(`组合参考图识别到 ${requiredSlotCount} 个商品位置，请按顺序选择 ${requiredSlotCount} 张平铺图；当前选择 ${masterPaths.length} 张`);
+  }
   const localMasterPaths = [];
   for (let index = 0; index < masterPaths.length; index += 1) {
     const source = masterPaths[index];

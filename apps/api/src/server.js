@@ -567,6 +567,7 @@ function safeConfig(config = {}) {
     childrenwearRealAssetsPath: configAssetPath(config.childrenwearRealAssetsPath),
     childrenwearReferenceAssetsPath: configAssetPath(config.childrenwearReferenceAssetsPath),
     childrenwearModelAssetsPath: configAssetPath(config.childrenwearModelAssetsPath),
+    childrenwearSceneAssetsPath: configAssetPath(config.childrenwearSceneAssetsPath),
     childrenwearCombinationAssetsPath: configAssetPath(config.childrenwearCombinationAssetsPath),
     outputPath
   };
@@ -581,6 +582,7 @@ function publicConfig(config) {
     childrenwearRealAssetsPath: configAssetPath(config.childrenwearRealAssetsPath),
     childrenwearReferenceAssetsPath: configAssetPath(config.childrenwearReferenceAssetsPath),
     childrenwearModelAssetsPath: configAssetPath(config.childrenwearModelAssetsPath),
+    childrenwearSceneAssetsPath: configAssetPath(config.childrenwearSceneAssetsPath),
     childrenwearCombinationAssetsPath: configAssetPath(config.childrenwearCombinationAssetsPath),
     workspaceRoot: runtime.WORKSPACE_ROOT,
     defaultOutputPath: runtime.OUTPUT_ROOT
@@ -847,6 +849,7 @@ const ASSET_KIND_MAP = Object.freeze({
   'childrenwear-real': 'childrenwear-real',
   'childrenwear-reference': 'childrenwear-reference',
   'childrenwear-model': 'childrenwear-model',
+  'childrenwear-scene': 'childrenwear-scene',
   'childrenwear-combination': 'childrenwear-combination'
 });
 const SUPPORTED_IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif', '.tif', '.tiff']);
@@ -1082,6 +1085,7 @@ async function deleteAssetFiles(kindValue, requestedRoot, paths = []) {
     'childrenwear-real': 'product',
     'childrenwear-reference': 'flat_reference',
     'childrenwear-model': 'model_reference',
+    'childrenwear-scene': 'scene_reference',
     'childrenwear-combination': 'combination_reference'
   };
   const files = [];

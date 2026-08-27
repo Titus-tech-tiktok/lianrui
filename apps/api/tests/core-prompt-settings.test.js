@@ -12,12 +12,13 @@ test('prompt settings expose all active childrenwear analysis and generation pro
     'childrenwearProductAnalysis',
     'childrenwearFlatReferenceAnalysis',
     'childrenwearModelReferenceAnalysis',
+    'childrenwearSceneReferenceAnalysis',
     'childrenwearCombinationReferenceAnalysis',
     'childrenwearMasterGeneration',
     'childrenwearModelGeneration',
     'childrenwearCombinationGeneration'
   ]);
-  assert.equal(PROMPT_DEFINITIONS.filter(item => item.group === '多嘻噜卡 AI 分析').length, 4);
+  assert.equal(PROMPT_DEFINITIONS.filter(item => item.group === '多嘻噜卡 AI 分析').length, 5);
   assert.equal(PROMPT_DEFINITIONS.filter(item => item.group === '多嘻噜卡生图').length, 3);
   for (const removedId of [
     'templatePrint',

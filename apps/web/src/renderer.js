@@ -206,6 +206,7 @@ const state = {
   childrenwearReal: null,
   childrenwearReference: null,
   childrenwearModelReference: null,
+  childrenwearSceneReference: null,
   childrenwearActiveTask: null,
   childrenwearTasks: [],
   childrenwearCombinationSelection: new Set(),
@@ -214,18 +215,21 @@ const state = {
     childrenwearRealAssetsPath: [],
     childrenwearReferenceAssetsPath: [],
     childrenwearModelAssetsPath: [],
+    childrenwearSceneAssetsPath: [],
     childrenwearCombinationAssetsPath: []
   },
   childrenwearProductionLibraries: {
     childrenwearRealAssetsPath: [],
     childrenwearReferenceAssetsPath: [],
     childrenwearModelAssetsPath: [],
+    childrenwearSceneAssetsPath: [],
     childrenwearCombinationAssetsPath: []
   },
   childrenwearProductionFolders: {
     childrenwearRealAssetsPath: [],
     childrenwearReferenceAssetsPath: [],
     childrenwearModelAssetsPath: [],
+    childrenwearSceneAssetsPath: [],
     childrenwearCombinationAssetsPath: []
   },
   childrenwearLibraryUploading: new Set(),
@@ -234,6 +238,7 @@ const state = {
   childrenwearAssetTab: 'childrenwearRealAssetsPath',
   childrenwearProductionTab: 'master',
   childrenwearSourceTabs: { master: 'master-real', model: 'model-master', combination: 'combination-master' },
+  childrenwearModelBackgroundMode: 'model_reference',
   childrenwearDrafts: { master: [], model: [], combination: [] },
   childrenwearActiveDraft: { master: '', model: '', combination: '' },
   childrenwearQueueFilters: { master: 'all', model: 'all', combination: 'all' },
@@ -253,30 +258,35 @@ const state = {
     childrenwearRealAssetsPath: [],
     childrenwearReferenceAssetsPath: [],
     childrenwearModelAssetsPath: [],
+    childrenwearSceneAssetsPath: [],
     childrenwearCombinationAssetsPath: []
   },
   childrenwearLibraryFolder: {
     childrenwearRealAssetsPath: 'auto',
     childrenwearReferenceAssetsPath: 'auto',
     childrenwearModelAssetsPath: 'auto',
+    childrenwearSceneAssetsPath: 'auto',
     childrenwearCombinationAssetsPath: 'auto'
   },
   childrenwearLibraryPage: {
     childrenwearRealAssetsPath: 1,
     childrenwearReferenceAssetsPath: 1,
     childrenwearModelAssetsPath: 1,
+    childrenwearSceneAssetsPath: 1,
     childrenwearCombinationAssetsPath: 1
   },
   childrenwearLibraryTotals: {
     childrenwearRealAssetsPath: { total: 0, totalPages: 0, pageSize: 48 },
     childrenwearReferenceAssetsPath: { total: 0, totalPages: 0, pageSize: 48 },
     childrenwearModelAssetsPath: { total: 0, totalPages: 0, pageSize: 48 },
+    childrenwearSceneAssetsPath: { total: 0, totalPages: 0, pageSize: 48 },
     childrenwearCombinationAssetsPath: { total: 0, totalPages: 0, pageSize: 48 }
   },
   childrenwearLibraryDeleteSelection: {
     childrenwearRealAssetsPath: new Set(),
     childrenwearReferenceAssetsPath: new Set(),
     childrenwearModelAssetsPath: new Set(),
+    childrenwearSceneAssetsPath: new Set(),
     childrenwearCombinationAssetsPath: new Set()
   },
   childrenwearPickerKey: '',
@@ -1746,7 +1756,7 @@ function isClientSubPath(root, candidate) {
 async function sanitizeConfigWorkspacePaths() {
   if (!state.config?.workspaceRoot) return;
   let changed = false;
-  for (const key of ['categoriesPath', 'printsPath', 'detailSetsPath', 'childrenwearRealAssetsPath', 'childrenwearReferenceAssetsPath', 'childrenwearModelAssetsPath', 'childrenwearCombinationAssetsPath']) {
+  for (const key of ['categoriesPath', 'printsPath', 'detailSetsPath', 'childrenwearRealAssetsPath', 'childrenwearReferenceAssetsPath', 'childrenwearModelAssetsPath', 'childrenwearSceneAssetsPath', 'childrenwearCombinationAssetsPath']) {
     if (state.config[key] && !isClientSubPath(state.config.workspaceRoot, state.config[key])) {
       state.config[key] = '';
       changed = true;
@@ -5449,6 +5459,7 @@ async function resetSettings() {
     childrenwearRealAssetsPath: state.config.childrenwearRealAssetsPath,
     childrenwearReferenceAssetsPath: state.config.childrenwearReferenceAssetsPath,
     childrenwearModelAssetsPath: state.config.childrenwearModelAssetsPath,
+    childrenwearSceneAssetsPath: state.config.childrenwearSceneAssetsPath,
     childrenwearCombinationAssetsPath: state.config.childrenwearCombinationAssetsPath
   };
   state.config = await window.caishen.resetConfig();
@@ -5482,6 +5493,14 @@ const CHILDRENWEAR_LIBRARY_META = Object.freeze({
     empty: '尚未上传模特图',
     selected: '当前模特参考图',
     analysisRole: 'model_reference'
+  },
+  childrenwearSceneAssetsPath: {
+    grid: '#childrenwearSceneAssetsGrid',
+    summary: '#childrenwearSceneAssetsSummary',
+    stateKey: 'childrenwearSceneReference',
+    empty: '尚未上传场景图',
+    selected: '当前场景参考图',
+    analysisRole: 'scene_reference'
   },
   childrenwearCombinationAssetsPath: {
     grid: '#childrenwearCombinationAssetsGrid',
@@ -5618,7 +5637,8 @@ function openChildrenwearLibrary(key) {
 const CHILDRENWEAR_PICKER_COPY = Object.freeze({
   childrenwearRealAssetsPath: ['选择实拍产品图', '实拍图决定商品版型、颜色、材质和全部细节。'],
   childrenwearReferenceAssetsPath: ['选择成品参考图', '参考图只决定平铺姿态、背景、光影和构图。'],
-  childrenwearModelAssetsPath: ['选择参考模特图', '模特参考图只决定人物、姿势、场景和光线。']
+  childrenwearModelAssetsPath: ['选择参考模特图', '模特参考图决定人物、动作、服装受力、褶皱和细节展示姿势。'],
+  childrenwearSceneAssetsPath: ['选择场景参考图', '场景图只决定背景环境、道具、灯光和接地阴影。']
 });
 
 function closeChildrenwearPicker() {
@@ -5934,6 +5954,8 @@ const CHILDRENWEAR_STYLE_PACKAGE_KINDS = Object.freeze({
   成品参考图: 'childrenwearReferenceAssetsPath',
   模特图: 'childrenwearModelAssetsPath',
   参考模特图: 'childrenwearModelAssetsPath',
+  场景图: 'childrenwearSceneAssetsPath',
+  场景参考图: 'childrenwearSceneAssetsPath',
   组合图: 'childrenwearCombinationAssetsPath',
   SKU组合图: 'childrenwearCombinationAssetsPath'
 });
@@ -5942,6 +5964,7 @@ const CHILDRENWEAR_STYLE_PACKAGE_LABELS = Object.freeze({
   childrenwearRealAssetsPath: '实拍图',
   childrenwearReferenceAssetsPath: '成品图',
   childrenwearModelAssetsPath: '模特图',
+  childrenwearSceneAssetsPath: '场景图',
   childrenwearCombinationAssetsPath: '组合图'
 });
 
@@ -6601,6 +6624,7 @@ function cwTaskDisplayName(styleName, taskCode) {
 
 function cwNewDraft(stage) {
   const draft = { id: createClientId(), stage, title: '', taskCode: '', styleName: '', selected: true, status: '待补齐素材', progress: '', result: null };
+  if (stage === 'model') draft.backgroundMode = state.childrenwearModelBackgroundMode || 'model_reference';
   if (stage === 'combination') draft.masters = [];
   state.childrenwearDrafts[stage].push(draft);
   state.childrenwearActiveDraft[stage] = draft.id;
@@ -6620,14 +6644,23 @@ function cwImage(value, fallback = '待选择') {
 
 function cwDraftReady(draft) {
   if (draft.stage === 'master') return Boolean(draft.real?.path && draft.reference?.path);
-  if (draft.stage === 'model') return Boolean(draft.master?.path && draft.reference?.path);
+  if (draft.stage === 'model') return Boolean(draft.master?.path && draft.reference?.path
+    && (draft.backgroundMode !== 'scene_reference' || draft.scene?.path));
   return Boolean(draft.masters?.length >= 2 && draft.reference?.path);
 }
 
 function cwDraftFlow(draft) {
   if (draft.stage === 'master') return `${cwImage(draft.real, '实拍产品图')}<i>+</i>${cwImage(draft.reference, '成品参考图')}<i>→</i>${cwImage(draft.result, '平铺母版图')}`;
-  if (draft.stage === 'model') return `${cwImage(draft.master, '已审核平铺图')}<i>+</i>${cwImage(draft.reference, '参考模特图')}<i>→</i>${cwImage(draft.result, '模特上身图')}`;
-  const masters = draft.masters?.length ? draft.masters.map((item, index) => `${index ? '<i>+</i>' : ''}${cwImage(item, `平铺图 ${index + 1}`)}`).join('') : cwImage(null, '选择 2～4 张平铺图');
+  if (draft.stage === 'model') {
+    const backgroundMode = draft.backgroundMode || 'model_reference';
+    const background = backgroundMode === 'white'
+      ? '<figure class="cw-flow-figure cw-background-mode"><span>白</span><figcaption>纯白背景</figcaption></figure>'
+      : backgroundMode === 'scene_reference'
+        ? cwImage(draft.scene, '场景参考图')
+        : '<figure class="cw-flow-figure cw-background-mode"><span>同</span><figcaption>跟随模特背景</figcaption></figure>';
+    return `${cwImage(draft.master, '已审核平铺图')}<i>+</i>${cwImage(draft.reference, '参考模特图')}<i>+</i>${background}<i>→</i>${cwImage(draft.result, '模特上身图')}`;
+  }
+  const masters = draft.masters?.length ? draft.masters.map((item, index) => `${index ? '<i>+</i>' : ''}<div class="cw-ordered-sku"><em>SKU ${String.fromCharCode(65 + index)}</em>${cwImage(item, `平铺图 ${index + 1}`)}<div><button type="button" data-cw-master-move="-1" data-cw-master-index="${index}"${index === 0 ? ' disabled' : ''}>←</button><button type="button" data-cw-master-move="1" data-cw-master-index="${index}"${index === draft.masters.length - 1 ? ' disabled' : ''}>→</button></div></div>`).join('') : cwImage(null, '选择 2～4 张平铺图');
   return `${masters}<i>+</i>${cwImage(draft.reference, '组合参考图')}<i>→</i>${cwImage(draft.result, '多 SKU 组合图')}`;
 }
 
@@ -6781,6 +6814,15 @@ function syncCwDraftsFromTasks() {
           name: output.modelReferencePath?.split(/[\\/]/).at(-1) || '参考模特图',
           folder: ''
         };
+        draft.backgroundMode = output.backgroundMode || 'model_reference';
+        draft.scene = output.sceneReferencePath ? {
+          path: output.sceneReferencePath,
+          url: output.sceneReferenceUrl,
+          thumbnailUrl: output.sceneReferenceThumbnailUrl,
+          previewUrl: output.sceneReferencePreviewUrl,
+          name: output.sceneReferencePath.split(/[\\/]/).at(-1) || '场景参考图',
+          folder: ''
+        } : null;
       } else {
         const masterPaths = output.masterPaths?.length ? output.masterPaths : (task.masterPaths || []);
         const imageTask = output.masterPaths?.length ? {
@@ -6941,6 +6983,7 @@ function cwLibrarySource(stage) {
   if (tab === 'master-real') return { key: 'childrenwearRealAssetsPath', role: 'real', folders: '#cwMasterSourceFolders', grid: '#cwMasterSourceGrid' };
   if (tab === 'master-reference') return { key: 'childrenwearReferenceAssetsPath', role: 'reference', folders: '#cwMasterSourceFolders', grid: '#cwMasterSourceGrid' };
   if (tab === 'model-reference') return { key: 'childrenwearModelAssetsPath', role: 'reference', folders: '#cwModelSourceFolders', grid: '#cwModelSourceGrid' };
+  if (tab === 'model-scene') return { key: 'childrenwearSceneAssetsPath', role: 'scene', folders: '#cwModelSourceFolders', grid: '#cwModelSourceGrid' };
   if (tab === 'combination-reference') return { key: 'childrenwearCombinationAssetsPath', role: 'reference', folders: '#cwCombinationSourceFolders', grid: '#cwCombinationSourceGrid' };
   if (tab === 'model-master') return { approved: true, role: 'master', folders: '#cwModelSourceFolders', grid: '#cwModelSourceGrid' };
   return { approved: true, role: 'master', folders: '#cwCombinationSourceFolders', grid: '#cwCombinationSourceGrid' };
@@ -6983,8 +7026,16 @@ function addCwSource(stage, role, pathValue) {
     draft = drafts.find(item => !item[role]?.path) || cwNewDraft(stage);
     draft[role] = source;
   } else if (stage === 'model') {
-    draft = drafts.find(item => !item[role]?.path) || cwNewDraft(stage);
-    draft[role] = source;
+    if (role === 'scene') {
+      state.childrenwearModelBackgroundMode = 'scene_reference';
+      draft = drafts.find(item => item.backgroundMode === 'scene_reference' && !item.scene?.path) || cwDraft(stage);
+      draft.backgroundMode = 'scene_reference';
+      draft.scene = source;
+    } else {
+      draft = drafts.find(item => !item[role]?.path) || cwNewDraft(stage);
+      draft[role] = source;
+      draft.backgroundMode ||= state.childrenwearModelBackgroundMode || 'model_reference';
+    }
   } else if (role === 'reference') {
     draft = drafts.find(item => !item.reference?.path) || cwNewDraft(stage);
     draft.reference = source;
@@ -7038,7 +7089,10 @@ function cwDraftGenerationPayload(stage, draft) {
   };
   if (stage === 'model') return {
     folder: draft.master.taskFolder, taskName: draft.title,
-    modelReferencePath: draft.reference.path, extraInstruction: ''
+    modelReferencePath: draft.reference.path,
+    backgroundMode: draft.backgroundMode || 'model_reference',
+    sceneReferencePath: draft.backgroundMode === 'scene_reference' ? draft.scene?.path || '' : '',
+    extraInstruction: ''
   };
   return {
     folder: draft.taskFolder || draft.masters[0]?.taskFolder || '', taskName: draft.title,
@@ -7620,7 +7674,7 @@ async function markCwReviewItemNeedsRegeneration(item) {
 
 async function regenerateCwReviewItem(item) {
   if (item.stage === 'master') return window.caishen.generateChildrenwearMaster({ folder: item.folder, taskName: item.task.taskName, realPhotoPath: item.task.realPhotoPath, referencePath: item.task.referencePath, category: item.task.category, material: item.task.material, craft: item.task.craft, extraInstruction: '' });
-  if (item.stage === 'model') return window.caishen.generateChildrenwearModel({ folder: item.folder, taskName: item.task.taskName, modelReferencePath: item.output.modelReferencePath, extraInstruction: '' });
+  if (item.stage === 'model') return window.caishen.generateChildrenwearModel({ folder: item.folder, taskName: item.task.taskName, modelReferencePath: item.output.modelReferencePath, backgroundMode: item.output.backgroundMode || 'model_reference', sceneReferencePath: item.output.sceneReferencePath || '', extraInstruction: '' });
   return window.caishen.generateChildrenwearCombination({ folder: item.folder, taskName: item.task.taskName, masterPaths: item.task.masterPaths, combinationReferencePath: item.task.combinationReferencePath });
 }
 
@@ -7730,6 +7784,22 @@ function bindChildrenwearEvents() {
     if (source.key) await loadChildrenwearLibrary(source.key);
     renderCwSource(stage);
   });
+  $$('[data-cw-model-background]').forEach(button => button.onclick = () => {
+    const mode = button.dataset.cwModelBackground;
+    if (!['model_reference', 'white', 'scene_reference'].includes(mode)) return;
+    state.childrenwearModelBackgroundMode = mode;
+    const draft = cwDraft('model');
+    draft.backgroundMode = mode;
+    draft.status = cwDraftReady(draft) ? '待生成' : '待补齐素材';
+    button.parentElement.querySelectorAll('[data-cw-model-background]').forEach(item => item.classList.toggle('active', item === button));
+    if (mode === 'scene_reference') {
+      state.childrenwearSourceTabs.model = 'model-scene';
+      const tab = $('[data-cw-source-tab="model-scene"]');
+      tab?.parentElement.querySelectorAll('[data-cw-source-tab]').forEach(item => item.classList.toggle('active', item === tab));
+      void loadChildrenwearLibrary('childrenwearSceneAssetsPath').then(() => renderCwSource('model'));
+    }
+    renderCwQueue('model');
+  });
   $$('.cw-source-column').forEach(column => column.onclick = async event => {
     const folder = event.target.closest('[data-cw-source-folder]');
     if (folder) {
@@ -7759,6 +7829,17 @@ function bindChildrenwearEvents() {
       const stage = card?.dataset.stage;
       const id = card?.dataset.cwDraft;
       if (!stage || !id) return;
+      const move = event.target.closest('[data-cw-master-move]');
+      if (move && stage === 'combination') {
+        const draft = state.childrenwearDrafts.combination.find(item => item.id === id);
+        const from = Number(move.dataset.cwMasterIndex);
+        const to = from + Number(move.dataset.cwMasterMove);
+        if (draft?.masters?.[from] && to >= 0 && to < draft.masters.length) {
+          [draft.masters[from], draft.masters[to]] = [draft.masters[to], draft.masters[from]];
+          draft.selected = true;
+          return renderCwQueue('combination');
+        }
+      }
       const inlineCompare = event.target.closest('[data-cw-inline-compare]');
       if (inlineCompare) return openCwCompare(inlineCompare.dataset.cwInlineCompare, stage === 'master' ? 'master' : 'review');
       const inlineApprove = event.target.closest('[data-cw-inline-approve]');
@@ -7799,7 +7880,15 @@ function bindChildrenwearEvents() {
         return deleteCwDraftCards(stage, [draft]);
       }
       if (event.target.closest('[data-cw-generate-one]')) return runCwDraft(stage, state.childrenwearDrafts[stage].find(item => item.id === id));
-      if (!event.target.closest('button,input,label')) { state.childrenwearActiveDraft[stage] = id; renderCwQueue(stage); }
+      if (!event.target.closest('button,input,label')) {
+        state.childrenwearActiveDraft[stage] = id;
+        if (stage === 'model') {
+          const draft = state.childrenwearDrafts.model.find(item => item.id === id);
+          state.childrenwearModelBackgroundMode = draft?.backgroundMode || 'model_reference';
+          $$('[data-cw-model-background]').forEach(item => item.classList.toggle('active', item.dataset.cwModelBackground === state.childrenwearModelBackgroundMode));
+        }
+        renderCwQueue(stage);
+      }
     };
   });
   $$('[data-cw-batch]').forEach(button => button.onclick = async () => {

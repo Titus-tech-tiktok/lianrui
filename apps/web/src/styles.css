@@ -8797,6 +8797,14 @@ body.production-scroll-lock { height: 100vh; overflow: hidden; overflow-anchor: 
 .cw-source-tabs button::after { content: ""; background: transparent; height: 2px; position: absolute; right: 0; bottom: -1px; left: 0; }
 .cw-source-tabs button.active { color: var(--ink); }
 .cw-source-tabs button.active::after { background: var(--teal); }
+.cw-model-background-modes { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 10px 16px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+.cw-model-background-modes button { border: 1px solid var(--line); border-radius: 999px; background: #fff; padding: 6px 10px; color: var(--muted); font-weight: 700; }
+.cw-model-background-modes button.active { border-color: var(--teal); background: var(--teal-pale, #edf7f5); color: var(--teal); }
+.cw-background-mode span { display: grid; place-items: center; width: 100%; height: 100%; color: var(--teal); font-size: 24px; font-weight: 800; }
+.cw-ordered-sku { position: relative; display: grid; justify-items: center; gap: 3px; }
+.cw-ordered-sku > em { position: absolute; z-index: 1; top: 4px; left: 4px; border-radius: 999px; background: rgba(13, 37, 47, .82); color: #fff; padding: 2px 6px; font-size: 9px; font-style: normal; }
+.cw-ordered-sku > div { display: flex; gap: 3px; }
+.cw-ordered-sku > div button { min-width: 28px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--ink); }
 .cw-source-folders { border-bottom: 1px solid var(--line); align-items: center; gap: 7px; min-height: 52px; padding: 8px 14px; overflow-x: auto; display: flex; }
 .cw-source-folders > button { color: var(--ink); background: #fff; border: 1px solid var(--line); border-radius: 7px; white-space: nowrap; min-height: 34px; padding: 0 9px; font-size: 10px; font-weight: 700; }
 .cw-source-folders > button.active { border-color: var(--teal); background: var(--teal-soft); }

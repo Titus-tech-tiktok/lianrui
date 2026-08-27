@@ -25,6 +25,7 @@ test('多嘻噜卡使用永沙式资产管理、左右任务台和五段生产�
     ['childrenwearRealAssetsPath', '实拍产品图'],
     ['childrenwearReferenceAssetsPath', '成品参考图'],
     ['childrenwearModelAssetsPath', '参考模特图'],
+    ['childrenwearSceneAssetsPath', '场景参考图'],
     ['childrenwearCombinationAssetsPath', '组合图']
   ]) {
     assert.match(index, new RegExp(`data-childrenwear-library-tab="${key}"`));
@@ -56,7 +57,7 @@ test('多嘻噜卡使用永沙式资产管理、左右任务台和五段生产�
   assert.doesNotMatch(index, /childrenwearMasterNote|childrenwearModelNote|补充要求/);
   assert.match(index, /id="childrenwearAssetPickerModal"/);
   assert.doesNotMatch(index, /class="sidebar-preview-control"/);
-  assert.ok((index.match(/data-image-preview-size/g) || []).length >= 4);
+  assert.ok((index.match(/data-image-preview-size/g) || []).length >= 5);
   assert.doesNotMatch(index, /data-open-childrenwear-library=/);
   assert.doesNotMatch(index, /childrenwear-hero/);
   assert.match(renderer, /function setChildrenwearAssetTab/);
@@ -66,9 +67,12 @@ test('多嘻噜卡使用永沙式资产管理、左右任务台和五段生产�
   assert.match(renderer, /function parseChildrenwearStylePackage/);
   assert.match(renderer, /function importChildrenwearStylePackage/);
   assert.equal((index.match(/data-import-childrenwear-style-package/g) || []).length, 4);
-  assert.equal((index.match(/>按用途文件夹导入<\/button>/g) || []).length, 4);
+  assert.equal((index.match(/>按用途文件夹导入<\/button>/g) || []).length, 5);
   assert.doesNotMatch(index, /data-open-childrenwear-production="master">进入生成平铺图/);
-  for (const folderName of ['实拍图', '成品图', '模特图', '组合图']) assert.match(renderer, new RegExp(`${folderName}:`));
+  for (const folderName of ['实拍图', '成品图', '模特图', '场景图', '组合图']) assert.match(renderer, new RegExp(`${folderName}:`));
+  assert.match(index, /data-cw-model-background="model_reference"/);
+  assert.match(index, /data-cw-model-background="white"/);
+  assert.match(index, /data-cw-model-background="scene_reference"/);
   assert.match(renderer, /function renameChildrenwearLibraryFolder/);
   assert.match(renderer, /避免素材被合并/);
   assert.match(renderer, /function renderCwQueue/);

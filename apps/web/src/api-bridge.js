@@ -325,6 +325,7 @@ function assetKindFromKey(key) {
     childrenwearRealAssetsPath: 'childrenwear-real',
     childrenwearReferenceAssetsPath: 'childrenwear-reference',
     childrenwearModelAssetsPath: 'childrenwear-model',
+    childrenwearSceneAssetsPath: 'childrenwear-scene',
     childrenwearCombinationAssetsPath: 'childrenwear-combination'
   })[key] || 'template';
 }

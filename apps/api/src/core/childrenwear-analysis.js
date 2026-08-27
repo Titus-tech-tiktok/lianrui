@@ -8,6 +8,7 @@ const ROLE_BY_LIBRARY_KEY = Object.freeze({
   childrenwearRealAssetsPath: 'product',
   childrenwearReferenceAssetsPath: 'flat_reference',
   childrenwearModelAssetsPath: 'model_reference',
+  childrenwearSceneAssetsPath: 'scene_reference',
   childrenwearCombinationAssetsPath: 'combination_reference'
 });
 
@@ -46,6 +47,14 @@ const ROLE_PROMPTS = Object.freeze({
     'Required JSON shape:',
     '{"schema_version":"1.1","asset_role":"model_reference","summary":"","reference_value":{"why_selected":"","action_to_transfer":"","fold_and_drape_logic":""},"canvas":{"aspect_ratio":"","crop":"","camera":""},"model":{"age_band":"","body_orientation":"","pose":"","weight_bearing":"","limbs":[],"hands":[],"feet":[]},"garment_display":{"target_regions":[],"occupancy":0.0,"on_body_outline":"","detail_display_actions":[],"fit":"","drape":"","folds":[{"region":"","normalized_path_or_zone":"","direction":"","intensity":"","cause":"gravity|bend|compression|overlap|tension"}],"visible_regions":[],"hidden_regions":[]},"occlusions":[{"occluder":"","target_region":"","layer_order":""}],"protected_regions":[],"editable_regions":[],"scene":{"background":{"description":"","colors":[{"hex_estimate":"","coverage":0.0}],"gradient":"","texture":""},"props":[]},"lighting":{"direction":"","contrast":"","softness":"","color_temperature":""},"shadow":{"footprint":"","direction":"","softness":"","opacity":""},"uncertain_regions":[]}',
     'Identify every protected person/scene region, the replaceable garment region, exact body pose and joint bends, on-body product outline, detail-display actions, garment occupancy, every major gravity/tension/compression fold zone, overlap and front/back layer order, background colour/gradient/texture, lighting and shadow footprint. These are exact presentation targets, not loose style hints.'
+  ].join('\n'),
+  scene_reference: [
+    'CHILDRENSWEAR_SCENE_REFERENCE_ANALYSIS',
+    'Analyze this image only as an optional ecommerce environment reference. It controls the background, environment, props, camera mood, lighting and ground/contact-shadow conditions. It never controls the product, model identity, model pose or garment folds.',
+    ...COMMON_RULES,
+    'Required JSON shape:',
+    '{"schema_version":"1.1","asset_role":"scene_reference","summary":"","reference_value":{"why_selected":"","environment_to_transfer":""},"canvas":{"aspect_ratio":"","crop":"","camera":""},"scene":{"environment_type":"","background":{"description":"","colors":[{"hex_estimate":"","coverage":0.0}],"gradient":"","texture":""},"ground":"","props":[{"description":"","position":{"x":0.0,"y":0.0},"layer":"background|foreground"}]} ,"lighting":{"direction":"","contrast":"","softness":"","color_temperature":""},"shadow":{"footprint":"","direction":"","softness":"","opacity":""},"protected_scene_elements":[],"uncertain_regions":[]}',
+    'Explain why the scene is useful, then extract only reproducible environment facts: canvas/crop, background, ground, props and their layer order, lighting, colour temperature and shadow conditions. Do not infer or prescribe a person, pose, clothing identity, garment placement or garment folds.'
   ].join('\n'),
   combination_reference: [
     'CHILDRENSWEAR_COMBINATION_REFERENCE_ANALYSIS',
@@ -102,6 +111,7 @@ function normalizeChildrenwearAssetAnalysis(roleValue, value) {
     product: 'real_product',
     flat_reference: 'flat_presentation_reference',
     model_reference: 'model_reference',
+    scene_reference: 'scene_reference',
     combination_reference: 'combination_reference'
   }[role];
   parsed.schema_version = ANALYSIS_SCHEMA_VERSION;

@@ -50,9 +50,9 @@ test('childrenwear prompts keep real product and reference roles separate', () =
 
   const model = buildChildrenwearModelPrompt({ productManifest, referenceSpec: { model: { pose: '站立' } } });
   assert.match(model, /image 1 is the approved flat-lay master/i);
-  assert.match(model, /final model, action, pose, garment-deformation and scene reference/i);
+  assert.match(model, /final model, action, pose and garment-deformation reference/i);
   assert.match(model, /纯棉梭织/);
-  assert.match(model, /Preserve the model identity/i);
+  assert.match(model, /Preserve model identity\/type/i);
   assert.match(model, /Natural occlusion/i);
   assert.match(model, /action blueprint/i);
   assert.match(model, /fold flow and wrinkle zones/i);
@@ -60,7 +60,20 @@ test('childrenwear prompts keep real product and reference roles separate', () =
   assert.match(model, /Never convert the real SKU into the reference garment type/i);
   assert.match(model, /REFERENCE PRESENTATION LOCK/i);
   assert.match(model, /PRODUCT IDENTITY LOCK/i);
-  assert.match(model, /pose\/background\/folds\/shadows\/detail-display action/i);
+  assert.match(model, /CONTROLLED RANDOM MICRO-VARIATION/i);
+  assert.match(model, /natural facial expression, gaze direction and small head-angle variation/i);
+  assert.match(model, /No dramatic turn, jump, squat/i);
+  assert.match(model, /keep the model visually centred/i);
+  assert.match(model, /BACKGROUND MICRO-VARIATION/i);
+
+  const whiteModel = buildChildrenwearModelPrompt({ productManifest, referenceSpec: {}, backgroundMode: 'white' });
+  assert.match(whiteModel, /BACKGROUND MODE: PURE WHITE/i);
+  assert.match(whiteModel, /RGB\(255,255,255\)/i);
+  assert.match(whiteModel, /BACKGROUND VARIATION: none/i);
+  const sceneModel = buildChildrenwearModelPrompt({ productManifest, referenceSpec: {}, backgroundMode: 'scene_reference', sceneSpec: { scene: { environment_type: 'nursery' } } });
+  assert.match(sceneModel, /image 3 is the only environment\/background/i);
+  assert.match(sceneModel, /SCENE_REFERENCE_SPEC/i);
+  assert.match(sceneModel, /never controls the person, pose, garment identity or garment folds/i);
 });
 
 test('combination prompts use the real reference index for two to four masters', () => {
