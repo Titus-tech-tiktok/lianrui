@@ -27,7 +27,7 @@ const LONG_JOB_METHODS = new Set([
   'prepareTemplates', 'generateFree', 'generateTask', 'generateTemplateMaster',
   'generateTemplates', 'regenerateTemplate',
   'analyzeChildrenwearAssets', 'scanPendingChildrenwearAnalysis',
-  'generateChildrenwearMaster', 'generateChildrenwearModel', 'generateChildrenwearCombination'
+  'generateChildrenwearMaster', 'generateChildrenwearModel', 'generateChildrenwearCombination', 'generateChildrenwearBatch'
 ]);
 const SUPERADMIN_RPC_METHODS = new Set([
   'getApiSettings', 'saveApiSettings', 'testApiSettings', 'testRelayHealth', 'savePromptSetting', 'resetPromptSetting'
@@ -1183,6 +1183,30 @@ const rpc = {
     combinationReferencePath: managedPath(payload?.combinationReferencePath, { message: '组合参考图不属于当前工作区或任务目录' }),
     masterPaths: [...new Set((payload?.masterPaths || []).map(value => managedPath(value, { message: '母版图不属于当前输出目录' })))]
   }, context || {}),
+  generateChildrenwearBatch: ([payload], context) => {
+    const stage = String(payload?.stage || '');
+    const items = (Array.isArray(payload?.items) ? payload.items : []).slice(0, 500).map(item => {
+      if (stage === 'master') return {
+        ...(item || {}),
+        folder: item?.folder ? managedPath(item.folder) : '',
+        realPhotoPath: managedPath(item?.realPhotoPath, { message: '实拍图不属于当前工作区或任务目录' }),
+        referencePath: managedPath(item?.referencePath, { message: '参考成品图不属于当前工作区或任务目录' })
+      };
+      if (stage === 'model') return {
+        ...(item || {}),
+        folder: managedPath(item?.folder, { message: '童装任务不属于当前输出目录' }),
+        modelReferencePath: managedPath(item?.modelReferencePath, { message: '模特参考图不属于当前工作区或任务目录' })
+      };
+      if (stage === 'combination') return {
+        ...(item || {}),
+        folder: item?.folder ? managedPath(item.folder, { message: '组合图任务不属于当前输出目录' }) : '',
+        combinationReferencePath: managedPath(item?.combinationReferencePath, { message: '组合参考图不属于当前工作区或任务目录' }),
+        masterPaths: [...new Set((item?.masterPaths || []).map(value => managedPath(value, { message: '母版图不属于当前输出目录' })))]
+      };
+      return item || {};
+    });
+    return runtime.generateChildrenwearBatch({ stage, items }, context || {});
+  },
   listChildrenwearTasks: () => runtime.listChildrenwearTasks(),
   renameChildrenwearTask: ([payload]) => runtime.renameChildrenwearTask({
     ...(payload || {}),
@@ -1248,6 +1272,9 @@ async function startServer() {
       uptimeSeconds: Math.floor(process.uptime()),
       activeImageRequests: queue.active,
       queuedImageRequests: queue.queued,
+      activeBackgroundJobs: activeJobs,
+      queuedBackgroundJobs: pendingJobs.length,
+      maxBackgroundJobs: MAX_ACTIVE_JOBS,
       currentImageConcurrency: queue.currentConcurrency,
       maxImageConcurrency: queue.maxConcurrency,
       imageStartIntervalMs: queue.minStartIntervalMs

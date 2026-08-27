@@ -4455,6 +4455,72 @@ async function generateChildrenwearCombination(payload = {}, options = {}) {
   return writeChildrenwearTask(folder, task);
 }
 
+async function generateChildrenwearBatch(payload = {}, options = {}) {
+  const stage = ['master', 'model', 'combination'].includes(payload.stage) ? payload.stage : '';
+  if (!stage) throw new Error('童装批量生成阶段无效');
+  const items = (Array.isArray(payload.items) ? payload.items : []).slice(0, 500);
+  if (!items.length) throw new Error('没有可以生成的童装任务');
+  const records = items.map((item, index) => ({ index, item: item || {} }));
+  const groups = new Map();
+  for (const record of records) {
+    const folder = String(record.item.folder || '');
+    const key = stage === 'model'
+      ? `model:${record.index}`
+      : folder
+        ? `${stage}:${path.resolve(folder).toLocaleLowerCase('en-US')}`
+        : `${stage}:new:${record.index}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(record);
+  }
+  const results = new Array(records.length);
+  let completed = 0;
+  let failed = 0;
+  const total = records.length;
+  const concurrency = childrenwearAnalysisConcurrencyLimit(groups.size);
+  const generate = stage === 'master'
+    ? generateChildrenwearMaster
+    : stage === 'model'
+      ? generateChildrenwearModel
+      : generateChildrenwearCombination;
+  await options.reportProgress?.({ phase: 'running', current: 0, total, percent: 0, concurrency, message: `已提交 ${total} 个任务，服务端并发处理中` });
+  await runWithConcurrency([...groups.values()], concurrency, async group => {
+    for (const record of group) {
+      const itemProgress = update => options.reportProgress?.({
+        ...(update || {}),
+        current: completed,
+        total,
+        concurrency,
+        itemIndex: record.index,
+        itemState: 'running',
+        percent: Math.min(99, Math.round((completed / total) * 100)),
+        message: update?.message || `正在处理第 ${record.index + 1} 个任务`
+      });
+      try {
+        const value = await generate(record.item, { signal: options.signal, reportProgress: itemProgress });
+        completed += 1;
+        results[record.index] = { index: record.index, ok: true, value };
+        await options.reportProgress?.({
+          phase: 'generating', current: completed, total, concurrency,
+          itemIndex: record.index, itemState: 'completed',
+          percent: Math.round((completed / total) * 100),
+          message: `已完成 ${completed}/${total}`
+        });
+      } catch (error) {
+        completed += 1;
+        failed += 1;
+        results[record.index] = { index: record.index, ok: false, error: error?.message || String(error) };
+        await options.reportProgress?.({
+          phase: 'generating', current: completed, total, concurrency,
+          itemIndex: record.index, itemState: 'failed', itemError: error?.message || String(error),
+          percent: Math.round((completed / total) * 100),
+          message: `已完成 ${completed}/${total}，失败 ${failed}`
+        });
+      }
+    }
+  });
+  return { stage, total, completed: total - failed, failed, concurrency, results };
+}
+
 async function initializeRuntime() {
   await Promise.all([
     fsp.mkdir(currentUserDataRoot(), { recursive: true }),
@@ -4487,6 +4553,7 @@ const runtimeExports = {
   fileFromToken,
   fileToken,
   approveChildrenwearOutput,
+  generateChildrenwearBatch,
   generateChildrenwearCombination,
   generateChildrenwearMaster,
   generateChildrenwearModel,

@@ -24,11 +24,14 @@ test('health endpoint exposes deployment and image queue state only', async () =
     assert.equal(response.status, 200);
     assert.deepEqual(Object.keys(body).sort(), [
       'activeImageRequests',
+      'activeBackgroundJobs',
       'commit',
       'currentImageConcurrency',
       'imageStartIntervalMs',
+      'maxBackgroundJobs',
       'maxImageConcurrency',
       'ok',
+      'queuedBackgroundJobs',
       'queuedImageRequests',
       'uptimeSeconds'
     ].sort());

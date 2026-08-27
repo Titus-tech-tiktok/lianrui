@@ -6938,6 +6938,40 @@ function setChildrenwearProductionTab(tab) {
   renderCwQueue(next);
 }
 
+function cwDraftGenerationPayload(stage, draft) {
+  if (stage === 'master') return {
+    folder: draft.taskFolder || '', realPhotoPath: draft.real.path, referencePath: draft.reference.path,
+    taskName: draft.title, taskCode: draft.taskCode, category: draft.real.folder || '童装', material: '以实拍图为准', craft: '', extraInstruction: ''
+  };
+  if (stage === 'model') return {
+    folder: draft.master.taskFolder, taskName: draft.title,
+    modelReferencePath: draft.reference.path, extraInstruction: ''
+  };
+  return {
+    folder: draft.taskFolder || draft.masters[0]?.taskFolder || '', taskName: draft.title,
+    masterPaths: draft.masters.map(item => item.path), combinationReferencePath: draft.reference.path
+  };
+}
+
+function applyCwDraftGenerationResult(stage, draft, result) {
+  draft.taskFolder = result.folder;
+  draft.taskCode = result.taskCode || draft.taskCode;
+  draft.styleName = result.styleName || draft.styleName;
+  draft.title = result.taskName || draft.title || cwTaskDisplayName(draft.styleName, draft.taskCode);
+  if (stage === 'master') {
+    draft.result = { path: result.masterPath, url: result.masterUrl, thumbnailUrl: result.masterThumbnailUrl, previewUrl: result.masterPreviewUrl, name: `平铺母版 v${result.masterVersion || 1}` };
+  } else {
+    const output = (stage === 'model' ? result.modelOutputs : result.combinationOutputs)?.at(-1);
+    draft.outputId = output?.id;
+    draft.result = output ? {
+      path: output.path, url: output.url, thumbnailUrl: output.thumbnailUrl, previewUrl: output.previewUrl,
+      name: stage === 'model' ? '模特图候选' : '组合图候选'
+    } : null;
+  }
+  draft.status = '等待成品审核';
+  draft.progress = stage === 'master' ? '平铺图已生成，请在当前页面高清审核' : '已进入 05 成品审核与下载';
+}
+
 async function runCwDraft(stage, draft, options = {}) {
   if (!cwDraftReady(draft) || (draft.status === '生成中' && !options.prepared)) return;
   if (!options.prepared) {
@@ -6946,31 +6980,16 @@ async function runCwDraft(stage, draft, options = {}) {
   }
   if (!options.deferRender) renderCwQueue(stage);
   try {
-    if (stage === 'master') {
-      const result = await window.caishen.generateChildrenwearMaster({
-        folder: draft.taskFolder || '', realPhotoPath: draft.real.path, referencePath: draft.reference.path,
-        taskName: draft.title, taskCode: draft.taskCode, category: draft.real.folder || '童装', material: '以实拍图为准', craft: '', extraInstruction: ''
-      }, progress => { draft.progress = progress.message || '正在生成平铺图'; updateCwQueueProgress(stage, draft); });
-      draft.taskFolder = result.folder;
-      draft.taskCode = result.taskCode || draft.taskCode;
-      draft.styleName = result.styleName || draft.styleName;
-      draft.title = result.taskName || cwTaskDisplayName(draft.styleName, draft.taskCode);
-      draft.result = { path: result.masterPath, url: result.masterUrl, thumbnailUrl: result.masterThumbnailUrl, previewUrl: result.masterPreviewUrl, name: `平铺母版 v${result.masterVersion || 1}` };
-    } else if (stage === 'model') {
-      const result = await window.caishen.generateChildrenwearModel({ folder: draft.master.taskFolder, taskName: draft.title, modelReferencePath: draft.reference.path, extraInstruction: '' }, progress => { draft.progress = progress.message || '正在生成模特图'; updateCwQueueProgress(stage, draft); });
-      const output = result.modelOutputs?.at(-1);
-      draft.taskFolder = result.folder;
-      draft.outputId = output?.id;
-      draft.result = output ? { path: output.path, url: output.url, thumbnailUrl: output.thumbnailUrl, previewUrl: output.previewUrl, name: '模特图候选' } : null;
-    } else {
-      const result = await window.caishen.generateChildrenwearCombination({ folder: draft.taskFolder || draft.masters[0]?.taskFolder || '', taskName: draft.title, masterPaths: draft.masters.map(item => item.path), combinationReferencePath: draft.reference.path }, progress => { draft.progress = progress.message || '正在生成组合图'; updateCwQueueProgress(stage, draft); });
-      const output = result.combinationOutputs?.at(-1);
-      draft.taskFolder = result.folder;
-      draft.outputId = output?.id;
-      draft.result = output ? { path: output.path, url: output.url, thumbnailUrl: output.thumbnailUrl, previewUrl: output.previewUrl, name: '组合图候选' } : null;
-    }
-    draft.status = '等待成品审核';
-    draft.progress = stage === 'master' ? '平铺图已生成，请在当前页面高清审核' : '已进入 05 成品审核与下载';
+    const generator = stage === 'master'
+      ? window.caishen.generateChildrenwearMaster
+      : stage === 'model'
+        ? window.caishen.generateChildrenwearModel
+        : window.caishen.generateChildrenwearCombination;
+    const result = await generator(cwDraftGenerationPayload(stage, draft), progress => {
+      draft.progress = progress.message || `正在生成${CW_STAGE_META[stage].label}`;
+      updateCwQueueProgress(stage, draft);
+    });
+    applyCwDraftGenerationResult(stage, draft, result);
     if (options.liveRefresh) void scheduleChildrenwearTaskRefresh();
     else if (!options.deferReload) await loadChildrenwearTasks();
     if (!options.silent) toast(stage === 'master' ? '平铺图生成完成，请在当前页面审核' : `${CW_STAGE_META[stage].label}生成完成，已进入 05 成品审核与下载`);
@@ -6987,40 +7006,59 @@ async function runCwDraft(stage, draft, options = {}) {
   }
 }
 
-function cwBatchGroupKey(stage, draft) {
-  // Multiple model references for the same style may call the image API in
-  // parallel. The backend performs a short atomic merge when each result is
-  // written into the shared style metadata.
-  if (stage === 'model') return `model:${draft.id}`;
-  if (stage === 'combination') return draft.taskFolder || draft.masters?.[0]?.taskFolder || `draft:${draft.id}`;
-  return draft.taskFolder || `draft:${draft.id}`;
-}
-
 async function runCwBatch(stage) {
   const drafts = cwFilteredDrafts(stage).filter(item => item.selected && cwDraftReady(item) && item.status !== '生成中');
   if (!drafts.length) return toast('请先选中已补齐素材的任务卡片', true);
-  const grouped = new Map();
-  for (const draft of drafts) {
-    const key = cwBatchGroupKey(stage, draft);
-    if (!grouped.has(key)) grouped.set(key, []);
-    grouped.get(key).push(draft);
-  }
-  const cwTaskGroups = [...grouped.values()];
-  const cwConcurrency = await apiBatchConcurrencyLimit(cwTaskGroups.length);
   for (const draft of drafts) {
     draft.status = '生成中';
-    draft.progress = '正在提交生成任务…';
+    draft.progress = '正在提交整批任务…';
   }
   renderCwQueue(stage);
-  await runClientConcurrency(cwTaskGroups, cwConcurrency, async group => {
-    // 组合图仍按共享任务目录保护写入；模特图每张卡片独立并发。
-    for (const draft of group) await runCwDraft(stage, draft, { prepared: true, deferRender: true, deferReload: true, liveRefresh: true, silent: true });
-  });
-  await flushChildrenwearTaskRefresh();
-  const failed = drafts.filter(draft => draft.status === '失败').length;
-  const succeeded = drafts.length - failed;
-  if (failed) return toast(`批量任务完成：成功 ${succeeded} 个，失败 ${failed} 个；失败卡片可单独重新生成`, true);
-  toast(stage === 'master' ? `${succeeded} 个平铺图任务已并发生成，请继续批量审核` : `${succeeded} 个任务已并发生成并进入成品审核与下载`);
+  try {
+    const batch = await window.caishen.generateChildrenwearBatch({
+      stage,
+      items: drafts.map(draft => cwDraftGenerationPayload(stage, draft))
+    }, progress => {
+      const index = Number(progress.itemIndex);
+      const draft = Number.isInteger(index) ? drafts[index] : null;
+      if (!draft) return;
+      if (progress.itemState === 'failed') {
+        draft.status = '失败';
+        draft.progress = childrenwearFriendlyError(progress.itemError || progress.message);
+      } else {
+        draft.progress = progress.itemState === 'completed'
+          ? '生成完成，正在同步审核结果…'
+          : (progress.message || `服务端并发处理中（${progress.concurrency || '-'} 路）`);
+        if (progress.itemState === 'completed') {
+          draft.status = '等待成品审核';
+          void scheduleChildrenwearTaskRefresh();
+        }
+      }
+      updateCwQueueProgress(stage, draft);
+    });
+    for (const record of batch.results || []) {
+      const draft = drafts[record.index];
+      if (!draft) continue;
+      if (record.ok) applyCwDraftGenerationResult(stage, draft, record.value);
+      else {
+        draft.status = '失败';
+        draft.progress = childrenwearFriendlyError(record.error);
+      }
+      updateCwQueueProgress(stage, draft);
+    }
+    await flushChildrenwearTaskRefresh();
+    const failed = Number(batch.failed) || drafts.filter(draft => draft.status === '失败').length;
+    const succeeded = drafts.length - failed;
+    if (failed) return toast(`批量任务完成：成功 ${succeeded} 个，失败 ${failed} 个；失败卡片可单独重新生成`, true);
+    toast(stage === 'master' ? `${succeeded} 个平铺图任务已并发生成，请继续批量审核` : `${succeeded} 个任务已并发生成并进入成品审核与下载`);
+  } catch (error) {
+    for (const draft of drafts.filter(item => item.status === '生成中')) {
+      draft.status = '失败';
+      draft.progress = childrenwearFriendlyError(error);
+      updateCwQueueProgress(stage, draft);
+    }
+    toast(`批量任务失败：${childrenwearFriendlyError(error)}`, true);
+  }
 }
 
 function cwFolderKey(value) {

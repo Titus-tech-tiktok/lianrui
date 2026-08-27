@@ -267,10 +267,19 @@ test('runtime completes master approval, model generation and combination with t
   await fs.access(withModel.modelOutputs[0].path);
   assert.equal(path.basename(path.dirname(withModel.modelOutputs[0].path)), '模特图');
 
-  await Promise.all(Array.from({ length: 3 }, () => runtime.generateChildrenwearModel({
-    folder: first.folder,
-    modelReferencePath: modelReference
-  })));
+  const modelBatchProgress = [];
+  const modelBatch = await runtime.generateChildrenwearBatch({
+    stage: 'model',
+    items: Array.from({ length: 3 }, () => ({
+      folder: first.folder,
+      modelReferencePath: modelReference
+    }))
+  }, { reportProgress: update => modelBatchProgress.push(update) });
+  assert.equal(modelBatch.total, 3);
+  assert.equal(modelBatch.completed, 3);
+  assert.equal(modelBatch.failed, 0);
+  assert.equal(modelBatch.results.every(item => item.ok), true);
+  assert.equal(modelBatchProgress.filter(item => item.itemState === 'completed').length, 3);
   assert.ok(maxActiveImageRequests >= 3, `expected concurrent model calls, observed ${maxActiveImageRequests}`);
   const afterConcurrentModels = (await runtime.listChildrenwearTasks()).find(item => item.folder === first.folder);
   assert.equal(afterConcurrentModels.modelOutputs.length, 4);

@@ -653,6 +653,12 @@ window.caishen = {
     `childrenwear-combination:${Date.now()}:${createClientId()}`,
     onProgress
   ),
+  generateChildrenwearBatch: (payload, onProgress) => runJob(
+    'generateChildrenwearBatch',
+    [payload],
+    `childrenwear-batch:${payload?.stage || 'unknown'}:${Date.now()}:${createClientId()}`,
+    onProgress
+  ),
   listChildrenwearTasks: () => rpc('listChildrenwearTasks'),
   renameChildrenwearTask: payload => rpc('renameChildrenwearTask', payload),
   deleteChildrenwearTasks: folders => rpc('deleteChildrenwearTasks', folders),
