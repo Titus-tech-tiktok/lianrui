@@ -119,6 +119,59 @@ test('multipart asset sync keeps the member workspace context', async () => {
     assert.deepEqual(repeatResult.paths, result.paths);
     assert.deepEqual(repeatResult.uploadedPaths, []);
 
+    const cachedLibraryResponse = await fetch(`${base}/api/rpc`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({
+        method: 'listImageLibrary',
+        args: [result.root, { folder: 'auto', page: 1, pageSize: 48 }]
+      })
+    });
+    if (cachedLibraryResponse.status !== 200) assert.fail(await cachedLibraryResponse.text());
+    assert.equal((await cachedLibraryResponse.json()).data.total, 1);
+
+    const appendPrepare = await fetch(`${base}/api/assets/sync/prepare/print`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({
+        currentRoot: result.root,
+        rootName: 'prints',
+        files: [{ name: 'leaf.png', relativePath: 'leaf.png', size: 6, lastModified: 2000 }]
+      })
+    });
+    assert.equal(appendPrepare.status, 200);
+    const appendPrepared = (await appendPrepare.json()).data;
+
+    const appendForm = new FormData();
+    appendForm.append('files', new Blob([Buffer.from('second')], { type: 'image/png' }), 'leaf.png');
+    appendForm.append('relativePaths', JSON.stringify(['leaf.png']));
+    appendForm.append('lastModified', JSON.stringify([2000]));
+    const appendUpload = await fetch(`${base}/api/assets/sync/upload/${appendPrepared.sessionId}`, {
+      method: 'POST',
+      headers: { Cookie: cookie },
+      body: appendForm
+    });
+    if (appendUpload.status !== 200) assert.fail(await appendUpload.text());
+
+    const appendFinish = await fetch(`${base}/api/assets/sync/finish/${appendPrepared.sessionId}`, {
+      method: 'POST',
+      headers: { Cookie: cookie }
+    });
+    if (appendFinish.status !== 200) assert.fail(await appendFinish.text());
+
+    const refreshedLibraryResponse = await fetch(`${base}/api/rpc`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({
+        method: 'listImageLibrary',
+        args: [result.root, { folder: 'auto', page: 1, pageSize: 48 }]
+      })
+    });
+    if (refreshedLibraryResponse.status !== 200) assert.fail(await refreshedLibraryResponse.text());
+    const refreshedLibrary = (await refreshedLibraryResponse.json()).data;
+    assert.equal(refreshedLibrary.total, 2);
+    assert.deepEqual(refreshedLibrary.items.map(item => item.name).sort(), ['flower.png', 'leaf.png']);
+
     const configResponse = await fetch(`${base}/api/rpc`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },

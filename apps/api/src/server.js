@@ -946,6 +946,7 @@ async function finishAssetSync(sessionId, workspaceId = runtime.WORKSPACE_ID) {
   if (missing) throw new Error(`还有 ${missing} 张图片未上传完成`);
   await fsp.mkdir(session.root, { recursive: true });
   if (session.kind === 'template') await runtime.prepareTemplateStructure(session.root);
+  runtime.invalidateImageLibraryIndex(session.root);
   assetSyncSessions.delete(session.id);
   return {
     root: session.root,
