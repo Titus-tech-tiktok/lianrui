@@ -7368,23 +7368,26 @@ function cwCompareQueue() {
 function cwCompareSources(item) {
   const task = item.task || {};
   const sources = [];
-  const add = (key, label, url, kind = 'source', primary = false) => { if (url) sources.push({ key, label, url, kind, primary }); };
+  const add = (key, label, url, kind = 'source', primary = false, previewUrl = '') => {
+    if (url) sources.push({ key, label, url, previewUrl: previewUrl || url, kind, primary });
+  };
   if (item.stage === 'master') {
-    add('result', '生成平铺母版图', item.url, 'result', true);
-    add('real', '实拍产品图', task.realPhotoUrl);
-    add('reference', '成品参考图', task.referenceUrl);
-    (task.masterHistory || []).filter(history => history.url && history.path !== item.path).slice().reverse().forEach(history => add(`history-${history.version}`, `历史平铺图 v${history.version}`, history.url, 'history'));
+    add('result', '生成平铺母版图', item.url, 'result', true, item.previewUrl);
+    add('real', '实拍产品图', task.realPhotoUrl, 'source', false, task.realPhotoPreviewUrl);
+    add('reference', '成品参考图', task.referenceUrl, 'source', false, task.referencePreviewUrl);
+    (task.masterHistory || []).filter(history => history.url && history.path !== item.path).slice().reverse().forEach(history => add(`history-${history.version}`, `历史平铺图 v${history.version}`, history.url, 'history', false, history.previewUrl));
   } else if (item.stage === 'model') {
-    add('master', '已审核平铺母版', item.output?.masterUrl || task.masterUrl, 'source', true);
-    add('real', '实拍产品图', task.realPhotoUrl);
-    add('reference', '成品参考图', task.referenceUrl);
-    add('model-reference', '参考模特图', item.output?.modelReferenceUrl);
-    add('result', '生成模特上身图', item.url, 'result');
+    add('master', '已审核平铺母版', item.output?.masterUrl || task.masterUrl, 'source', true, item.output?.masterPreviewUrl || task.masterPreviewUrl);
+    add('real', '实拍产品图', task.realPhotoUrl, 'source', false, task.realPhotoPreviewUrl);
+    add('reference', '成品参考图', task.referenceUrl, 'source', false, task.referencePreviewUrl);
+    add('model-reference', '参考模特图', item.output?.modelReferenceUrl, 'source', false, item.output?.modelReferencePreviewUrl);
+    add('result', '生成模特上身图', item.url, 'result', false, item.previewUrl);
   } else {
     const masterUrls = item.output?.masterUrls?.length ? item.output.masterUrls : (task.masterUrls || []);
-    masterUrls.forEach((url, index) => add(`master-${index}`, `已审核平铺图 ${String.fromCharCode(65 + index)}`, url, 'source', index === 0));
-    add('combination-reference', '组合参考图', item.output?.combinationReferenceUrl || task.combinationReferenceUrl);
-    add('result', '生成多 SKU 组合图', item.url, 'result');
+    const masterPreviewUrls = item.output?.masterPreviewUrls?.length ? item.output.masterPreviewUrls : (task.masterPreviewUrls || []);
+    masterUrls.forEach((url, index) => add(`master-${index}`, `已审核平铺图 ${String.fromCharCode(65 + index)}`, url, 'source', index === 0, masterPreviewUrls[index]));
+    add('combination-reference', '组合参考图', item.output?.combinationReferenceUrl || task.combinationReferenceUrl, 'source', false, item.output?.combinationReferencePreviewUrl || task.combinationReferencePreviewUrl);
+    add('result', '生成多 SKU 组合图', item.url, 'result', false, item.previewUrl);
   }
   return sources;
 }
@@ -7469,8 +7472,40 @@ function resetCwCompareView() {
   applyCwCompareTransform();
 }
 
-function setCwCompareActual(image = null) {
-  const target = image || $('#cwComparePanes .cw-compare-pane.result [data-cw-compare-image]') || $('#cwComparePanes [data-cw-compare-image]');
+async function loadCwCompareOriginal(target) {
+  const originalUrl = target?.dataset.originalSrc || '';
+  if (!target || !originalUrl || target.dataset.originalLoaded === 'true') return target;
+  const compareId = state.childrenwearCompareId;
+  const button = $('#cwCompareActual');
+  if (button) {
+    button.disabled = true;
+    button.textContent = '正在加载原图…';
+  }
+  try {
+    const preload = new Image();
+    preload.decoding = 'async';
+    preload.src = originalUrl;
+    if (typeof preload.decode === 'function') await preload.decode();
+    else await new Promise((resolve, reject) => { preload.onload = resolve; preload.onerror = reject; });
+    if (!target.isConnected || state.childrenwearCompareId !== compareId) return null;
+    target.src = originalUrl;
+    target.dataset.originalLoaded = 'true';
+    if (typeof target.decode === 'function') await target.decode().catch(() => {});
+    return target;
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = '原始像素 1:1';
+    }
+  }
+}
+
+async function setCwCompareActual(image = null) {
+  let target = image || $('#cwComparePanes .cw-compare-pane.result [data-cw-compare-image]') || $('#cwComparePanes [data-cw-compare-image]');
+  target = await loadCwCompareOriginal(target).catch(() => {
+    toast('原始图片加载失败，请稍后重试', true);
+    return null;
+  });
   const frame = target?.closest('.cw-compare-frame');
   if (!target?.naturalWidth || !frame?.clientWidth || !frame?.clientHeight) return;
   const fitScale = Math.min(frame.clientWidth / target.naturalWidth, frame.clientHeight / target.naturalHeight);
@@ -7507,7 +7542,10 @@ function renderCwCompare() {
   const panes = $('#cwComparePanes');
   panes.style.setProperty('--cw-compare-count', String(sources.length));
   panes.style.setProperty('--cw-compare-column-width', `${(92 / Math.min(3, Math.max(1, sources.length))).toFixed(3)}vw`);
-  panes.innerHTML = sources.map((source, sourceIndex) => `<figure class="cw-compare-pane ${source.kind === 'result' ? 'result' : ''}" data-cw-source-key="${escapeHtml(source.key)}"><figcaption draggable="true" title="按住拖动调整对比顺序"><i aria-hidden="true">⠿</i><span>${String(sourceIndex + 1).padStart(2, '0')}</span><b>${escapeHtml(source.label)}</b>${source.kind === 'result' ? '<em>生成结果</em>' : source.kind === 'history' ? '<em>历史版本</em>' : '<em>参考依据</em>'}</figcaption><div class="cw-compare-frame"><img draggable="false" src="${escapeHtml(source.url)}" data-cw-compare-image alt="${escapeHtml(source.label)}原始高清图"></div></figure>`).join('');
+  panes.innerHTML = sources.map((source, sourceIndex) => {
+    const previewUrl = source.previewUrl || source.url;
+    return `<figure class="cw-compare-pane ${source.kind === 'result' ? 'result' : ''}" data-cw-source-key="${escapeHtml(source.key)}"><figcaption draggable="true" title="按住拖动调整对比顺序"><i aria-hidden="true">⠿</i><span>${String(sourceIndex + 1).padStart(2, '0')}</span><b>${escapeHtml(source.label)}</b>${source.kind === 'result' ? '<em>生成结果</em>' : source.kind === 'history' ? '<em>历史版本</em>' : '<em>参考依据</em>'}</figcaption><div class="cw-compare-frame"><img draggable="false" decoding="async" src="${escapeHtml(previewUrl)}" data-original-src="${escapeHtml(source.url)}" data-original-loaded="${previewUrl === source.url ? 'true' : 'false'}" data-cw-compare-image alt="${escapeHtml(source.label)}高清预览图"></div></figure>`;
+  }).join('');
   applyCwCompareTransform();
 }
 

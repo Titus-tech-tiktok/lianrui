@@ -124,7 +124,7 @@ test('多嘻噜卡使用永沙式资产管理、左右任务台和五段生产�
   assert.match(renderer, /if \(currentPage === 'childrenwear'\) \{/);
   assert.doesNotMatch(renderer, /for \(const stage of Object\.keys\(CW_STAGE_META\)\) \{\s*renderCwSource\(stage\);\s*renderCwQueue\(stage\);/);
   assert.match(renderer, /function cwCompareSources/);
-  assert.match(renderer, /add\('result', '生成平铺母版图', item\.url, 'result', true\)/);
+  assert.match(renderer, /add\('result', '生成平铺母版图', item\.url, 'result', true, item\.previewUrl\)/);
   assert.match(renderer, /const primaryKey = sources\.find\(source => source\.primary\)/);
   assert.match(renderer, /function toggleCwCompareSource/);
   assert.match(renderer, /function reorderCwCompareSource/);
@@ -132,6 +132,9 @@ test('多嘻噜卡使用永沙式资产管理、左右任务台和五段生产�
   assert.match(renderer, /ondragstart/);
   assert.match(renderer, /function openCwCompare/);
   assert.match(renderer, /function setCwCompareActual/);
+  assert.match(renderer, /async function loadCwCompareOriginal/);
+  assert.match(renderer, /data-original-src/);
+  assert.match(renderer, /source\.previewUrl \|\| source\.url/);
   assert.match(renderer, /高清审核/);
   assert.doesNotMatch(renderer, /data-cw-review-open=/);
   assert.doesNotMatch(renderer, /data-cw-review-flag=/);
