@@ -72,7 +72,11 @@ test('多嘻噜卡使用永沙式资产管理、左右任务台和五段生产�
   assert.match(renderer, /function renameChildrenwearLibraryFolder/);
   assert.match(renderer, /避免素材被合并/);
   assert.match(renderer, /function renderCwQueue/);
+  assert.match(renderer, /childrenwearQueueVisibleLimits: \{ master: 36, model: 36, combination: 36 \}/);
+  assert.match(renderer, /const renderedDrafts = visibleDrafts\.slice\(0, visibleLimit\)/);
+  assert.match(renderer, /data-cw-queue-more/);
   assert.match(renderer, /function syncCwDraftsFromTasks/);
+  assert.match(renderer, /const taskByMasterPath = new Map/);
   assert.match(renderer, /task\.modelOutputs/);
   assert.match(renderer, /task\.combinationOutputs/);
   assert.match(renderer, /saved-\$\{stage\}:\$\{task\.folder\}:\$\{output\.id\}/);
@@ -90,6 +94,7 @@ test('多嘻噜卡使用永沙式资产管理、左右任务台和五段生产�
   assert.match(server, /'generateChildrenwearBatch'/);
   assert.match(renderer, /function scheduleChildrenwearTaskRefresh/);
   assert.match(renderer, /function cwReviewItemForDraft/);
+  assert.match(renderer, /reviewIndex\.byId\.get/);
   assert.match(renderer, /void scheduleChildrenwearTaskRefresh\(\)/);
   assert.match(renderer, /function flushChildrenwearTaskRefresh/);
   assert.match(renderer, /await flushChildrenwearTaskRefresh\(\)/);
@@ -98,6 +103,10 @@ test('多嘻噜卡使用永沙式资产管理、左右任务台和五段生产�
   assert.match(renderer, /options\.resultsOnly/);
   assert.doesNotMatch(renderer, /for \(const draft of drafts\) await runCwDraft\(stage, draft\)/);
   assert.match(renderer, /function regenerateCwReviewItem/);
+  assert.match(renderer, /childrenwearReviewVisibleGroupLimit: 12/);
+  assert.match(renderer, /data-cw-review-more-groups/);
+  assert.match(renderer, /if \(currentPage === 'childrenwear'\) \{/);
+  assert.doesNotMatch(renderer, /for \(const stage of Object\.keys\(CW_STAGE_META\)\) \{\s*renderCwSource\(stage\);\s*renderCwQueue\(stage\);/);
   assert.match(renderer, /function cwCompareSources/);
   assert.match(renderer, /add\('result', '生成平铺母版图', item\.url, 'result', true\)/);
   assert.match(renderer, /const primaryKey = sources\.find\(source => source\.primary\)/);

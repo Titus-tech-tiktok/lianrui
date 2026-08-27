@@ -237,9 +237,11 @@ const state = {
   childrenwearDrafts: { master: [], model: [], combination: [] },
   childrenwearActiveDraft: { master: '', model: '', combination: '' },
   childrenwearQueueFilters: { master: 'all', model: 'all', combination: 'all' },
+  childrenwearQueueVisibleLimits: { master: 36, model: 36, combination: 36 },
   childrenwearReviewSelection: new Set(),
   childrenwearReviewFilter: 'pending',
   childrenwearReviewGroupLimits: new Map(),
+  childrenwearReviewVisibleGroupLimit: 12,
   childrenwearCompareId: '',
   childrenwearCompareContext: 'review',
   childrenwearCompareZoom: 1,
@@ -1659,6 +1661,8 @@ function setPage(name) {
   requestAnimationFrame(() => {
     if (currentPage !== name) return;
     if (name === 'review') loadReviews({ silent: state.reviews.length > 0 });
+    if (name === 'childrenwear') setChildrenwearProductionTab(state.childrenwearProductionTab);
+    if (name === 'childrenwear-review') renderCwReview();
     if (name === 'prompts' && canViewPrompts() && !state.promptSettings) loadPromptSettings();
     if (name === 'assets') loadChildrenwearLibraries();
     if (name === 'mobile-stats') loadMobileStats();
@@ -6666,9 +6670,9 @@ function cwPersistedStatus(approved, reviewStatus) {
   return reviewStatus === 'needs_regeneration' ? '需重生成' : '等待成品审核';
 }
 
-function cwTaskMasterImage(task, masterPath = task?.masterPath, index = -1) {
+function cwTaskMasterImage(task, masterPath = task?.masterPath, index = -1, taskByMasterPath = null) {
   if (!masterPath) return null;
-  const sourceTask = state.childrenwearTasks.find(item => item.masterPath === masterPath);
+  const sourceTask = taskByMasterPath?.get(masterPath) || state.childrenwearTasks.find(item => item.masterPath === masterPath);
   const taskIndex = index >= 0 ? index : (task?.masterPaths || []).indexOf(masterPath);
   return {
     path: masterPath,
@@ -6684,14 +6688,16 @@ function cwTaskMasterImage(task, masterPath = task?.masterPath, index = -1) {
 
 function syncCwDraftsFromTasks() {
   const taskFolders = new Set(state.childrenwearTasks.map(task => String(task.folder || '').toLocaleLowerCase('en-US')));
+  const taskByMasterPath = new Map(state.childrenwearTasks.filter(task => task.masterPath).map(task => [task.masterPath, task]));
   state.childrenwearDrafts.master = state.childrenwearDrafts.master.filter(draft => {
     if (!draft.taskFolder || draft.status === '生成中') return true;
     return taskFolders.has(String(draft.taskFolder).toLocaleLowerCase('en-US'));
   });
   const drafts = state.childrenwearDrafts.master;
+  const masterDraftByFolder = new Map(drafts.filter(draft => draft.taskFolder).map(draft => [draft.taskFolder, draft]));
   for (const task of state.childrenwearTasks) {
     if (!task.masterPath || !task.masterUrl) continue;
-    let draft = drafts.find(item => item.taskFolder === task.folder);
+    let draft = masterDraftByFolder.get(task.folder);
     if (!draft) {
       draft = {
         id: `saved-master:${task.folder}`,
@@ -6706,6 +6712,7 @@ function syncCwDraftsFromTasks() {
         taskFolder: task.folder
       };
       drafts.push(draft);
+      masterDraftByFolder.set(task.folder, draft);
     }
     if (draft.status !== '生成中') {
       draft.title = task.taskName || draft.title;
@@ -6727,9 +6734,12 @@ function syncCwDraftsFromTasks() {
       return outputKeys.has(cwPersistedOutputKey(stage, draft.taskFolder, draft.outputId));
     });
     const stageDrafts = state.childrenwearDrafts[stage];
+    const draftByOutputKey = new Map(stageDrafts.filter(draft => draft.outputId).map(draft => [cwPersistedOutputKey(stage, draft.taskFolder, draft.outputId), draft]));
+    const draftByResultPath = new Map(stageDrafts.filter(draft => draft.result?.path).map(draft => [draft.result.path, draft]));
     for (const { task, output } of records) {
       if (!output?.id || !output.path || !output.url) continue;
-      let draft = stageDrafts.find(item => item.taskFolder === task.folder && (item.outputId === output.id || item.result?.path === output.path));
+      const outputKey = cwPersistedOutputKey(stage, task.folder, output.id);
+      let draft = draftByOutputKey.get(outputKey) || draftByResultPath.get(output.path);
       if (!draft) {
         draft = {
           id: `saved-${stage}:${task.folder}:${output.id}`,
@@ -6746,6 +6756,8 @@ function syncCwDraftsFromTasks() {
         };
         if (stage === 'combination') draft.masters = [];
         stageDrafts.push(draft);
+        draftByOutputKey.set(outputKey, draft);
+        draftByResultPath.set(output.path, draft);
       }
       if (draft.status === '生成中') continue;
       draft.title = output.taskName || task.taskName || draft.title;
@@ -6757,7 +6769,7 @@ function syncCwDraftsFromTasks() {
       draft.status = cwPersistedStatus(output.approved, output.reviewStatus);
       draft.progress = '';
       if (stage === 'model') {
-        draft.master = cwTaskMasterImage(task, output.masterPath || task.masterPath);
+        draft.master = cwTaskMasterImage(task, output.masterPath || task.masterPath, -1, taskByMasterPath);
         draft.reference = {
           path: output.modelReferencePath,
           url: output.modelReferenceUrl,
@@ -6775,7 +6787,7 @@ function syncCwDraftsFromTasks() {
           masterThumbnailUrls: output.masterThumbnailUrls,
           masterPreviewUrls: output.masterPreviewUrls
         } : task;
-        draft.masters = masterPaths.map((masterPath, index) => cwTaskMasterImage(imageTask, masterPath, index)).filter(Boolean);
+        draft.masters = masterPaths.map((masterPath, index) => cwTaskMasterImage(imageTask, masterPath, index, taskByMasterPath)).filter(Boolean);
         draft.reference = {
           path: output.combinationReferencePath || task.combinationReferencePath,
           url: output.combinationReferenceUrl || task.combinationReferenceUrl,
@@ -6812,13 +6824,14 @@ function updateCwQueueProgress(stage, draft) {
   }, 200));
 }
 
-function cwReviewItemForDraft(stage, draft) {
+function cwReviewItemForDraft(stage, draft, reviewIndex = null) {
   if (!draft?.taskFolder) return null;
-  return cwReviewItems().find(item => item.stage === stage
-    && item.folder === draft.taskFolder
-    && (stage === 'master'
-      || (draft.outputId && item.outputId === draft.outputId)
-      || (draft.result?.path && item.path === draft.result.path)));
+  if (reviewIndex) {
+    const id = stage === 'master' ? `master:${draft.taskFolder}` : (draft.outputId ? `${stage}:${draft.taskFolder}:${draft.outputId}` : '');
+    return (id && reviewIndex.byId.get(id)) || (draft.result?.path && reviewIndex.byPath.get(draft.result.path)) || null;
+  }
+  return cwReviewItems().find(item => item.stage === stage && item.folder === draft.taskFolder
+    && (stage === 'master' || (draft.outputId && item.outputId === draft.outputId) || (draft.result?.path && item.path === draft.result.path)));
 }
 
 function renderCwQueue(stage) {
@@ -6828,11 +6841,19 @@ function renderCwQueue(stage) {
   const drafts = state.childrenwearDrafts[stage];
   const filter = state.childrenwearQueueFilters[stage] || 'all';
   const visibleDrafts = cwFilteredDrafts(stage);
+  const visibleLimit = Math.max(12, Number(state.childrenwearQueueVisibleLimits[stage]) || 36);
+  const renderedDrafts = visibleDrafts.slice(0, visibleLimit);
+  const remainingDrafts = Math.max(0, visibleDrafts.length - renderedDrafts.length);
+  const reviewItems = cwReviewItems();
+  const reviewIndex = {
+    byId: new Map(reviewItems.map(item => [item.id, item])),
+    byPath: new Map(reviewItems.filter(item => item.path).map(item => [item.path, item]))
+  };
   $(meta.count).textContent = stage === 'master' && filter !== 'all' ? `${visibleDrafts.length} / ${drafts.length} 项` : `${drafts.length} 项`;
-  panel.innerHTML = visibleDrafts.length ? visibleDrafts.map((draft, index) => {
+  const cards = renderedDrafts.map((draft, index) => {
     const running = draft.status === '生成中';
     const ready = cwDraftReady(draft);
-    const reviewItem = cwReviewItemForDraft(stage, draft);
+    const reviewItem = cwReviewItemForDraft(stage, draft, reviewIndex);
     const reviewStatus = reviewItem ? cwReviewStatus(reviewItem) : '';
     const title = draft.title || `${meta.label}任务 ${index + 1}`;
     return `<article class="cw-task-card${draft.selected ? ' selected' : ''}${draft.id === state.childrenwearActiveDraft[stage] ? ' editing' : ''}${reviewStatus === 'approved' ? ' approved' : ''}${reviewStatus === 'needs_regeneration' ? ' needs-regeneration' : ''}" data-cw-draft="${escapeHtml(draft.id)}" data-stage="${stage}">
@@ -6840,7 +6861,10 @@ function renderCwQueue(stage) {
       <div class="cw-task-flow">${cwDraftFlow(draft)}</div>
       <footer><span class="cw-task-status${cwDraftStatusKey(draft) === 'needs_regeneration' ? ' error' : ''}">${escapeHtml(stage === 'master' ? cwDraftStatusText(draft) : (draft.progress || (ready ? '素材已齐全，可以生成' : draft.status)))}</span><div class="cw-task-card-actions">${reviewItem ? `<button class="secondary" type="button" data-cw-inline-compare="${escapeHtml(reviewItem.id)}">高清审核</button>${stage === 'master' && !reviewItem.approved ? `<button class="secondary" type="button" data-cw-inline-approve="${escapeHtml(reviewItem.id)}">通过</button><button class="secondary danger-soft" type="button" data-cw-inline-flag="${escapeHtml(reviewItem.id)}"${reviewStatus === 'needs_regeneration' ? ' disabled' : ''}>${reviewStatus === 'needs_regeneration' ? '已标记问题' : '标记问题'}</button>` : ''}` : ''}<button class="secondary" type="button" data-cw-generate-one="${escapeHtml(draft.id)}"${!ready || running ? ' disabled' : ''}>${draft.result || draft.status === '失败' ? '重新生成' : `生成${escapeHtml(meta.label)}`}</button></div></footer>
     </article>`;
-  }).join('') : `<div class="cw-task-empty"><b>${drafts.length ? '当前筛选没有任务' : `还没有${escapeHtml(meta.label)}任务`}</b><span>${drafts.length ? '切换其他状态查看任务。' : '点击左侧素材，系统会自动创建并补齐任务卡片。'}</span></div>`;
+  }).join('');
+  panel.innerHTML = visibleDrafts.length
+    ? `${cards}${remainingDrafts ? `<button class="cw-review-load-more" type="button" data-cw-queue-more="${stage}">继续显示 ${Math.min(36, remainingDrafts)} 个任务（剩余 ${remainingDrafts} 个）</button>` : ''}`
+    : `<div class="cw-task-empty"><b>${drafts.length ? '当前筛选没有任务' : `还没有${escapeHtml(meta.label)}任务`}</b><span>${drafts.length ? '切换其他状态查看任务。' : '点击左侧素材，系统会自动创建并补齐任务卡片。'}</span></div>`;
 }
 
 function cwLibrarySource(stage) {
@@ -7439,7 +7463,8 @@ async function regenerateCurrentCwCompare() {
 function renderCwReview() {
   const grid = $('#cwReviewGrid');
   if (!grid) return;
-  let items = cwReviewItems();
+  const allItems = cwReviewItems();
+  let items = allItems;
   if (state.childrenwearReviewFilter === 'pending') items = items.filter(item => cwReviewStatus(item) === 'pending');
   if (state.childrenwearReviewFilter === 'needs_regeneration') items = items.filter(item => cwReviewStatus(item) === 'needs_regeneration');
   if (state.childrenwearReviewFilter === 'approved') items = items.filter(item => item.approved);
@@ -7460,16 +7485,28 @@ function renderCwReview() {
     const status = cwReviewStatus(item);
     return `<article class="cw-review-card${item.approved ? ' approved' : ''}${status === 'needs_regeneration' ? ' needs-regeneration' : ''}${state.childrenwearReviewSelection.has(item.id) ? ' selected' : ''}" data-cw-review-id="${escapeHtml(item.id)}"><label><input type="checkbox" data-cw-review-select="${escapeHtml(item.id)}"${state.childrenwearReviewSelection.has(item.id) ? ' checked' : ''}><span></span><b>${escapeHtml(item.stageLabel)}</b><em>${status === 'approved' ? '已通过' : status === 'needs_regeneration' ? '需重生成' : '待审核'}</em></label><button class="cw-review-image-button" type="button" data-cw-review-compare="${escapeHtml(item.id)}" title="点击进入高清对比审核"><img loading="lazy" decoding="async" src="${escapeHtml(item.thumbnailUrl || item.url)}" data-preview-src="${escapeHtml(item.previewUrl || item.url)}" alt="${escapeHtml(item.stageLabel)}"></button></article>`;
   };
-  grid.innerHTML = groups.size ? [...groups.entries()].map(([folder, groupItems]) => {
+  const allItemsByFolder = new Map();
+  for (const item of allItems) {
+    if (!allItemsByFolder.has(item.folder)) allItemsByFolder.set(item.folder, []);
+    allItemsByFolder.get(item.folder).push(item);
+  }
+  const groupEntries = [...groups.entries()];
+  const visibleGroupLimit = Math.max(4, Number(state.childrenwearReviewVisibleGroupLimit) || 12);
+  const visibleGroupEntries = groupEntries.slice(0, visibleGroupLimit);
+  const remainingGroups = Math.max(0, groupEntries.length - visibleGroupEntries.length);
+  const groupsMarkup = visibleGroupEntries.map(([folder, groupItems]) => {
     const task = groupItems[0].task;
-    const taskItems = cwReviewItems().filter(item => item.folder === folder);
+    const taskItems = allItemsByFolder.get(folder) || groupItems;
     const groupName = task.taskName || task.category || String(folder).split(/[\\/]/).at(-1) || '未命名款式';
     const totals = ['master', 'model', 'combination'].map(stage => `${CW_STAGE_META[stage].label} ${taskItems.filter(item => item.stage === stage).length}`).join(' · ');
     const limit = Math.max(24, Number(state.childrenwearReviewGroupLimits.get(folder)) || 48);
     const visibleItems = groupItems.slice(0, limit);
     const remaining = Math.max(0, groupItems.length - visibleItems.length);
     return `<section class="cw-review-group" data-cw-review-folder="${escapeHtml(folder)}"><header class="cw-review-group-head"><div><span>款式任务</span><h3>${escapeHtml(groupName)}</h3><small>${escapeHtml(totals)}</small></div><div><button class="secondary mini" type="button" data-cw-review-rename-folder="${escapeHtml(folder)}">改名</button><button class="primary mini" type="button" data-cw-review-download-folder="${escapeHtml(folder)}">下载款式文件夹</button></div></header>${cwReviewTaskMetricsHtml(taskItems)}<div class="cw-review-group-items">${visibleItems.map(card).join('')}</div>${remaining ? `<button class="cw-review-load-more" type="button" data-cw-review-more="${escapeHtml(folder)}">继续显示 ${Math.min(48, remaining)} 张（剩余 ${remaining} 张）</button>` : ''}</section>`;
-  }).join('') : '<div class="cw-task-empty"><b>当前没有需要审核的图片</b><span>02、03、04 生成完成后会自动进入这里。</span></div>';
+  }).join('');
+  grid.innerHTML = groups.size
+    ? `${groupsMarkup}${remainingGroups ? `<button class="cw-review-load-more" type="button" data-cw-review-more-groups>继续显示 ${Math.min(12, remainingGroups)} 个款式（剩余 ${remainingGroups} 个）</button>` : ''}`
+    : '<div class="cw-task-empty"><b>当前没有需要审核的图片</b><span>02、03、04 生成完成后会自动进入这里。</span></div>';
 }
 
 async function approveCwReviewItem(item) {
@@ -7487,11 +7524,11 @@ async function regenerateCwReviewItem(item) {
 }
 
 function renderChildrenwear() {
-  for (const stage of Object.keys(CW_STAGE_META)) {
-    renderCwSource(stage);
-    renderCwQueue(stage);
+  if (currentPage === 'childrenwear') {
+    renderCwSource(state.childrenwearProductionTab);
+    renderCwQueue(state.childrenwearProductionTab);
   }
-  renderCwReview();
+  if (currentPage === 'childrenwear-review') renderCwReview();
 }
 
 async function loadChildrenwearTasks(options = {}) {
@@ -7568,6 +7605,12 @@ function bindChildrenwearEvents() {
       renderCwQueue(stage);
     };
     column.onclick = async event => {
+      const more = event.target.closest('[data-cw-queue-more]');
+      if (more) {
+        const stage = more.dataset.cwQueueMore;
+        state.childrenwearQueueVisibleLimits[stage] = (Number(state.childrenwearQueueVisibleLimits[stage]) || 36) + 36;
+        return renderCwQueue(stage);
+      }
       const card = event.target.closest('[data-cw-draft]');
       const stage = card?.dataset.stage;
       const id = card?.dataset.cwDraft;
@@ -7644,6 +7687,7 @@ function bindChildrenwearEvents() {
   });
   $$('.cw-queue-filters [data-cw-queue-filter]').forEach(button => button.onclick = () => {
     state.childrenwearQueueFilters.master = button.dataset.cwQueueFilter;
+    state.childrenwearQueueVisibleLimits.master = 36;
     button.parentElement.querySelectorAll('button').forEach(item => item.classList.toggle('active', item === button));
     renderCwQueue('master');
   });
@@ -7654,6 +7698,11 @@ function bindChildrenwearEvents() {
     renderCwReview();
   };
   $('#cwReviewGrid').onclick = async event => {
+    const moreGroups = event.target.closest('[data-cw-review-more-groups]');
+    if (moreGroups) {
+      state.childrenwearReviewVisibleGroupLimit = (Number(state.childrenwearReviewVisibleGroupLimit) || 12) + 12;
+      return renderCwReview();
+    }
     const more = event.target.closest('[data-cw-review-more]');
     if (more) {
       const folder = more.dataset.cwReviewMore;
@@ -7684,6 +7733,7 @@ function bindChildrenwearEvents() {
   $$('.cw-review-filters [data-cw-review-filter]').forEach(button => button.onclick = () => {
     state.childrenwearReviewFilter = button.dataset.cwReviewFilter;
     state.childrenwearReviewGroupLimits.clear();
+    state.childrenwearReviewVisibleGroupLimit = 12;
     button.parentElement.querySelectorAll('button').forEach(item => item.classList.toggle('active', item === button));
     renderCwReview();
   });
