@@ -6,6 +6,7 @@ const REVIEW_REGENERATION_RECORDS_STORAGE_KEY = 'caishen-web-review-regeneration
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'caishen-web-sidebar-collapsed-v1';
 const IMAGE_PREVIEW_SIZE_STORAGE_KEY = 'duoxiluka-image-preview-size-v1';
 const WORKSPACE_BACKGROUND_STORAGE_KEY = 'duoxiluka-workspace-background-v1';
+const FIXED_MODEL_REFERENCE_STORAGE_KEY = 'duoxiluka-fixed-model-reference-v1';
 const DEFAULT_WORKSPACE_BACKGROUND = '#EFEEE9';
 let storageScope = 'anonymous';
 const scopedStorageKey = key => `${key}:${storageScope}`;
@@ -111,6 +112,30 @@ function loadReviewRegenerationRecords() {
 
 function persistReviewRegenerationRecords() {
   try { localStorage.setItem(scopedStorageKey(REVIEW_REGENERATION_RECORDS_STORAGE_KEY), JSON.stringify(state.reviewRegenerationRecords.slice(-300))); } catch {}
+}
+
+function loadFixedModelReferencePreference() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(scopedStorageKey(FIXED_MODEL_REFERENCE_STORAGE_KEY)) || 'null');
+    if (!saved || typeof saved !== 'object') return { enabled: false, asset: null };
+    return {
+      enabled: Boolean(saved.enabled),
+      asset: saved.asset?.path ? { path: String(saved.asset.path), name: String(saved.asset.name || ''), folder: String(saved.asset.folder || '') } : null
+    };
+  } catch {
+    return { enabled: false, asset: null };
+  }
+}
+
+function persistFixedModelReferencePreference() {
+  const asset = state.childrenwearFixedModelReference?.path ? {
+    path: state.childrenwearFixedModelReference.path,
+    name: state.childrenwearFixedModelReference.name || '',
+    folder: state.childrenwearFixedModelReference.folder || ''
+  } : null;
+  try {
+    localStorage.setItem(scopedStorageKey(FIXED_MODEL_REFERENCE_STORAGE_KEY), JSON.stringify({ enabled: Boolean(state.childrenwearFixedModelEnabled), asset }));
+  } catch {}
 }
 
 const state = {
@@ -241,6 +266,10 @@ const state = {
   childrenwearProductionTab: 'master',
   childrenwearSourceTabs: { master: 'master-real', model: 'model-master', combination: 'combination-master' },
   childrenwearModelBackgroundMode: 'model_reference',
+  childrenwearFixedModelEnabled: false,
+  childrenwearFixedModelReference: null,
+  childrenwearLineageSelectedPath: '',
+  childrenwearLineageQuery: '',
   childrenwearDrafts: { master: [], model: [], combination: [] },
   childrenwearActiveDraft: { master: '', model: '', combination: '' },
   childrenwearQueueFilters: { master: 'all', model: 'all', combination: 'all' },
@@ -532,6 +561,9 @@ function applyCurrentUser(user) {
   state.viewedReviewJobs = loadViewedReviewJobs();
   state.reviewRegenerationRecords = loadReviewRegenerationRecords();
   state.assetPreviewSizes = loadStoredAssetPreviewSizes();
+  const fixedModelPreference = loadFixedModelReferencePreference();
+  state.childrenwearFixedModelEnabled = fixedModelPreference.enabled;
+  state.childrenwearFixedModelReference = fixedModelPreference.asset;
   $('#currentUserName').textContent = user.displayName || user.username;
   $('#currentUserName').title = `${user.username} · ${roleLabel(user.role)}`;
   $('#promptSettingsNav').hidden = true;
@@ -5722,8 +5754,8 @@ function setChildrenwearAssetTab(key) {
 
 const CHILDRENWEAR_PRODUCTION_HINTS = Object.freeze({
   master: '实拍产品图 + 成品参考图 → 平铺图',
-  model: '已审核平铺图 + 参考模特图 → 模特上身图',
-  combination: '选择 2～4 个已审核平铺图 → 多 SKU 组合图'
+  model: '已生成平铺图 + 参考模特图 → 模特上身图',
+  combination: '选择 2～4 个已生成平铺图 → 多 SKU 组合图'
 });
 
 function setChildrenwearProductionTabLegacy(tab) {
@@ -5865,6 +5897,17 @@ async function loadChildrenwearLibrary(key, options = {}) {
       totalPages: Number(result.totalPages) || 0,
       pageSize: Number(result.pageSize) || 48
     };
+    if (key === 'childrenwearModelAssetsPath') {
+      const fixedPath = state.childrenwearFixedModelReference?.path;
+      const hydrated = fixedPath ? state.childrenwearProductionLibraries[key].find(item => item.path === fixedPath) : null;
+      if (hydrated) state.childrenwearFixedModelReference = hydrated;
+      else if (fixedPath && options.refresh === true) {
+        state.childrenwearFixedModelReference = null;
+        state.childrenwearFixedModelEnabled = false;
+        persistFixedModelReferencePreference();
+      }
+      renderFixedModelControl();
+    }
   } catch (error) {
     state.childrenwearLibraries[key] = [];
     state.childrenwearProductionLibraries[key] = [];
@@ -6423,16 +6466,16 @@ function renderChildrenwearModelResults() {
   if (!container) return;
   const outputs = state.childrenwearActiveTask?.modelOutputs || [];
   container.innerHTML = outputs.length ? outputs.slice().reverse().map(output => `
-    <article class="childrenwear-model-result${output.approved ? ' approved' : ''}" data-childrenwear-model-id="${escapeHtml(output.id)}">
+    <article class="childrenwear-model-result completed" data-childrenwear-model-id="${escapeHtml(output.id)}">
       <img src="${escapeHtml(output.url)}" alt="模特上身图">
-      <div><b>${output.approved ? '已审核模特图' : '模特图候选'}</b><span>${escapeHtml(formatLocalDateTime(output.createdAt))}</span><div><button class="${output.approved ? 'secondary' : 'primary'}" type="button" data-approve-childrenwear-model="${escapeHtml(output.id)}">${output.approved ? '取消通过' : '审核通过'}</button><button class="text-button" type="button" data-open-childrenwear-model="${escapeHtml(output.path)}">查看原图</button></div></div>
+      <div><b>模特图已完成</b><span>${escapeHtml(formatLocalDateTime(output.createdAt))}</span><div><button class="text-button" type="button" data-open-childrenwear-model="${escapeHtml(output.path)}">查看原图</button></div></div>
     </article>`).join('') : '<div class="empty-inline">还没有模特图</div>';
 }
 
 function renderChildrenwearMasterLibrary() {
   const container = $('#childrenwearMasterLibrary');
   if (!container) return;
-  const tasks = state.childrenwearTasks.filter(task => task.masterApproved && task.masterPath && task.masterUrl);
+  const tasks = state.childrenwearTasks.filter(task => task.masterPath && task.masterUrl);
   const availablePaths = new Set(tasks.map(task => task.masterPath));
   for (const selected of [...state.childrenwearCombinationSelection]) {
     if (!availablePaths.has(selected)) state.childrenwearCombinationSelection.delete(selected);
@@ -6442,7 +6485,7 @@ function renderChildrenwearMasterLibrary() {
       <input type="checkbox" data-childrenwear-master-path="${escapeHtml(task.masterPath)}"${state.childrenwearCombinationSelection.has(task.masterPath) ? ' checked' : ''}>
       <img src="${escapeHtml(task.masterUrl)}" alt="${escapeHtml(task.category || '童装平铺图')}">
       <span><b>${escapeHtml(task.category || '童装')}</b><small>${escapeHtml(task.material || '材质未标注')} · 平铺图 v${Number(task.masterVersion) || 1}</small></span>
-    </label>`).join('') : '<div class="empty-inline">还没有已审核平铺图</div>';
+    </label>`).join('') : '<div class="empty-inline">还没有已生成平铺图</div>';
   const count = state.childrenwearCombinationSelection.size;
   $('#childrenwearCombinationStatus').textContent = count ? `已选择 ${count}/4 个平铺图` : '请选择 2～4 个平铺图';
 }
@@ -6487,9 +6530,9 @@ function newChildrenwearMasterTask() {
 function renderChildrenwearApprovedMasters() {
   const container = $('#childrenwearApprovedMasterList');
   if (!container) return;
-  const tasks = state.childrenwearTasks.filter(task => task.masterApproved && task.masterUrl);
-  container.innerHTML = tasks.length ? `<div class="childrenwear-approved-master-head"><b>选择已审核平铺图</b><span>${tasks.length} 个可用</span></div><div>` + tasks.map(task => `
-    <button class="childrenwear-approved-master${task.folder === state.childrenwearActiveTask?.folder ? ' active' : ''}" type="button" data-childrenwear-model-task-folder="${escapeHtml(task.folder)}"><img loading="lazy" src="${escapeHtml(task.masterUrl)}" alt="${escapeHtml(task.category || '平铺图')}"><span><b>${escapeHtml(task.category || '童装')}</b><small>${escapeHtml(task.material || '')}</small></span></button>`).join('') + '</div>' : '<div class="empty-inline">还没有已审核平铺图，请先在 02 完成审核。</div>';
+  const tasks = state.childrenwearTasks.filter(task => task.masterPath && task.masterUrl);
+  container.innerHTML = tasks.length ? `<div class="childrenwear-approved-master-head"><b>选择已生成平铺图</b><span>${tasks.length} 个可用</span></div><div>` + tasks.map(task => `
+    <button class="childrenwear-approved-master${task.folder === state.childrenwearActiveTask?.folder ? ' active' : ''}" type="button" data-childrenwear-model-task-folder="${escapeHtml(task.folder)}"><img loading="lazy" src="${escapeHtml(task.masterUrl)}" alt="${escapeHtml(task.category || '平铺图')}"><span><b>${escapeHtml(task.category || '童装')}</b><small>${escapeHtml(task.material || '')} · ${task.masterApproved ? '平铺已通过' : '平铺待审核'}</small></span></button>`).join('') + '</div>' : '<div class="empty-inline">还没有已生成平铺图，请先在 02 生成。</div>';
 }
 
 function renderChildrenwearLegacy() {
@@ -6515,8 +6558,8 @@ function renderChildrenwearLegacy() {
   $('#approveChildrenwearMasterButton').textContent = task?.masterApproved ? '已确认正式平铺图' : '确认正式平铺图';
   $('#approveChildrenwearMasterButton').disabled = Boolean(task?.masterApproved);
   $('#childrenwearMasterStage').classList.toggle('is-complete', Boolean(task?.masterApproved));
-  $('#childrenwearModelStage').classList.toggle('is-active', Boolean(task?.masterApproved));
-  $('#generateChildrenwearModelButton').disabled = !(task?.masterApproved && state.childrenwearModelReference?.path);
+  $('#childrenwearModelStage').classList.toggle('is-active', Boolean(task?.masterPath));
+  $('#generateChildrenwearModelButton').disabled = !(task?.masterPath && state.childrenwearModelReference?.path);
   if (task?.masterApproved) {
     $('#childrenwearMasterStatus').textContent = `正式平铺图已确认 · v${Number(task.masterVersion) || 1}`;
     $('#childrenwearModelStatus').textContent = state.childrenwearModelReference?.path ? '可以生成模特图' : '请上传模特或姿势参考图';
@@ -6589,7 +6632,7 @@ async function approveChildrenwearMaster() {
 
 async function runChildrenwearModelGeneration() {
   const task = state.childrenwearActiveTask;
-  if (!task?.masterApproved || !state.childrenwearModelReference?.path) return toast('请先确认平铺图并上传模特参考图', true);
+  if (!task?.masterPath || !state.childrenwearModelReference?.path) return toast('请先生成平铺图并上传模特参考图', true);
   const button = $('#generateChildrenwearModelButton');
   button.disabled = true;
   button.textContent = '正在生成…';
@@ -6600,8 +6643,8 @@ async function runChildrenwearModelGeneration() {
       extraInstruction: $('#childrenwearModelNote').value.trim()
     }, progress => { $('#childrenwearModelStatus').textContent = progress.message || '正在生成模特图'; });
     await loadChildrenwearTasks();
-    $('#childrenwearModelStatus').textContent = '模特图生成完成，等待成品审核';
-    toast('模特图候选已生成');
+    $('#childrenwearModelStatus').textContent = '模特图生成完成，可直接查看和下载';
+    toast('模特图已生成');
   } catch (error) {
     $('#childrenwearModelStatus').textContent = errorText(error);
     toast(errorText(error), true);
@@ -6628,8 +6671,8 @@ async function toggleChildrenwearModelApproval(outputId) {
 }
 
 function randomChildrenwearCombination() {
-  const paths = state.childrenwearTasks.filter(task => task.masterApproved && task.masterPath).map(task => task.masterPath);
-  if (paths.length < 2) return toast('至少需要两个已审核平铺图', true);
+  const paths = state.childrenwearTasks.filter(task => task.masterPath).map(task => task.masterPath);
+  if (paths.length < 2) return toast('至少需要两个已生成平铺图', true);
   for (let index = paths.length - 1; index > 0; index -= 1) {
     const swap = Math.floor(Math.random() * (index + 1));
     [paths[index], paths[swap]] = [paths[swap], paths[index]];
@@ -6640,7 +6683,7 @@ function randomChildrenwearCombination() {
 
 async function runChildrenwearCombination() {
   const masterPaths = [...state.childrenwearCombinationSelection];
-  if (masterPaths.length < 2 || masterPaths.length > 4) return toast('请选择 2～4 个已审核平铺图', true);
+  if (masterPaths.length < 2 || masterPaths.length > 4) return toast('请选择 2～4 个已生成平铺图', true);
   const button = $('#generateChildrenwearCombinationButton');
   button.disabled = true;
   button.textContent = '正在排版…';
@@ -6752,7 +6795,11 @@ function cwTaskDisplayName(styleName, taskCode) {
 function cwNewDraft(stage) {
   const now = new Date().toISOString();
   const draft = { id: createClientId(), stage, title: '', taskCode: '', styleName: '', selected: true, status: '待补齐素材', progress: '', result: null, createdAt: now, updatedAt: now };
-  if (stage === 'model') draft.backgroundMode = state.childrenwearModelBackgroundMode || 'model_reference';
+  if (stage === 'model') {
+    draft.backgroundMode = state.childrenwearModelBackgroundMode || 'model_reference';
+    const fixedModel = cwHydratedFixedModelReference();
+    if (state.childrenwearFixedModelEnabled && fixedModel?.path) draft.reference = fixedModel;
+  }
   if (stage === 'combination') draft.masters = [];
   state.childrenwearDrafts[stage].unshift(draft);
   state.childrenwearActiveDraft[stage] = draft.id;
@@ -6790,7 +6837,7 @@ function cwDraftFlow(draft) {
       : backgroundMode === 'scene_reference'
         ? cwImage(draft.scene, '场景参考图')
         : '<figure class="cw-flow-figure cw-background-mode"><span>同</span><figcaption>跟随模特背景</figcaption></figure>';
-    return `${cwImage(draft.master, '已审核平铺图')}<i>+</i>${cwImage(draft.reference, '参考模特图')}<i>+</i>${background}<i>→</i>${cwImage(draft.result, '模特上身图')}`;
+    return `${cwImage(draft.master, '已生成平铺图')}<i>+</i>${cwImage(draft.reference, '参考模特图')}<i>+</i>${background}<i>→</i>${cwImage(draft.result, '模特上身图')}`;
   }
   const masters = draft.masters?.length ? draft.masters.map((item, index) => `${index ? '<i>+</i>' : ''}<div class="cw-ordered-sku"><em>SKU ${String.fromCharCode(65 + index)}</em>${cwImage(item, `平铺图 ${index + 1}`)}<div><button type="button" data-cw-master-move="-1" data-cw-master-index="${index}"${index === 0 ? ' disabled' : ''}>←</button><button type="button" data-cw-master-move="1" data-cw-master-index="${index}"${index === draft.masters.length - 1 ? ' disabled' : ''}>→</button></div></div>`).join('') : cwImage(null, '选择 2～4 张平铺图');
   return `${masters}<i>+</i>${cwImage(draft.reference, '组合参考图')}<i>→</i>${cwImage(draft.result, '多 SKU 组合图')}`;
@@ -6802,9 +6849,10 @@ function cwTaskForDraft(draft) {
 
 function cwReviewStatus(item) {
   if (!item) return 'pending';
-  if (item.approved) return 'approved';
   const value = item.stage === 'master' ? item.task?.masterReviewStatus : item.output?.reviewStatus;
-  return value === 'needs_regeneration' ? 'needs_regeneration' : 'pending';
+  if (value === 'needs_regeneration') return 'needs_regeneration';
+  if (item.stage !== 'master') return 'completed';
+  return item.approved ? 'approved' : 'pending';
 }
 
 function cwDraftStatusKey(draft) {
@@ -6818,17 +6866,17 @@ function cwDraftStatusKey(draft) {
       : draft.stage === 'combination'
         ? (task?.combinationOutputs || []).find(item => item.id === draft.outputId || item.path === draft.result?.path)
         : null;
-    const approved = draft.stage === 'master' ? task?.masterApproved : output?.approved;
     const reviewStatus = draft.stage === 'master' ? task?.masterReviewStatus : output?.reviewStatus;
-    if (approved || draft.status === '已通过') return 'approved';
     if (reviewStatus === 'needs_regeneration' || draft.status === '需重生成') return 'needs_regeneration';
+    if (draft.stage !== 'master') return 'completed';
+    if (task?.masterApproved || draft.status === '已通过') return 'approved';
     return 'pending';
   }
   return cwDraftReady(draft) ? 'ready' : 'incomplete';
 }
 
 function cwDraftStatusLabel(draft) {
-  return ({ incomplete: '缺少素材', ready: '待生成', running: '生成中', pending: '待审核', needs_regeneration: '需重生成', approved: '已通过' })[cwDraftStatusKey(draft)] || '待处理';
+  return ({ incomplete: '缺少素材', ready: '待生成', running: '生成中', pending: '待审核', completed: '已完成', needs_regeneration: '需重生成', approved: '已通过' })[cwDraftStatusKey(draft)] || '待处理';
 }
 
 function cwDraftMissingLabels(draft) {
@@ -6837,7 +6885,7 @@ function cwDraftMissingLabels(draft) {
     if (!draft.real?.path) missing.push('实拍产品图');
     if (!draft.reference?.path) missing.push('成品参考图');
   } else if (draft.stage === 'model') {
-    if (!draft.master?.path) missing.push('已审核平铺图');
+    if (!draft.master?.path) missing.push('已生成平铺图');
     if (!draft.reference?.path) missing.push('参考模特图');
     if (draft.backgroundMode === 'scene_reference' && !draft.scene?.path) missing.push('场景参考图');
   } else {
@@ -6850,6 +6898,7 @@ function cwDraftMissingLabels(draft) {
 function cwDraftStatusText(draft) {
   const status = cwDraftStatusKey(draft);
   if (status === 'approved') return '审核已通过，已解锁后续步骤';
+  if (status === 'completed') return '图片已生成，可直接查看、下载或用于后续流程';
   if (status === 'needs_regeneration') return draft.progress || '生成失败或结果待重新生成';
   if (status === 'pending') return `${CW_STAGE_META[draft.stage]?.label || '图片'}已生成，等待审核`;
   if (status === 'running') return draft.progress || '正在生成';
@@ -6878,23 +6927,33 @@ function cwPersistedOutputKey(stage, folder, outputId) {
   return `${stage}\u0000${String(folder || '').toLocaleLowerCase('en-US')}\u0000${String(outputId || '')}`;
 }
 
-function cwPersistedStatus(approved, reviewStatus) {
+function cwPersistedStatus(stage, approved, reviewStatus) {
+  if (reviewStatus === 'needs_regeneration') return '需重生成';
+  if (stage !== 'master') return '已完成';
   if (approved) return '已通过';
-  return reviewStatus === 'needs_regeneration' ? '需重生成' : '等待成品审核';
+  return '等待成品审核';
 }
 
 function cwTaskMasterImage(task, masterPath = task?.masterPath, index = -1, taskByMasterPath = null) {
   if (!masterPath) return null;
-  const sourceTask = taskByMasterPath?.get(masterPath) || state.childrenwearTasks.find(item => item.masterPath === masterPath);
   const taskIndex = index >= 0 ? index : (task?.masterPaths || []).indexOf(masterPath);
+  const manifest = taskIndex >= 0 ? task?.skuManifest?.[taskIndex] : null;
+  const sourceMasterPath = taskIndex >= 0 ? (task?.sourceMasterPaths?.[taskIndex] || manifest?.sourceMasterPath || '') : '';
+  const sourceTaskFolder = taskIndex >= 0 ? (task?.sourceTaskFolders?.[taskIndex] || manifest?.sourceTaskFolder || '') : '';
+  const sourceTask = taskByMasterPath?.get(masterPath)
+    || (sourceMasterPath ? taskByMasterPath?.get(sourceMasterPath) : null)
+    || state.childrenwearTasks.find(item => item.masterPath === masterPath
+      || (sourceMasterPath && item.masterPath === sourceMasterPath)
+      || (sourceTaskFolder && cwFolderKey(item.folder) === cwFolderKey(sourceTaskFolder)));
   return {
     path: masterPath,
+    sourceMasterPath: sourceTask?.masterPath || sourceMasterPath || masterPath,
     url: sourceTask?.masterUrl || (taskIndex >= 0 ? task?.masterUrls?.[taskIndex] : '') || (masterPath === task?.masterPath ? task?.masterUrl : ''),
     thumbnailUrl: sourceTask?.masterThumbnailUrl || (taskIndex >= 0 ? task?.masterThumbnailUrls?.[taskIndex] : '') || (masterPath === task?.masterPath ? task?.masterThumbnailUrl : ''),
     previewUrl: sourceTask?.masterPreviewUrl || (taskIndex >= 0 ? task?.masterPreviewUrls?.[taskIndex] : '') || (masterPath === task?.masterPath ? task?.masterPreviewUrl : ''),
-    name: sourceTask?.taskName || task?.taskName || `已审核平铺图${taskIndex >= 0 ? ` ${taskIndex + 1}` : ''}`,
+    name: sourceTask?.taskName || task?.taskName || `已生成平铺图${taskIndex >= 0 ? ` ${taskIndex + 1}` : ''}`,
     folder: sourceTask?.material || task?.material || '',
-    taskFolder: sourceTask?.folder || task?.folder || '',
+    taskFolder: sourceTask?.folder || sourceTaskFolder || task?.folder || '',
     taskName: sourceTask?.taskName || task?.taskName || ''
   };
 }
@@ -6936,7 +6995,7 @@ function syncCwDraftsFromTasks() {
       draft.real = { path: task.realPhotoPath, url: task.realPhotoUrl, thumbnailUrl: task.realPhotoThumbnailUrl, previewUrl: task.realPhotoPreviewUrl, name: task.realPhotoPath?.split(/[\\/]/).at(-1) || '实拍产品图', folder: task.category || '' };
       draft.reference = { path: task.referencePath, url: task.referenceUrl, thumbnailUrl: task.referenceThumbnailUrl, previewUrl: task.referencePreviewUrl, name: task.referencePath?.split(/[\\/]/).at(-1) || '成品参考图', folder: '' };
       draft.result = { path: task.masterPath, url: task.masterUrl, thumbnailUrl: task.masterThumbnailUrl, previewUrl: task.masterPreviewUrl, name: `平铺母版 v${task.masterVersion || 1}` };
-      draft.status = cwPersistedStatus(task.masterApproved, task.masterReviewStatus);
+      draft.status = cwPersistedStatus('master', task.masterApproved, task.masterReviewStatus);
       draft.progress = '';
       draft.updatedAt = task.updatedAt || task.createdAt || draft.updatedAt;
     }
@@ -6964,7 +7023,7 @@ function syncCwDraftsFromTasks() {
           taskCode: task.taskCode || '',
           styleName: task.styleName || task.category || '',
           selected: false,
-          status: '等待成品审核',
+          status: '已完成',
           progress: '',
           result: null,
           taskFolder: task.folder,
@@ -6984,7 +7043,7 @@ function syncCwDraftsFromTasks() {
       draft.taskFolder = task.folder;
       draft.outputId = output.id;
       draft.result = { path: output.path, url: output.url, thumbnailUrl: output.thumbnailUrl, previewUrl: output.previewUrl, name: stage === 'model' ? '模特图候选' : '组合图候选' };
-      draft.status = cwPersistedStatus(output.approved, output.reviewStatus);
+      draft.status = cwPersistedStatus(stage, output.approved, output.reviewStatus);
       draft.progress = '';
       draft.updatedAt = output.createdAt || task.updatedAt || draft.updatedAt;
       if (stage === 'model') {
@@ -7011,6 +7070,9 @@ function syncCwDraftsFromTasks() {
         const imageTask = output.masterPaths?.length ? {
           ...task,
           masterPaths,
+          sourceMasterPaths: output.sourceMasterPaths || task.sourceMasterPaths,
+          sourceTaskFolders: output.sourceTaskFolders || task.sourceTaskFolders,
+          skuManifest: output.skuManifest || task.skuManifest,
           masterUrls: output.masterUrls,
           masterThumbnailUrls: output.masterThumbnailUrls,
           masterPreviewUrls: output.masterPreviewUrls
@@ -7133,6 +7195,29 @@ function cwTaskReviewIndex() {
   };
 }
 
+function cwFlatLayValidationMarkup(validation) {
+  if (!validation || validation.error) return validation?.error
+    ? `<div class="cw-flatlay-checks error">质量检查失败：${escapeHtml(validation.error)}</div>`
+    : '';
+  const background = validation.background || {};
+  const geometry = validation.geometry || {};
+  const centerError = geometry.center_error ? Math.max(Number(geometry.center_error.x) || 0, Number(geometry.center_error.y) || 0) : null;
+  const sleeveError = geometry.sleeve_angle_checks?.maximum_error_degrees == null ? NaN : Number(geometry.sleeve_angle_checks.maximum_error_degrees);
+  const legError = geometry.leg_angle_checks?.maximum_error_degrees == null ? NaN : Number(geometry.leg_angle_checks.maximum_error_degrees);
+  const crotchError = geometry.crotch_check?.error == null ? NaN : Number(geometry.crotch_check.error);
+  const items = [
+    { label: '背景 ΔE', value: background.delta_e == null ? '—' : Number(background.delta_e).toFixed(2), pass: background.within_tolerance },
+    { label: '中心误差', value: centerError == null ? '—' : `${(centerError * 100).toFixed(1)}%`, pass: geometry.center_within_tolerance },
+    { label: '占比误差', value: geometry.coverage_error == null ? '—' : `${(Number(geometry.coverage_error) * 100).toFixed(1)}%`, pass: geometry.coverage_within_tolerance },
+    { label: '轮廓相似', value: geometry.contour_similarity_iou == null ? '—' : `${(Number(geometry.contour_similarity_iou) * 100).toFixed(1)}%`, pass: geometry.contour_similarity_iou == null ? null : Number(geometry.contour_similarity_iou) >= 0.75 },
+    { label: '关键点误差', value: geometry.keypoint_alignment?.mean_error == null ? '—' : `${(Number(geometry.keypoint_alignment.mean_error) * 100).toFixed(1)}%`, pass: geometry.keypoint_alignment?.within_tolerance },
+    { label: '袖角误差', value: Number.isFinite(sleeveError) ? `${sleeveError.toFixed(1)}°` : '—', pass: Number.isFinite(sleeveError) ? sleeveError <= 8 : null },
+    { label: '裤腿角误差', value: Number.isFinite(legError) ? `${legError.toFixed(1)}°` : '—', pass: Number.isFinite(legError) ? legError <= 8 : null },
+    { label: '裆部误差', value: Number.isFinite(crotchError) ? `${(crotchError * 100).toFixed(1)}%` : '—', pass: geometry.crotch_check?.within_tolerance }
+  ];
+  return `<div class="cw-flatlay-checks" aria-label="平铺图确定性质量检查">${items.map(item => `<span class="${item.pass === false ? 'fail' : item.pass === true ? 'pass' : ''}"><b>${escapeHtml(item.label)}</b><em>${escapeHtml(item.value)}</em></span>`).join('')}</div>`;
+}
+
 function syncCwGenerationPreviewState() {
   const generationActive = Object.values(state.childrenwearDrafts).some(items => items.some(item => item.status === '生成中'));
   document.documentElement.classList.toggle('childrenwear-generation-active', generationActive);
@@ -7150,11 +7235,14 @@ function cwTaskCardMarkup(stage, draft, index, reviewIndex) {
   const title = draft.title || `${meta.label}任务 ${index + 1}`;
   const statusKey = cwDraftStatusKey(draft);
   const missing = cwDraftMissingLabels(draft);
+  const task = cwTaskForDraft(draft);
+  const flatLayValidation = stage === 'master' ? (draft.flatLayValidation || task?.flatLayValidation) : null;
   return `<article class="cw-task-card ${statusKey}${draft.selected ? ' selected' : ''}${draft.id === state.childrenwearActiveDraft[stage] ? ' editing' : ''}${reviewStatus === 'approved' ? ' approved' : ''}${reviewStatus === 'needs_regeneration' ? ' needs-regeneration' : ''}" data-cw-draft="${escapeHtml(draft.id)}" data-stage="${stage}">
       <header><label><input type="checkbox" data-cw-select-draft="${escapeHtml(draft.id)}"${draft.selected ? ' checked' : ''}><span></span><span class="cw-task-title-line"><b title="${escapeHtml(title)}">${escapeHtml(title)}</b><em class="cw-task-state-badge ${statusKey}">${escapeHtml(cwDraftStatusLabel(draft))}</em></span></label><div><button class="secondary mini" type="button" data-cw-edit="${escapeHtml(draft.id)}">改名</button><button class="link-danger" type="button" data-cw-remove="${escapeHtml(draft.id)}"${running ? ' disabled' : ''}>删除</button></div></header>
       <div class="cw-task-flow">${cwDraftFlow(draft)}</div>
+      ${cwFlatLayValidationMarkup(flatLayValidation)}
       ${missing.length ? `<div class="cw-task-missing">还缺：${escapeHtml(missing.join('、'))}</div>` : ''}
-      <footer><span class="cw-task-status${statusKey === 'needs_regeneration' ? ' error' : ''}">${escapeHtml(draft.progress || cwDraftStatusText(draft))}</span><div class="cw-task-card-actions">${reviewItem ? `<button class="secondary" type="button" data-cw-inline-compare="${escapeHtml(reviewItem.id)}">高清审核</button>${stage === 'master' && !reviewItem.approved ? `<button class="secondary" type="button" data-cw-inline-approve="${escapeHtml(reviewItem.id)}">通过</button>` : ''}` : ''}<button class="secondary" type="button" data-cw-generate-one="${escapeHtml(draft.id)}"${!ready || running ? ' disabled' : ''}>${draft.result || draft.status === '失败' ? '重新生成' : `生成${escapeHtml(meta.label)}`}</button></div></footer>
+      <footer><span class="cw-task-status${statusKey === 'needs_regeneration' ? ' error' : ''}">${escapeHtml(draft.progress || cwDraftStatusText(draft))}</span><div class="cw-task-card-actions">${reviewItem ? `<button class="secondary" type="button" data-cw-inline-compare="${escapeHtml(reviewItem.id)}">${stage === 'master' ? '高清审核' : '高清查看'}</button>${stage === 'master' && !reviewItem.approved ? `<button class="secondary" type="button" data-cw-inline-approve="${escapeHtml(reviewItem.id)}">通过</button>` : ''}` : ''}<button class="secondary" type="button" data-cw-generate-one="${escapeHtml(draft.id)}"${!ready || running ? ' disabled' : ''}>${draft.result || draft.status === '失败' ? '重新生成' : `生成${escapeHtml(meta.label)}`}</button></div></footer>
     </article>`;
 }
 
@@ -7163,6 +7251,9 @@ function renderCwQueueFilters(stage) {
   if (!panel) return;
   const filterBar = panel.querySelector('.cw-queue-filters');
   if (!filterBar) return;
+  if (!filterBar.querySelector(`[data-cw-queue-filter="${state.childrenwearQueueFilters[stage] || 'all'}"]`)) {
+    state.childrenwearQueueFilters[stage] = 'all';
+  }
   filterBar.hidden = false;
   filterBar.setAttribute('data-stage', stage);
   const drafts = state.childrenwearDrafts[stage] || [];
@@ -7198,6 +7289,85 @@ function renderCwActivity(stage) {
     const detail = missing.length ? `缺少：${missing.join('、')}` : (draft.progress || cwDraftStatusText(draft));
     return `<button class="cw-activity-item ${key}" type="button" data-cw-activity-jump="${escapeHtml(draft.id)}" data-stage="${stage}"><span><b title="${escapeHtml(title)}">${escapeHtml(title)}</b><em>${escapeHtml(cwActivityClock(cwDraftActivityTime(draft)))}</em></span><small>${escapeHtml(cwDraftStatusLabel(draft))} · ${escapeHtml(detail)}</small></button>`;
   }).join('') : '<div class="cw-activity-empty">暂无任务动态</div>';
+}
+
+function cwLineageMasterOptions() {
+  return state.childrenwearTasks
+    .filter(task => task.masterPath && task.masterUrl)
+    .map(task => ({
+      path: task.masterPath,
+      folder: task.folder || '',
+      title: task.taskName || task.category || '平铺母版图',
+      meta: `${task.material || '未标材质'} · ${task.masterApproved ? '已通过' : '待审核'}`,
+      thumbnailUrl: task.masterThumbnailUrl || task.masterUrl,
+      updatedAt: task.updatedAt || task.createdAt || ''
+    }))
+    .sort((left, right) => String(right.updatedAt).localeCompare(String(left.updatedAt)));
+}
+
+function cwDraftUsesLineageMaster(draft, master) {
+  if (!draft || !master) return false;
+  const samePath = value => value && (value === master.path || value.sourceMasterPath === master.path);
+  const sameFolder = value => value && cwFolderKey(value.taskFolder) === cwFolderKey(master.folder);
+  if (draft.stage === 'master') return samePath(draft.result?.path) || cwFolderKey(draft.taskFolder) === cwFolderKey(master.folder);
+  if (draft.stage === 'model') return samePath(draft.master) || samePath(draft.master?.path) || sameFolder(draft.master);
+  return (draft.masters || []).some(item => samePath(item) || samePath(item.path) || sameFolder(item));
+}
+
+function cwLineageRelations(master) {
+  const stages = ['master', 'model', 'combination'];
+  return stages.flatMap(stage => (state.childrenwearDrafts[stage] || [])
+    .filter(draft => cwDraftUsesLineageMaster(draft, master))
+    .map(draft => ({ stage, draft, time: cwDraftActivityTime(draft) })))
+    .sort((left, right) => String(right.time).localeCompare(String(left.time)));
+}
+
+function renderCwLineageSearch() {
+  const list = $('#cwLineageMasterList');
+  const results = $('#cwLineageResults');
+  if (!list || !results) return;
+  const query = String(state.childrenwearLineageQuery || '').trim().toLocaleLowerCase('zh-CN');
+  const all = cwLineageMasterOptions();
+  const visible = query ? all.filter(item => `${item.title}\n${item.meta}\n${item.path}`.toLocaleLowerCase('zh-CN').includes(query)) : all;
+  if (!all.some(item => item.path === state.childrenwearLineageSelectedPath)) state.childrenwearLineageSelectedPath = visible[0]?.path || all[0]?.path || '';
+  list.innerHTML = visible.length ? visible.map(item => `<button class="cw-lineage-master${item.path === state.childrenwearLineageSelectedPath ? ' active' : ''}" type="button" data-cw-lineage-master="${escapeHtml(item.path)}"><img loading="lazy" decoding="async" src="${escapeHtml(item.thumbnailUrl)}" alt="${escapeHtml(item.title)}"><span><b>${escapeHtml(item.title)}</b><small>${escapeHtml(item.meta)}</small></span></button>`).join('') : '<div class="empty-inline">没有匹配的平铺图。</div>';
+  const selected = all.find(item => item.path === state.childrenwearLineageSelectedPath);
+  const relations = selected ? cwLineageRelations(selected) : [];
+  $('#cwLineageSelectedTitle').textContent = selected?.title || '请选择一张平铺图';
+  $('#cwLineageSelectedMeta').textContent = `${relations.length} 个关联任务`;
+  results.innerHTML = relations.length ? relations.map(({ stage, draft, time }) => `<button class="cw-lineage-result" type="button" data-cw-lineage-stage="${stage}" data-cw-lineage-draft="${escapeHtml(draft.id)}"><span class="stage">${stage === 'master' ? '02 平铺' : stage === 'model' ? '03 模特' : '04 组合'}</span><span><b>${escapeHtml(draft.title || CW_STAGE_META[stage].label)}</b><small>${escapeHtml(cwDraftStatusLabel(draft))} · ${escapeHtml(draft.progress || cwDraftStatusText(draft))}</small></span><time>${escapeHtml(cwActivityClock(time))}</time></button>`).join('') : '<div class="empty-inline">这张平铺图暂时没有关联任务。</div>';
+}
+
+async function openCwLineageSearch() {
+  await loadChildrenwearTasks();
+  state.childrenwearLineageQuery = '';
+  $('#cwLineageQuery').value = '';
+  renderCwLineageSearch();
+  $('#cwLineageSearchModal').hidden = false;
+  requestAnimationFrame(() => $('#cwLineageQuery').focus());
+}
+
+function closeCwLineageSearch() {
+  $('#cwLineageSearchModal').hidden = true;
+}
+
+function jumpToCwLineageDraft(stage, id) {
+  const drafts = state.childrenwearDrafts[stage] || [];
+  const index = drafts.findIndex(item => item.id === id);
+  if (index < 0) return toast('关联任务已被删除或尚未同步，请刷新后重试', true);
+  closeCwLineageSearch();
+  state.childrenwearQueueFilters[stage] = 'all';
+  state.childrenwearQueueDateFilters[stage] = 'all';
+  state.childrenwearQueueVisibleLimits[stage] = Math.max(36, index + 1);
+  state.childrenwearActiveDraft[stage] = id;
+  openChildrenwearProduction(stage);
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const card = [...($(CW_STAGE_META[stage].queue)?.querySelectorAll('[data-cw-draft]') || [])].find(item => item.dataset.cwDraft === id);
+    if (!card) return;
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    card.classList.add('log-target');
+    setTimeout(() => card.classList.remove('log-target'), 2500);
+  }));
 }
 
 function renderCwQueue(stage) {
@@ -7281,8 +7451,29 @@ function cwLibrarySource(stage) {
   if (tab === 'model-reference') return { key: 'childrenwearModelAssetsPath', role: 'reference', folders: '#cwModelSourceFolders', grid: '#cwModelSourceGrid' };
   if (tab === 'model-scene') return { key: 'childrenwearSceneAssetsPath', role: 'scene', folders: '#cwModelSourceFolders', grid: '#cwModelSourceGrid' };
   if (tab === 'combination-reference') return { key: 'childrenwearCombinationAssetsPath', role: 'reference', folders: '#cwCombinationSourceFolders', grid: '#cwCombinationSourceGrid' };
-  if (tab === 'model-master') return { approved: true, role: 'master', folders: '#cwModelSourceFolders', grid: '#cwModelSourceGrid' };
-  return { approved: true, role: 'master', folders: '#cwCombinationSourceFolders', grid: '#cwCombinationSourceGrid' };
+  if (tab === 'model-master') return { generated: true, role: 'master', folders: '#cwModelSourceFolders', grid: '#cwModelSourceGrid' };
+  return { generated: true, role: 'master', folders: '#cwCombinationSourceFolders', grid: '#cwCombinationSourceGrid' };
+}
+
+function cwHydratedFixedModelReference() {
+  const fixed = state.childrenwearFixedModelReference;
+  if (!fixed?.path) return null;
+  const hydrated = (state.childrenwearProductionLibraries.childrenwearModelAssetsPath || []).find(item => item.path === fixed.path);
+  if (hydrated) state.childrenwearFixedModelReference = hydrated;
+  return hydrated || fixed;
+}
+
+function renderFixedModelControl() {
+  const checkbox = $('#cwFixedModelEnabled');
+  const status = $('#cwFixedModelStatus');
+  const clear = $('#cwClearFixedModel');
+  if (!checkbox || !status || !clear) return;
+  const fixed = cwHydratedFixedModelReference();
+  checkbox.checked = Boolean(state.childrenwearFixedModelEnabled);
+  status.textContent = fixed?.path
+    ? `当前固定：${fixed.name || fixed.folder || '已选模特'}；新任务自动复用，仅更换场景`
+    : (state.childrenwearFixedModelEnabled ? '请从下方选择一张参考模特图作为固定模特' : '关闭后每张任务可选择不同模特');
+  clear.hidden = !fixed?.path;
 }
 
 function renderCwSource(stage) {
@@ -7290,23 +7481,25 @@ function renderCwSource(stage) {
   const folders = $(source.folders);
   const grid = $(source.grid);
   if (!folders || !grid) return;
-  if (source.approved) {
-    const items = state.childrenwearTasks.filter(task => task.masterApproved && task.masterPath && task.masterUrl).map(task => ({ path: task.masterPath, url: task.masterUrl, thumbnailUrl: task.masterThumbnailUrl, previewUrl: task.masterPreviewUrl, name: task.taskName || task.category || '已审核平铺图', folder: task.material || '', taskFolder: task.folder, taskName: task.taskName || task.category || '' }));
-    folders.innerHTML = `<span>已审核平铺图</span><b>${items.length} 张可用</b>`;
-    grid.innerHTML = items.length ? items.map(item => `<button class="cw-source-item" type="button" data-cw-source-path="${escapeHtml(item.path)}" data-cw-source-role="master"><img loading="lazy" decoding="async" src="${escapeHtml(item.thumbnailUrl || item.url)}" data-preview-src="${escapeHtml(item.previewUrl || item.url)}" alt="${escapeHtml(item.name)}"><span><b>${escapeHtml(item.name)}</b><small>${escapeHtml(item.folder)}</small></span></button>`).join('') : '<div class="cw-source-empty">平铺图审核通过后才会显示在这里，可在 02 就地审核或到 05 集中处理。</div>';
+  if (source.generated) {
+    const items = state.childrenwearTasks.filter(task => task.masterPath && task.masterUrl).map(task => ({ path: task.masterPath, url: task.masterUrl, thumbnailUrl: task.masterThumbnailUrl, previewUrl: task.masterPreviewUrl, name: task.taskName || task.category || '已生成平铺图', folder: task.material || '', taskFolder: task.folder, taskName: task.taskName || task.category || '', reviewed: Boolean(task.masterApproved) }));
+    folders.innerHTML = `<span>全部已生成平铺图</span><b>${items.length} 张可用</b>`;
+    grid.innerHTML = items.length ? items.map(item => `<button class="cw-source-item" type="button" data-cw-source-path="${escapeHtml(item.path)}" data-cw-source-role="master"><img loading="lazy" decoding="async" src="${escapeHtml(item.thumbnailUrl || item.url)}" data-preview-src="${escapeHtml(item.previewUrl || item.url)}" alt="${escapeHtml(item.name)}"><span><b>${escapeHtml(item.name)}</b><small>${escapeHtml(item.folder)} · ${item.reviewed ? '平铺已通过' : '平铺待审核'}</small></span></button>`).join('') : '<div class="cw-source-empty">还没有已生成平铺图。请先在 02 生成，审核状态不会阻塞 03、04 使用。</div>';
     return;
   }
   const active = state.childrenwearLibraryFolder[source.key] || 'root';
   const libraryFolders = state.childrenwearProductionFolders[source.key] || [];
   folders.innerHTML = libraryFolders.length ? libraryFolders.map(folder => `<button class="${folder.id === active ? 'active' : ''}" type="button" data-cw-source-folder="${escapeHtml(folder.id)}" data-cw-source-key="${source.key}">${escapeHtml(folder.name)}<small>${Number(folder.count) || 0}</small></button>`).join('') : '<span>暂无文件夹</span>';
   const items = state.childrenwearProductionLibraries[source.key] || [];
-  grid.innerHTML = items.length ? items.map(item => `<button class="cw-source-item" type="button" data-cw-source-path="${escapeHtml(item.path)}" data-cw-source-role="${source.role}"><img loading="lazy" decoding="async" src="${escapeHtml(item.thumbnailUrl || item.url)}" data-preview-src="${escapeHtml(item.previewUrl || item.url)}" alt="${escapeHtml(item.name)}"><span><b>${escapeHtml(item.name)}</b><small>${escapeHtml(item.folder || '')}</small></span></button>`).join('') : '<div class="cw-source-empty">当前文件夹没有已完成 AI 分析的素材，请先到 01 素材资产完成分析。</div>';
+  const fixedPath = stage === 'model' && source.role === 'reference' ? state.childrenwearFixedModelReference?.path : '';
+  grid.innerHTML = items.length ? items.map(item => `<button class="cw-source-item${fixedPath && item.path === fixedPath ? ' fixed-model' : ''}" type="button" data-cw-source-path="${escapeHtml(item.path)}" data-cw-source-role="${source.role}"><img loading="lazy" decoding="async" src="${escapeHtml(item.thumbnailUrl || item.url)}" data-preview-src="${escapeHtml(item.previewUrl || item.url)}" alt="${escapeHtml(item.name)}"><span><b>${escapeHtml(item.name)}</b><small>${escapeHtml(item.folder || '')}${fixedPath && item.path === fixedPath ? ' · 固定模特' : ''}</small></span></button>`).join('') : '<div class="cw-source-empty">当前文件夹没有已完成 AI 分析的素材，请先到 01 素材资产完成分析。</div>';
+  if (stage === 'model') renderFixedModelControl();
 }
 
 function cwFindSource(stage, role, pathValue) {
   if (role === 'master') {
     const task = state.childrenwearTasks.find(item => item.masterPath === pathValue);
-    return task ? { path: task.masterPath, url: task.masterUrl, thumbnailUrl: task.masterThumbnailUrl, previewUrl: task.masterPreviewUrl, name: task.taskName || task.category || '已审核平铺图', folder: task.material || '', taskFolder: task.folder, taskName: task.taskName || task.category || '' } : null;
+    return task ? { path: task.masterPath, url: task.masterUrl, thumbnailUrl: task.masterThumbnailUrl, previewUrl: task.masterPreviewUrl, name: task.taskName || task.category || '已生成平铺图', folder: task.material || '', taskFolder: task.folder, taskName: task.taskName || task.category || '' } : null;
   }
   const source = cwLibrarySource(stage);
   return (state.childrenwearProductionLibraries[source.key] || []).find(item => item.path === pathValue) || null;
@@ -7368,6 +7561,18 @@ function addCwSource(stage, role, pathValue) {
     } else {
       draft = cwOldestDraft(stage, item => !item[role]?.path) || cwNewDraft(stage);
       draft[role] = source;
+      if (role === 'reference' && state.childrenwearFixedModelEnabled) {
+        state.childrenwearFixedModelReference = source;
+        for (const candidate of state.childrenwearDrafts.model) {
+          if (!candidate.reference?.path && !candidate.result?.path && candidate.status !== '生成中') {
+            candidate.reference = source;
+            candidate.status = cwDraftReady(candidate) ? '待生成' : '待补齐素材';
+            candidate.updatedAt = new Date().toISOString();
+          }
+        }
+        persistFixedModelReferencePreference();
+        renderFixedModelControl();
+      }
       draft.backgroundMode ||= state.childrenwearModelBackgroundMode || 'model_reference';
     }
   } else if (role === 'reference') {
@@ -7425,7 +7630,8 @@ function setChildrenwearProductionTab(tab) {
 function cwDraftGenerationPayload(stage, draft) {
   if (stage === 'master') return {
     folder: draft.taskFolder || '', realPhotoPath: draft.real.path, referencePath: draft.reference.path,
-    taskName: draft.title, taskCode: draft.taskCode, category: draft.real.folder || '童装', material: '以实拍图为准', craft: '', extraInstruction: ''
+    taskName: draft.title, taskCode: draft.taskCode, category: draft.real.folder || '童装',
+    material: draft.real.folder || '以实拍图为准', craft: '', extraInstruction: ''
   };
   if (stage === 'model') return {
     folder: draft.master.taskFolder, taskName: draft.title,
@@ -7447,6 +7653,7 @@ function applyCwDraftGenerationResult(stage, draft, result) {
   draft.title = result.taskName || draft.title || cwTaskDisplayName(draft.styleName, draft.taskCode);
   if (stage === 'master') {
     draft.result = { path: result.masterPath, url: result.masterUrl, thumbnailUrl: result.masterThumbnailUrl, previewUrl: result.masterPreviewUrl, name: `平铺母版 v${result.masterVersion || 1}` };
+    draft.flatLayValidation = result.flatLayValidation || null;
   } else {
     const output = (stage === 'model' ? result.modelOutputs : result.combinationOutputs)?.at(-1);
     draft.outputId = output?.id;
@@ -7455,8 +7662,8 @@ function applyCwDraftGenerationResult(stage, draft, result) {
       name: stage === 'model' ? '模特图候选' : '组合图候选'
     } : null;
   }
-  draft.status = '等待成品审核';
-  draft.progress = stage === 'master' ? '平铺图已生成，请在当前页面高清审核' : '已进入 05 成品审核与下载';
+  draft.status = stage === 'master' ? '等待成品审核' : '已完成';
+  draft.progress = stage === 'master' ? '平铺图已生成，请在当前页面高清审核' : '图片已生成，可直接查看、下载或用于后续流程';
   draft.updatedAt = new Date().toISOString();
 }
 
@@ -7509,7 +7716,7 @@ async function runCwDraft(stage, draft, options = {}) {
     applyChildrenwearTaskSnapshots([result]);
     if (options.liveRefresh && result?.folder) void scheduleChildrenwearTaskRefresh(result.folder);
     else if (!options.deferReload && !result?.folder) await loadChildrenwearTasks();
-    if (!options.silent) toast(stage === 'master' ? '平铺图生成完成，请在当前页面审核' : `${CW_STAGE_META[stage].label}生成完成，已进入 05 成品审核与下载`);
+    if (!options.silent) toast(stage === 'master' ? '平铺图生成完成，请在当前页面审核' : `${CW_STAGE_META[stage].label}生成完成，可直接查看和下载`);
     return true;
   } catch (error) {
     draft.status = '失败';
@@ -7586,7 +7793,7 @@ async function runCwBatch(stage, mode = 'generate') {
     const failed = Number(batch.failed) || drafts.filter(draft => draft.status === '失败').length;
     const succeeded = drafts.length - failed;
     if (failed) return toast(`批量任务完成：成功 ${succeeded} 个，失败 ${failed} 个；失败卡片可单独重新生成`, true);
-    toast(stage === 'master' ? `${succeeded} 个平铺图任务已并发生成，请继续批量审核` : `${succeeded} 个任务已并发生成并进入成品审核与下载`);
+    toast(stage === 'master' ? `${succeeded} 个平铺图任务已并发生成，请继续批量审核` : `${succeeded} 个任务已并发生成，可直接查看和下载`);
   } catch (error) {
     for (const draft of drafts.filter(item => item.status === '生成中')) {
       draft.status = '失败';
@@ -7649,8 +7856,8 @@ function cwReviewItems() {
     const currentMasterHistory = (task.masterHistory || []).find(item => item.path === task.masterPath) || (task.masterHistory || []).at(-1) || {};
     const masterMetrics = Object.keys(task.masterGeneration || {}).length ? task.masterGeneration : currentMasterHistory;
     if (task.masterPath && task.masterUrl) items.push({ id: `master:${task.folder}`, stage: 'master', stageLabel: '平铺母版图', folder: task.folder, outputId: '', path: task.masterPath, url: task.masterUrl, thumbnailUrl: task.masterThumbnailUrl, previewUrl: task.masterPreviewUrl, approved: Boolean(task.masterApproved), task, output: masterMetrics, createdAt: masterMetrics.completedAt || currentMasterHistory.createdAt || task.createdAt });
-    for (const output of task.modelOutputs || []) items.push({ id: `model:${task.folder}:${output.id}`, stage: 'model', stageLabel: '模特上身图', folder: task.folder, outputId: output.id, path: output.path, url: output.url, thumbnailUrl: output.thumbnailUrl, previewUrl: output.previewUrl, approved: Boolean(output.approved), task, output, createdAt: output.createdAt });
-    for (const output of task.combinationOutputs || []) items.push({ id: `combination:${task.folder}:${output.id}`, stage: 'combination', stageLabel: '多 SKU 组合图', folder: task.folder, outputId: output.id, path: output.path, url: output.url, thumbnailUrl: output.thumbnailUrl, previewUrl: output.previewUrl, approved: Boolean(output.approved), task, output, createdAt: output.createdAt });
+    for (const output of task.modelOutputs || []) items.push({ id: `model:${task.folder}:${output.id}`, stage: 'model', stageLabel: '模特上身图', folder: task.folder, outputId: output.id, path: output.path, url: output.url, thumbnailUrl: output.thumbnailUrl, previewUrl: output.previewUrl, approved: false, reviewRequired: false, task, output, createdAt: output.createdAt });
+    for (const output of task.combinationOutputs || []) items.push({ id: `combination:${task.folder}:${output.id}`, stage: 'combination', stageLabel: '多 SKU 组合图', folder: task.folder, outputId: output.id, path: output.path, url: output.url, thumbnailUrl: output.thumbnailUrl, previewUrl: output.previewUrl, approved: false, reviewRequired: false, task, output, createdAt: output.createdAt });
   }
   return items.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
 }
@@ -7707,6 +7914,7 @@ function cwVisibleReviewItems() {
   const dateFilter = state.childrenwearReviewDateFilter || 'all';
   if (dateFilter !== 'all') items = items.filter(item => cwTaskDateKey(item.task || item, item.task) === dateFilter);
   if (state.childrenwearReviewFilter === 'pending') return items.filter(item => cwReviewStatus(item) === 'pending');
+  if (state.childrenwearReviewFilter === 'completed') return items.filter(item => cwReviewStatus(item) === 'completed');
   if (state.childrenwearReviewFilter === 'needs_regeneration') return items.filter(item => cwReviewStatus(item) === 'needs_regeneration');
   if (state.childrenwearReviewFilter === 'approved') return items.filter(item => item.approved);
   return items;
@@ -7747,7 +7955,7 @@ function cwCompareSources(item) {
   } else {
     const masterUrls = item.output?.masterUrls?.length ? item.output.masterUrls : (task.masterUrls || []);
     const masterPreviewUrls = item.output?.masterPreviewUrls?.length ? item.output.masterPreviewUrls : (task.masterPreviewUrls || []);
-    masterUrls.forEach((url, index) => add(`master-${index}`, `已审核平铺图 ${String.fromCharCode(65 + index)}`, url, 'source', index === 0, masterPreviewUrls[index]));
+    masterUrls.forEach((url, index) => add(`master-${index}`, `已生成平铺图 ${String.fromCharCode(65 + index)}`, url, 'source', index === 0, masterPreviewUrls[index]));
     add('combination-reference', '组合参考图', item.output?.combinationReferenceUrl || task.combinationReferenceUrl, 'source', false, item.output?.combinationReferencePreviewUrl || task.combinationReferencePreviewUrl);
     add('result', '生成多 SKU 组合图', item.url, 'result', false, item.previewUrl);
   }
@@ -7893,10 +8101,12 @@ function renderCwCompare() {
   const sources = allSources.filter(source => visibleSet.has(source.key));
   const taskName = item.task.taskName || item.task.category || '未命名款式';
   $('#cwCompareTitle').textContent = taskName;
-  $('#cwCompareStage').textContent = `${item.stageLabel} · ${item.approved ? '已通过' : '待审核'}`;
+  const reviewStatus = cwReviewStatus(item);
+  $('#cwCompareStage').textContent = `${item.stageLabel} · ${reviewStatus === 'approved' ? '已通过' : reviewStatus === 'completed' ? '已完成' : reviewStatus === 'needs_regeneration' ? '需重生成' : '待审核'}`;
   $('#cwCompareCounter').textContent = queue.length ? `${index + 1} / ${queue.length}` : '1 / 1';
   $('#cwComparePrevious').disabled = state.childrenwearCompareBusy || index <= 0;
   $('#cwCompareNext').disabled = state.childrenwearCompareBusy || index < 0 || index >= queue.length - 1;
+  $('#cwCompareApprove').hidden = item.stage !== 'master';
   $('#cwCompareApprove').disabled = state.childrenwearCompareBusy || item.approved;
   $('#cwCompareApprove').textContent = item.approved ? '审核已通过' : '审核通过并查看下一张';
   $('#cwCompareRegenerate').disabled = state.childrenwearCompareBusy;
@@ -7946,7 +8156,7 @@ function navigateCwCompare(step) {
 
 async function approveCurrentCwCompare() {
   const item = cwReviewItems().find(candidate => candidate.id === state.childrenwearCompareId);
-  if (!item || item.approved || state.childrenwearCompareBusy) return;
+  if (!item || item.stage !== 'master' || item.approved || state.childrenwearCompareBusy) return;
   const queue = cwCompareQueue();
   const index = queue.findIndex(candidate => candidate.id === item.id);
   const nextId = queue[index + 1]?.id || queue[index - 1]?.id || '';
@@ -8007,6 +8217,7 @@ function renderCwReview() {
   let items = allItems;
   if (state.childrenwearReviewDateFilter !== 'all') items = items.filter(item => cwTaskDateKey(item.task || item, item.task) === state.childrenwearReviewDateFilter);
   if (state.childrenwearReviewFilter === 'pending') items = items.filter(item => cwReviewStatus(item) === 'pending');
+  if (state.childrenwearReviewFilter === 'completed') items = items.filter(item => cwReviewStatus(item) === 'completed');
   if (state.childrenwearReviewFilter === 'needs_regeneration') items = items.filter(item => cwReviewStatus(item) === 'needs_regeneration');
   if (state.childrenwearReviewFilter === 'approved') items = items.filter(item => item.approved);
   const availableIds = new Set(items.map(item => item.id));
@@ -8019,12 +8230,13 @@ function renderCwReview() {
   $('#cwReviewCount').textContent = `${groups.size} 个款式 · ${items.length} 张图片${state.childrenwearReviewSelection.size ? ` · 已选 ${state.childrenwearReviewSelection.size}` : ''}`;
   const hasSelection = state.childrenwearReviewSelection.size > 0;
   $('#cwReviewCompareSelected').disabled = !hasSelection;
-  $('#cwReviewApproveSelected').disabled = !hasSelection;
+  const selectedReviewableMasters = items.filter(item => state.childrenwearReviewSelection.has(item.id) && item.stage === 'master' && !item.approved);
+  $('#cwReviewApproveSelected').disabled = !selectedReviewableMasters.length;
   $('#cwReviewRegenerateSelected').disabled = !hasSelection;
   $('#cwReviewDownloadSelected').disabled = !hasSelection;
   const card = item => {
     const status = cwReviewStatus(item);
-    return `<article class="cw-review-card${item.approved ? ' approved' : ''}${status === 'needs_regeneration' ? ' needs-regeneration' : ''}${state.childrenwearReviewSelection.has(item.id) ? ' selected' : ''}" data-cw-review-id="${escapeHtml(item.id)}"><label><input type="checkbox" data-cw-review-select="${escapeHtml(item.id)}"${state.childrenwearReviewSelection.has(item.id) ? ' checked' : ''}><span></span><b>${escapeHtml(item.stageLabel)}</b><em>${status === 'approved' ? '已通过' : status === 'needs_regeneration' ? '需重生成' : '待审核'}</em></label><button class="cw-review-image-button" type="button" data-cw-review-compare="${escapeHtml(item.id)}" title="点击进入高清对比审核"><img loading="lazy" decoding="async" src="${escapeHtml(item.thumbnailUrl || item.url)}" data-preview-src="${escapeHtml(item.previewUrl || item.url)}" alt="${escapeHtml(item.stageLabel)}"></button></article>`;
+    return `<article class="cw-review-card${item.approved ? ' approved' : ''}${status === 'completed' ? ' completed' : ''}${status === 'needs_regeneration' ? ' needs-regeneration' : ''}${state.childrenwearReviewSelection.has(item.id) ? ' selected' : ''}" data-cw-review-id="${escapeHtml(item.id)}"><label><input type="checkbox" data-cw-review-select="${escapeHtml(item.id)}"${state.childrenwearReviewSelection.has(item.id) ? ' checked' : ''}><span></span><b>${escapeHtml(item.stageLabel)}</b><em>${status === 'approved' ? '已通过' : status === 'completed' ? '已完成' : status === 'needs_regeneration' ? '需重生成' : '待审核'}</em></label><button class="cw-review-image-button" type="button" data-cw-review-compare="${escapeHtml(item.id)}" title="点击进入高清对比查看"><img loading="lazy" decoding="async" src="${escapeHtml(item.thumbnailUrl || item.url)}" data-preview-src="${escapeHtml(item.previewUrl || item.url)}" alt="${escapeHtml(item.stageLabel)}"></button></article>`;
   };
   const allItemsByFolder = new Map();
   for (const item of allItems) {
@@ -8047,10 +8259,11 @@ function renderCwReview() {
   }).join('');
   grid.innerHTML = groups.size
     ? `${groupsMarkup}${remainingGroups ? `<button class="cw-review-load-more" type="button" data-cw-review-more-groups>继续显示 ${Math.min(12, remainingGroups)} 个款式（剩余 ${remainingGroups} 个）</button>` : ''}`
-    : '<div class="cw-task-empty"><b>当前没有需要审核的图片</b><span>02、03、04 生成完成后会自动进入这里。</span></div>';
+    : '<div class="cw-task-empty"><b>当前没有生成结果</b><span>02、03、04 生成完成后会自动显示在这里。</span></div>';
 }
 
 async function approveCwReviewItem(item) {
+  if (item?.stage !== 'master') return null;
   await window.caishen.approveChildrenwearOutput({ folder: item.folder, stage: item.stage, outputId: item.outputId, approved: true });
 }
 
@@ -8158,6 +8371,24 @@ async function flushChildrenwearTaskRefresh() {
 
 function bindChildrenwearEvents() {
   let compareDrag = null;
+  $('#openCwLineageSearchButton').onclick = openCwLineageSearch;
+  $('#closeCwLineageSearchButton').onclick = closeCwLineageSearch;
+  $('#closeCwLineageSearchFooterButton').onclick = closeCwLineageSearch;
+  $('#cwLineageQuery').oninput = event => {
+    state.childrenwearLineageQuery = event.target.value;
+    renderCwLineageSearch();
+  };
+  $('#cwLineageMasterList').onclick = event => {
+    const button = event.target.closest('[data-cw-lineage-master]');
+    if (!button) return;
+    state.childrenwearLineageSelectedPath = button.dataset.cwLineageMaster;
+    renderCwLineageSearch();
+  };
+  $('#cwLineageResults').onclick = event => {
+    const button = event.target.closest('[data-cw-lineage-draft]');
+    if (button) jumpToCwLineageDraft(button.dataset.cwLineageStage, button.dataset.cwLineageDraft);
+  };
+  $('#cwLineageSearchModal').onclick = event => { if (event.target === $('#cwLineageSearchModal')) closeCwLineageSearch(); };
   const taskContextMenu = document.createElement('div');
   taskContextMenu.className = 'cw-task-context-menu';
   taskContextMenu.hidden = true;
@@ -8198,6 +8429,43 @@ function bindChildrenwearEvents() {
     }
     renderCwQueue('model');
   });
+  $('#cwFixedModelEnabled').onchange = event => {
+    state.childrenwearFixedModelEnabled = Boolean(event.target.checked);
+    if (state.childrenwearFixedModelEnabled) {
+      const activeReference = state.childrenwearDrafts.model.find(item => item.id === state.childrenwearActiveDraft.model)?.reference;
+      if (activeReference?.path) state.childrenwearFixedModelReference = activeReference;
+      const fixed = cwHydratedFixedModelReference();
+      if (fixed?.path) {
+        for (const draft of state.childrenwearDrafts.model) {
+          if (!draft.reference?.path && !draft.result?.path && draft.status !== '生成中') {
+            draft.reference = fixed;
+            draft.status = cwDraftReady(draft) ? '待生成' : '待补齐素材';
+            draft.updatedAt = new Date().toISOString();
+          }
+        }
+      } else {
+        state.childrenwearSourceTabs.model = 'model-reference';
+        const tab = $('[data-cw-source-tab="model-reference"]');
+        tab?.parentElement.querySelectorAll('[data-cw-source-tab]').forEach(item => item.classList.toggle('active', item === tab));
+        void loadChildrenwearLibrary('childrenwearModelAssetsPath').then(() => renderCwSource('model'));
+        toast('请点击一张参考模特图，将它设为固定模特');
+      }
+    }
+    persistFixedModelReferencePreference();
+    renderFixedModelControl();
+    renderCwSource('model');
+    renderCwQueue('model');
+  };
+  $('#cwClearFixedModel').onclick = event => {
+    event.preventDefault();
+    event.stopPropagation();
+    state.childrenwearFixedModelReference = null;
+    state.childrenwearFixedModelEnabled = false;
+    persistFixedModelReferencePreference();
+    renderFixedModelControl();
+    renderCwSource('model');
+    toast('已取消固定模特；现有任务卡片的选择保持不变');
+  };
   $$('.cw-source-column').forEach(column => column.onclick = async event => {
     const folder = event.target.closest('[data-cw-source-folder]');
     if (folder) {
@@ -8425,9 +8693,10 @@ function bindChildrenwearEvents() {
     openCwCompare(first.id, 'review-selection');
   };
   $('#cwReviewApproveSelected').onclick = async () => {
-    const items = cwReviewItems().filter(item => state.childrenwearReviewSelection.has(item.id) && !item.approved);
+    const items = cwReviewItems().filter(item => state.childrenwearReviewSelection.has(item.id) && item.stage === 'master' && !item.approved);
+    if (!items.length) return toast('选中图片中没有待审核的平铺图', true);
     for (const item of items) await approveCwReviewItem(item);
-    state.childrenwearReviewSelection.clear(); await loadChildrenwearTasks(); toast(`已通过 ${items.length} 张图片`);
+    state.childrenwearReviewSelection.clear(); await loadChildrenwearTasks(); toast(`已通过 ${items.length} 张平铺图`);
   };
   $('#cwReviewRegenerateSelected').onclick = async () => {
     const items = cwReviewItems().filter(item => state.childrenwearReviewSelection.has(item.id));

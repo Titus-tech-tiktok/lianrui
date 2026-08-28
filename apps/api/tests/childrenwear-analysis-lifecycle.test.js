@@ -24,15 +24,23 @@ test('删除中的素材会使旧 AI 请求失效，重新导入后必须重新�
         await releaseFirst;
       }
       res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({
-        choices: [{ message: { content: JSON.stringify({
+      const analysisJson = JSON.stringify({
           summary: `真实分析-${requestCount}`,
-          category_guess: '开放品类测试',
-          piece_count: 1,
+          product_truth: {
+            category: '开放品类测试',
+            component_count: 1,
+            base_color: { name: '米色', hex_estimate: '#E8D9B8' },
+            fabric: { family: '可见测试面料', surface_texture: '平滑' },
+            must_preserve: ['真实颜色和轮廓'],
+            must_not_invent: ['不可新增口袋']
+          },
           pieces: [{ piece_id: 'piece_1', piece_type: '测试童装', material: {}, construction: {}, decorations: [] }],
-          must_preserve: [],
           uncertain_regions: []
-        }) } }],
+        });
+      res.end(JSON.stringify({
+        choices: [{ message: requestCount === 3
+          ? { content: '', reasoning_content: analysisJson }
+          : { content: analysisJson } }],
         usage: {}
       }));
     });
@@ -59,6 +67,7 @@ test('删除中的素材会使旧 AI 请求失效，重新导入后必须重新�
   await fs.mkdir(library, { recursive: true });
   const bytes = await sharp({ create: { width: 160, height: 200, channels: 3, background: '#e8d9b8' } }).png().toBuffer();
   await fs.writeFile(file, bytes);
+  await runtime.saveConfig({ childrenwearRealAssetsPath: library });
 
   const oldRequest = runtime.analyzeChildrenwearAssets({ role: 'product', paths: [file] });
   await firstStarted;
@@ -81,6 +90,15 @@ test('删除中的素材会使旧 AI 请求失效，重新导入后必须重新�
   const analyzedPage = await runtime.scanImageLibraryPage(library, { analysisRole: 'product', folder: 'root' });
   assert.equal(analyzedPage.items[0].analysis.status, 'analyzed');
   assert.match(analyzedPage.items[0].analysis.summary, /真实分析-2/);
+
+  await runtime.savePromptSetting('childrenwearProductAnalysis', 'UPDATED_PRODUCT_ANALYSIS_PROMPT');
+  const stalePromptPage = await runtime.scanImageLibraryPage(library, { analysisRole: 'product', folder: 'root' });
+  assert.equal(stalePromptPage.items[0].analysis.status, 'pending');
+  const rescanned = await runtime.scanPendingChildrenwearAnalysis();
+  assert.equal(rescanned.analyzed, 1);
+  assert.equal(requestCount, 3);
+  const refreshedPromptPage = await runtime.scanImageLibraryPage(library, { analysisRole: 'product', folder: 'root' });
+  assert.equal(refreshedPromptPage.items[0].analysis.status, 'analyzed');
 
   const serverPath = require.resolve('../src/server');
   delete require.cache[serverPath];

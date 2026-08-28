@@ -374,6 +374,54 @@ html, body, .app-shell, .app-shell > main { transition: background-color .2s eas
   .billing-price-grid label:last-child { grid-column: auto; }
 }
 
+.sidebar-lineage-search { width: 100%; min-height: 56px; margin: auto 0 10px; padding: 10px 12px; border: 1px solid rgba(255,255,255,.15); border-radius: 11px; display: grid; gap: 3px; text-align: left; background: rgba(255,255,255,.06); color: #f4f1e9; }
+.sidebar-lineage-search span { font-size: 13px; font-weight: 800; }
+.sidebar-lineage-search small { color: rgba(255,255,255,.58); font-size: 10px; line-height: 1.35; }
+.sidebar-lineage-search:hover { border-color: rgba(255,255,255,.3); background: rgba(255,255,255,.11); }
+.app-shell.sidebar-collapsed .sidebar-lineage-search { display: none; }
+
+.cw-fixed-model-control { margin: 10px 14px 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 10px; background: #fbfaf6; color: var(--ink); }
+.cw-fixed-model-control > input { width: 18px; height: 18px; accent-color: var(--teal); }
+.cw-fixed-model-control > span { min-width: 0; display: grid; gap: 3px; }
+.cw-fixed-model-control b { font-size: 13px; }
+.cw-fixed-model-control small { color: var(--muted); font-size: 11px; line-height: 1.35; overflow-wrap: anywhere; }
+.cw-fixed-model-control button { min-height: 32px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--danger); font-weight: 800; }
+.cw-source-item.fixed-model { outline: 2px solid var(--teal); outline-offset: -2px; background: var(--teal-soft); }
+.cw-source-item.fixed-model small { color: var(--teal); font-weight: 800; }
+
+.cw-lineage-modal { width: min(1120px, calc(100vw - 36px)); max-height: calc(100vh - 36px); }
+.cw-lineage-body { min-height: 520px; max-height: calc(100vh - 230px); display: grid; grid-template-columns: minmax(280px, 340px) minmax(0,1fr); overflow: hidden; }
+.cw-lineage-body > aside { min-width: 0; padding: 14px; border-right: 1px solid var(--line); display: grid; grid-template-rows: auto minmax(0,1fr); gap: 10px; background: #faf9f5; }
+.cw-lineage-body > aside > input { width: 100%; min-height: 42px; box-sizing: border-box; }
+#cwLineageMasterList, #cwLineageResults { min-height: 0; overflow: auto; }
+#cwLineageMasterList { display: grid; align-content: start; gap: 8px; }
+.cw-lineage-master { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 11px; display: grid; grid-template-columns: 62px minmax(0,1fr); align-items: center; gap: 10px; text-align: left; background: #fff; color: var(--ink); }
+.cw-lineage-master.active { border-color: var(--teal); box-shadow: 0 0 0 2px rgba(39,120,112,.1); background: var(--teal-soft); }
+.cw-lineage-master img { width: 62px; height: 62px; border-radius: 8px; object-fit: cover; background: #eee; }
+.cw-lineage-master span { min-width: 0; display: grid; gap: 4px; }
+.cw-lineage-master b, .cw-lineage-master small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cw-lineage-master b { font-size: 13px; }
+.cw-lineage-master small { color: var(--muted); font-size: 11px; }
+.cw-lineage-body > main { min-width: 0; display: grid; grid-template-rows: auto minmax(0,1fr); background: #fff; }
+.cw-lineage-body > main > header { min-height: 66px; padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex; align-items: center; }
+.cw-lineage-body > main > header > div { display: grid; gap: 4px; }
+.cw-lineage-body > main > header b { font-size: 16px; }
+.cw-lineage-body > main > header span { color: var(--muted); font-size: 12px; }
+#cwLineageResults { padding: 14px 16px; display: grid; align-content: start; gap: 9px; }
+.cw-lineage-result { width: 100%; padding: 12px; border: 1px solid var(--line); border-radius: 11px; display: grid; grid-template-columns: 82px minmax(0,1fr) auto; align-items: center; gap: 12px; text-align: left; background: #fff; color: var(--ink); }
+.cw-lineage-result:hover { border-color: var(--teal); background: var(--teal-soft); }
+.cw-lineage-result .stage { color: var(--teal); font-size: 12px; font-weight: 900; }
+.cw-lineage-result > span:nth-child(2) { min-width: 0; display: grid; gap: 4px; }
+.cw-lineage-result b, .cw-lineage-result small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cw-lineage-result b { font-size: 13px; }
+.cw-lineage-result small, .cw-lineage-result time { color: var(--muted); font-size: 11px; font-style: normal; }
+
+@media (max-width: 760px) {
+  .cw-lineage-modal { width: calc(100vw - 16px); max-height: calc(100vh - 16px); }
+  .cw-lineage-body { grid-template-columns: 1fr; max-height: none; overflow: auto; }
+  .cw-lineage-body > aside { max-height: 300px; border-right: 0; border-bottom: 1px solid var(--line); }
+}
+
 .nav-item {
   color: #f4f1e9b8;
   text-align: left;
@@ -8887,6 +8935,13 @@ body.production-scroll-lock { height: 100vh; overflow: hidden; overflow-anchor: 
 .cw-task-status { color: var(--teal); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .cw-task-status.error { color: var(--danger); }
 .cw-task-missing { color: #855c18; background: #fff8e8; border-radius: 6px; margin-top: -4px; padding: 7px 9px; font-size: 12px; }
+.cw-flatlay-checks { display: flex; flex-wrap: wrap; gap: 8px; padding: 9px 12px; border-top: 1px solid var(--line, #e6e3dc); background: #fafbf9; }
+.cw-flatlay-checks > span { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 4px 9px; border: 1px solid #d9ddd9; border-radius: 999px; color: #53605d; font-size: 13px; }
+.cw-flatlay-checks b, .cw-flatlay-checks em { font: inherit; font-style: normal; }
+.cw-flatlay-checks em { color: #172321; font-weight: 700; }
+.cw-flatlay-checks .pass { border-color: #9bc9bf; background: #eef8f5; }
+.cw-flatlay-checks .fail { border-color: #e3aaa1; background: #fff3f0; color: #9c3f33; }
+.cw-flatlay-checks.error { color: #9c3f33; background: #fff3f0; }
 .cw-task-card > footer button { flex: 0 0 auto; min-height: 34px; font-size: 10px; }
 .cw-task-card-actions { justify-content: flex-end; flex-wrap: wrap; gap: 7px; display: flex; }
 .cw-task-empty { color: var(--muted); border: 1px dashed var(--line); border-radius: 9px; padding: 34px 18px; text-align: center; }

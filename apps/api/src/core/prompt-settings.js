@@ -60,7 +60,7 @@ const PROMPT_DEFINITIONS = Object.freeze([
     id: 'childrenwearModelGeneration',
     title: '模特上身图生成',
     group: '多嘻噜卡生图',
-    description: '结构化三源锁定：已审核母版锁定商品；模特参考图锁定人物与动作类型、上身轮廓、褶皱逻辑和细节展示意图，并在每次生成时小幅随机变化表情、视线、头部角度、肩线、手势或站姿；人物始终居中。背景可选择跟随模特参考、纯白或独立场景参考图；非纯白背景锁定颜色、光线、景深、虚化和机位，只允许凳子、摆件等次要场景元素小幅增减或移动。',
+    description: '结构化三源锁定：选中的已生成平铺图锁定商品，不要求先审核通过；模特参考图锁定人物与动作类型、上身轮廓、褶皱逻辑和细节展示意图，并在每次生成时小幅随机变化表情、视线、头部角度、肩线、手势或站姿；人物始终居中。背景可选择跟随模特参考、纯白或独立场景参考图；非纯白背景锁定颜色、光线、景深、虚化和机位，只允许凳子、摆件等次要场景元素小幅增减或移动。',
     placeholders: [],
     defaultValue: buildChildrenwearModelPrompt({})
   },
@@ -68,7 +68,7 @@ const PROMPT_DEFINITIONS = Object.freeze([
     id: 'childrenwearCombinationGeneration',
     title: '多 SKU 组合图生成',
     group: '多嘻噜卡生图',
-    description: '双源硬锁：每张已审核母版分别锁定一个SKU的真实款式、面料、颜色、材质、图案和结构；组合参考图锁定背景、槽位外轮廓、摆放动作、褶皱、阴影、间距和层级。',
+    description: '双源硬锁：每张选中的已生成平铺图分别锁定一个SKU的真实款式、面料、颜色、材质、图案和结构，不要求先审核通过；组合参考图锁定背景、槽位外轮廓、摆放动作、褶皱、阴影、间距和层级。',
     placeholders: [],
     defaultValue: buildChildrenwearCombinationPrompt({ count: 4 })
   }

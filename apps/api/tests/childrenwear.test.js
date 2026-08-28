@@ -10,8 +10,12 @@ const {
   buildChildrenwearModelPrompt,
   buildChildrenwearCombinationPrompt,
   childrenwearPieceCount,
+  buildChildrenwearFlatLayTransformPlan,
   createChildrenwearCombination,
-  createChildrenwearEvidence
+  createChildrenwearEvidence,
+  extractFlatReferenceBackgroundProfile,
+  flatLayApiSizeForReference,
+  inspectFlatLayOutput
 } = require('../src/core/childrenwear');
 
 async function productImage(background = '#f6f6f3', garment = '#d6b36c') {
@@ -27,12 +31,15 @@ async function productImage(background = '#f6f6f3', garment = '#d6b36c') {
 
 test('childrenwear prompts keep real product and reference roles separate', () => {
   const productManifest = { category_guess: '纯棉梭织裤', piece_count: 1, pieces: [{ material: { family: '纯棉梭织' }, decorations: [{ type: '刺绣贴布' }] }] };
-  const referenceSpec = { canvas: { aspect_ratio: '1:1' }, presentation: { display_pose: '平铺' } };
+  const referenceSpec = { target_geometry: { canvas_aspect_ratio: '1:1', garment_canvas_coverage: 0.52, center_position: { x: 0.5, y: 0.5 } }, background_profile: { target_hex: '#EEBEC1', target_rgb: { r: 238, g: 190, b: 193 } } };
   const master = buildChildrenwearMasterPrompt({ productManifest, referenceSpec });
   assert.match(master, /image 1 is the original real product photo/i);
-  assert.match(master, /image 2 is the finished flat-lay reference/i);
-  assert.match(master, /PRODUCT_MANIFEST/);
-  assert.match(master, /FLAT_REFERENCE_SPEC/);
+  assert.match(master, /image 2 is the target finished flat-lay reference/i);
+  assert.match(master, /product_truth/);
+  assert.match(master, /target_geometry/);
+  assert.match(master, /background_profile/);
+  assert.match(master, /transform_plan/);
+  assert.match(master, /第一张图是商品身份和真实性的唯一依据/);
   assert.match(master, /纯棉梭织裤/);
   assert.match(master, /刺绣贴布/);
   assert.match(master, /Never copy product identity from image 2/i);
@@ -46,10 +53,12 @@ test('childrenwear prompts keep real product and reference roles separate', () =
   assert.match(master, /Fold geometry comes from image 2/i);
   assert.match(master, /garment style, construction, fabric, colour, material, artwork/i);
   assert.match(master, /do not blend, average or trade attributes/i);
+  assert.match(master, /garment_canvas_coverage_tolerance/);
+  assert.match(master, /background_color_tolerance_delta_e/);
   assert.doesNotMatch(master, /automatic detail crops/i);
 
   const model = buildChildrenwearModelPrompt({ productManifest, referenceSpec: { model: { pose: '站立' } } });
-  assert.match(model, /image 1 is the approved flat-lay master/i);
+  assert.match(model, /image 1 is the selected generated flat-lay/i);
   assert.match(model, /final model, action, pose and garment-deformation reference/i);
   assert.match(model, /纯棉梭织/);
   assert.match(model, /Preserve model identity\/type/i);
@@ -79,6 +88,77 @@ test('childrenwear prompts keep real product and reference roles separate', () =
   assert.match(sceneModel, /never controls the person, pose, garment identity or garment folds/i);
 });
 
+test('flat-lay transform plan keeps product facts separate from reference geometry', () => {
+  const plan = buildChildrenwearFlatLayTransformPlan({
+    product_truth: { must_preserve: ['pink pig print'], must_not_invent: ['pockets'] }
+  }, {
+    target_geometry: { garment_canvas_coverage: 0.47, sleeve_angles: [-9, 11] }
+  });
+  assert.ok(plan.preserve_from_source.includes('pink pig print'));
+  assert.ok(plan.forbidden_changes.includes('pockets'));
+  assert.equal(plan.geometry_constraints.target.garment_canvas_coverage, 0.47);
+  assert.equal(plan.geometry_constraints.garment_canvas_coverage_tolerance, 0.03);
+  assert.equal(plan.geometry_constraints.center_position_tolerance, 0.02);
+});
+
+test('background profile uses robust original-image perimeter median instead of one pixel', async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'childrenwear-background-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const file = path.join(root, 'reference.png');
+  const background = { r: 238, g: 190, b: 193, alpha: 1 };
+  const garment = Buffer.from('<svg width="500" height="500" xmlns="http://www.w3.org/2000/svg"><path d="M145 95 L210 70 H290 L355 95 L430 220 L365 260 L330 185 L330 425 L270 425 L250 310 L230 425 L170 425 L170 185 L135 260 L70 220 Z" fill="#ffffff"/></svg>');
+  await sharp({ create: { width: 500, height: 500, channels: 4, background } })
+    .composite([{ input: garment }, { input: Buffer.from('<svg width="20" height="20" xmlns="http://www.w3.org/2000/svg"><rect width="20" height="20" fill="#000000"/></svg>'), left: 0, top: 0 }])
+    .png()
+    .toFile(file);
+  const profile = await extractFlatReferenceBackgroundProfile(file);
+  assert.equal(profile.target_hex, '#EEBEC1');
+  assert.deepEqual(profile.target_rgb, { r: 238, g: 190, b: 193 });
+  assert.equal(profile.color_tolerance_delta_e, 3);
+  assert.match(profile.uniformity.source, /original_reference/);
+});
+
+test('flat-lay API size follows the original reference orientation', async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'childrenwear-output-size-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const cases = [
+    ['square.png', 500, 500, '1024x1024'],
+    ['near-square-portrait.png', 413, 473, '1024x1024'],
+    ['portrait.png', 500, 700, '1024x1536'],
+    ['landscape.png', 700, 500, '1536x1024']
+  ];
+  for (const [name, width, height, expected] of cases) {
+    const file = path.join(root, name);
+    await sharp({ create: { width, height, channels: 3, background: '#eeeeee' } }).png().toFile(file);
+    assert.equal((await flatLayApiSizeForReference(file)).size, expected);
+  }
+});
+
+test('deterministic flat-lay checks report background, center, coverage, contour and keypoints', async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'childrenwear-flatlay-check-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const reference = path.join(root, 'reference.png');
+  const output = path.join(root, 'output.png');
+  await fs.writeFile(reference, await productImage('#eebec1', '#ffffff'));
+  await fs.writeFile(output, await productImage('#eebec1', '#ffffff'));
+  const analysis = {
+    background_profile: { target_hex: '#EEBEC1', target_rgb: { r: 238, g: 190, b: 193 } },
+    target_geometry: {
+      garment_canvas_coverage: 0.33,
+      center_position: { x: 0.5, y: 0.52 },
+      keypoints: { neckline: { x: 0.5, y: 0.12 }, shoulders: [{ x: 0.4, y: 0.18 }, { x: 0.6, y: 0.18 }], sleeve_cuffs: [{ x: 0.14, y: 0.34 }, { x: 0.86, y: 0.34 }], crotch: { x: 0.5, y: 0.65 }, ankle_cuffs: [{ x: 0.35, y: 0.85 }, { x: 0.65, y: 0.85 }] }
+    }
+  };
+  const result = await inspectFlatLayOutput(output, analysis, reference);
+  assert.equal(result.background.delta_e, 0);
+  assert.ok(result.geometry.detected_bbox);
+  assert.ok(result.geometry.contour_similarity_iou > 0.98);
+  assert.ok(result.geometry.keypoint_alignment.checked >= 6);
+  assert.equal(result.geometry.sleeve_angle_checks.count, 2);
+  assert.equal(result.geometry.leg_angle_checks.count, 2);
+  assert.ok(result.geometry.crotch_check);
+});
+
 test('combination prompts use the real reference index for two to four masters', () => {
   for (const count of [2, 3, 4]) {
     const prompt = buildChildrenwearCombinationPrompt({
@@ -90,7 +170,7 @@ test('combination prompts use the real reference index for two to four masters',
         }
       }))
     });
-    assert.match(prompt, new RegExp(`Images 1 to ${count} are approved`, 'i'));
+    assert.match(prompt, new RegExp(`Images 1 to ${count} are selected generated flat-lays`, 'i'));
     assert.match(prompt, new RegExp(`Image ${count + 1} is the target composition action blueprint`, 'i'));
     assert.match(prompt, /SKU 2[\s\S]*"piece_count": 2/i);
     assert.match(prompt, /action blueprint/i);
@@ -143,7 +223,7 @@ test('EXIF-rotated phone photo uses normalized dimensions for evidence crops', a
   for (const file of files) await fs.access(file);
 });
 
-test('approved masters can be deterministically composed without another AI call', async (t) => {
+test('generated flat-lays can be deterministically composed without another AI call', async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'childrenwear-combo-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const first = path.join(root, 'first.png');
@@ -176,12 +256,12 @@ test('runtime completes master approval, model generation and combination with t
         const system = String(body.messages?.[0]?.content || '');
         analysisSystemPrompts.push(system);
         const analysis = system.includes('PRODUCT_MANIFEST')
-          ? { summary: '开放品类商品身份', category_guess: '测试新品类', piece_count: 1, pieces: [{ piece_id: 'piece_1', piece_type: '测试童装', material: { family: '可见面料' }, construction: {}, decorations: [] }], must_preserve: [], uncertain_regions: [] }
+          ? { summary: '开放品类商品身份', product_truth: { category: '测试新品类', component_count: 1, base_color: { name: '灰色', hex_estimate: '#333333' }, fabric: { family: '可见面料', surface_texture: '细纹' }, must_preserve: ['真实结构和颜色'], must_not_invent: ['不可新增口袋'] }, pieces: [{ piece_id: 'piece_1', piece_type: '测试童装', material: { family: '可见面料' }, construction: {}, decorations: [] }], uncertain_regions: [] }
           : system.includes('FLAT_PRESENTATION')
-            ? { summary: '平铺参考', canvas: { aspect_ratio: '1:1' }, presentation: { display_pose: '平铺' }, uncertain_regions: [] }
+            ? { summary: '平铺参考', target_geometry: { canvas_aspect_ratio: '1:1', garment_bbox: { x: 0.2, y: 0.12, width: 0.6, height: 0.76 }, garment_canvas_coverage: 0.35, center_position: { x: 0.5, y: 0.5 }, torso_width_height_ratio: 0.55, shoulder_width: 0.42, sleeve_angles: [-15, 15], sleeve_length_ratio: 0.36, crotch_width: 0.18, crotch_depth: 0.12, leg_angles: [86, 94], leg_length_ratio: 0.4, cuff_width_ratio: 0.2, symmetry: 'near symmetric', flatness: 'flat', keypoints: { neckline: { x: 0.5, y: 0.16 }, shoulders: [{ x: 0.36, y: 0.22 }, { x: 0.64, y: 0.22 }], armpits: [], sleeve_cuffs: [{ x: 0.2, y: 0.38 }, { x: 0.8, y: 0.38 }], crotch: { x: 0.5, y: 0.62 }, legs: [], ankle_cuffs: [{ x: 0.39, y: 0.88 }, { x: 0.61, y: 0.88 }] }, component_placement: [], detail_display_actions: [], folds: [] }, background_profile: { target_hex: '#f6f6f3', target_rgb: { r: 246, g: 246, b: 243 }, shadow: {}, color_tolerance_delta_e: 3 }, uncertain_regions: [] }
             : system.includes('MODEL_REFERENCE')
               ? { summary: '模特参考', model: { pose: '站立' }, protected_regions: [], editable_regions: [], uncertain_regions: [] }
-              : { summary: '组合参考', slot_count: 2, slots: [{ slot_id: 'slot_1' }, { slot_id: 'slot_2' }], uncertain_regions: [] };
+              : { summary: '组合参考', slot_count: 4, slots: [{ slot_id: 'slot_1' }, { slot_id: 'slot_2' }, { slot_id: 'slot_3' }, { slot_id: 'slot_4' }], uncertain_regions: [] };
         return res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(analysis) } }], usage: {} }));
       }
       if (req.url !== '/v1/images/edits') return res.writeHead(404).end();
@@ -246,9 +326,20 @@ test('runtime completes master approval, model generation and combination with t
   assert.equal(first.masterApproved, false);
   assert.match(requestBodies[0], /CUSTOM_BRAND_GUIDANCE/);
   assert.match(requestBodies[0], /SYSTEM_DYNAMIC_EXECUTION_CONTRACT/);
-  assert.match(requestBodies[0], /PRODUCT_MANIFEST/);
-  assert.match(requestBodies[0], /开放品类商品身份/);
-  assert.match(requestBodies[0], /FLAT_REFERENCE_SPEC/);
+  assert.match(requestBodies[0], /product_truth/);
+  assert.match(requestBodies[0], /"category": "测试新品类"/);
+  assert.match(requestBodies[0], /target_geometry/);
+  assert.match(requestBodies[0], /background_profile/);
+  assert.match(requestBodies[0], /transform_plan/);
+  assert.match(requestBodies[0], /1024x1536/);
+  assert.equal(first.backgroundProfile.target_hex, '#F6F6F3');
+  assert.equal(first.productAnalysisSchemaVersion, '2.0');
+  assert.equal(first.flatReferenceAnalysisSchemaVersion, '2.0');
+  assert.ok(first.productAnalysisIdentityHash);
+  assert.ok(first.flatReferenceAnalysisIdentityHash);
+  assert.equal(first.flatLayValidation.advisory_only, true);
+  assert.equal(first.flatLayImageSize.size, '1024x1536');
+  assert.equal(typeof first.flatLayValidation.geometry.contour_similarity_iou, 'number');
   assert.equal(first.masterReviewStatus, 'pending');
   assert.ok(first.masterGeneration.elapsedMs >= 0);
   assert.ok(first.masterGeneration.apiRequestCount >= 1);
@@ -266,10 +357,22 @@ test('runtime completes master approval, model generation and combination with t
   assert.equal(first.taskName, `${first.taskCode} 纯棉梭织裤`);
   await fs.access(first.masterPath);
   assert.equal(path.basename(path.dirname(first.masterPath)), '平铺图');
-  await assert.rejects(
-    runtime.generateChildrenwearModel({ folder: first.folder, modelReferencePath: modelReference }),
-    /请先人工确认母版图/
-  );
+  const outsideDetail = path.join(root, 'outside-detail.png');
+  await fs.writeFile(outsideDetail, await productImage('#ffffff', '#d0b080'));
+  await assert.rejects(runtime.generateChildrenwearMaster({
+    folder: first.folder,
+    realPhotoPath: first.realPhotoPath,
+    referencePath: first.referencePath,
+    detailPhotoPaths: [outsideDetail]
+  }), /实拍细节图不属于当前工作区/);
+  await assert.rejects(runtime.generateChildrenwearMaster({
+    folder: first.folder,
+    realPhotoPath: first.realPhotoPath,
+    referencePath: first.referencePath,
+    realDetailPaths: [outsideDetail]
+  }), /实拍细节图不属于当前工作区/);
+  const withModel = await runtime.generateChildrenwearModel({ folder: first.folder, modelReferencePath: modelReference });
+  assert.equal(withModel.masterApproved, false, '平铺图仍待审核，但不再阻塞模特图生成');
   const flaggedFirst = await runtime.approveChildrenwearOutput({ folder: first.folder, stage: 'master', approved: false, reviewStatus: 'needs_regeneration' });
   assert.equal(flaggedFirst.masterApproved, false);
   assert.equal(flaggedFirst.masterReviewStatus, 'needs_regeneration');
@@ -277,9 +380,9 @@ test('runtime completes master approval, model generation and combination with t
   assert.equal(approvedFirst.masterApproved, true);
   assert.equal(approvedFirst.masterReviewStatus, 'approved');
 
-  const withModel = await runtime.generateChildrenwearModel({ folder: first.folder, modelReferencePath: modelReference });
   assert.equal(withModel.modelOutputs.length, 1);
-  assert.equal(withModel.modelOutputs[0].reviewStatus, 'pending');
+  assert.equal(withModel.modelOutputs[0].reviewRequired, false);
+  assert.equal(withModel.modelOutputs[0].reviewStatus, 'completed');
   assert.ok(withModel.modelOutputs[0].elapsedMs >= 0);
   assert.ok(withModel.modelOutputs[0].apiRequestCount >= 1);
   assert.equal(typeof withModel.modelOutputs[0].billingCostMinor, 'number');
@@ -329,19 +432,20 @@ test('runtime completes master approval, model generation and combination with t
     category: '纯棉套装',
     material: '纯棉针织'
   });
-  const approvedSecond = await runtime.approveChildrenwearOutput({ folder: second.folder, stage: 'master', approved: true });
   await runtime.analyzeChildrenwearAssets({ role: 'combination_reference', paths: [reference] });
   const combo = await runtime.generateChildrenwearCombination({
     folder: approvedFirst.folder,
     taskName: '纯棉梭织裤款式 A',
-    masterPaths: [approvedFirst.masterPath, approvedSecond.masterPath],
+    masterPaths: [approvedFirst.masterPath, second.masterPath],
     combinationReferencePath: reference
   });
   assert.equal(combo.combinationOutputs.length, 1);
-  assert.match(requestBodies[6], /Images 1 to 2 are approved flat-lay masters/);
+  assert.equal(second.masterApproved, false, '未审核平铺图应允许直接进入组合图阶段');
+  assert.match(requestBodies[6], /Images 1 to 2 are selected generated flat-lays/);
   assert.match(requestBodies[6], /Image 3 is the target composition action blueprint/);
   assert.match(requestBodies[6], /SKU 2[\s\S]*"piece_count": 1/);
-  assert.equal(combo.combinationOutputs[0].reviewStatus, 'pending');
+  assert.equal(combo.combinationOutputs[0].reviewRequired, false);
+  assert.equal(combo.combinationOutputs[0].reviewStatus, 'completed');
   assert.ok(combo.combinationOutputs[0].elapsedMs >= 0);
   assert.ok(combo.combinationOutputs[0].apiRequestCount >= 1);
   assert.match(combo.combinationOutputs[0].thumbnailUrl, /^\/api\/thumbnails\//);
@@ -349,6 +453,13 @@ test('runtime completes master approval, model generation and combination with t
   assert.ok(combo.masterPaths.every(item => item.startsWith(path.join(first.folder, '素材', '组合平铺图'))));
   assert.equal(combo.masterUrls.length, 2);
   assert.equal(combo.combinationOutputs[0].masterPaths.length, 2);
+  assert.equal(combo.combinationReferenceSpec.slot_count, 2, '运营选择数量必须覆盖参考图识别出的槽位数');
+  assert.equal(combo.combinationReferenceSpec.selected_sku_count, 2);
+  assert.equal(combo.combinationReferenceSpec.detected_slot_count, 4);
+  assert.equal(combo.sourceMasterPaths.length, 2);
+  assert.equal(combo.sourceTaskFolders.length, 2);
+  assert.equal(combo.combinationOutputs[0].sourceMasterPaths.length, 2);
+  assert.equal(combo.combinationOutputs[0].sourceTaskFolders.length, 2);
   assert.equal(combo.combinationOutputs[0].masterThumbnailUrls.length, 2);
   assert.equal(combo.combinationOutputs[0].combinationReferencePath, combo.combinationReferencePath);
   assert.match(combo.combinationOutputs[0].combinationReferenceThumbnailUrl, /^\/api\/thumbnails\//);

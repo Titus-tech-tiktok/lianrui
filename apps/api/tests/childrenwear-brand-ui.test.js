@@ -16,6 +16,16 @@ test('多嘻噜卡使用永沙式资产管理、左右任务台和五段生产�
   ]);
   assert.match(index, /<title>多嘻噜卡科技<\/title>/);
   assert.match(index, /src="\/duoxiluka-logo\.png"/);
+  assert.match(index, /id="openCwLineageSearchButton"/);
+  assert.match(index, /id="cwLineageSearchModal"/);
+  assert.match(index, /id="cwFixedModelEnabled"/);
+  assert.match(index, /id="cwClearFixedModel"/);
+  assert.match(renderer, /function cwLineageRelations/);
+  assert.match(renderer, /function jumpToCwLineageDraft/);
+  assert.match(renderer, /function renderFixedModelControl/);
+  assert.match(renderer, /FIXED_MODEL_REFERENCE_STORAGE_KEY/);
+  assert.match(styles, /\.cw-lineage-modal/);
+  assert.match(styles, /\.cw-fixed-model-control/);
   assert.match(index, /data-index="01"[^>]+data-page="assets"[^>]*>素材资产<\/button>/);
   for (const [indexNumber, tab, label] of [['02', 'master', '生成平铺图'], ['03', 'model', '生成模特图'], ['04', 'combination', '组合多SKU图']]) {
     assert.match(index, new RegExp(`data-index="${indexNumber}"[^>]+data-page="childrenwear"[^>]+data-childrenwear-production-nav="${tab}"[^>]*>${label}<`));
@@ -61,11 +71,18 @@ test('多嘻噜卡使用永沙式资产管理、左右任务台和五段生产�
     const filterBar = index.match(new RegExp(`<div class="cw-queue-filters"[^>]*aria-label="${label}">([\\s\\S]*?)<\\/div>`))?.[1] || '';
     assert.match(filterBar, /data-cw-queue-date-filter/);
     assert.match(filterBar, /<button class="active"[^>]+data-cw-queue-filter="all"/);
-    for (const filter of ['all', 'incomplete', 'ready', 'running', 'pending', 'needs_regeneration', 'approved']) {
+    const filters = label === '平铺图任务筛选'
+      ? ['all', 'incomplete', 'ready', 'running', 'pending', 'needs_regeneration', 'approved']
+      : ['all', 'incomplete', 'ready', 'running', 'completed', 'needs_regeneration'];
+    for (const filter of filters) {
       assert.match(filterBar, new RegExp(`data-cw-queue-filter="${filter}"`));
     }
   }
-  assert.match(index, /class="cw-review-filters">[\s\S]*?id="cwReviewDateFilter"[\s\S]*?<button class="active"[^>]+data-cw-review-filter="all">全部<\/button><button[^>]+data-cw-review-filter="pending">待审核/);
+  assert.match(index, /class="cw-review-filters">[\s\S]*?id="cwReviewDateFilter"[\s\S]*?<button class="active"[^>]+data-cw-review-filter="all">全部<\/button><button[^>]+data-cw-review-filter="pending">平铺待审核<\/button><button[^>]+data-cw-review-filter="completed">已完成/);
+  assert.match(index, /data-cw-source-tab="model-master">已生成平铺图/);
+  assert.match(index, /data-cw-source-tab="combination-master">已生成平铺图/);
+  assert.match(renderer, /filter\(task => task\.masterPath && task\.masterUrl\)/);
+  assert.match(renderer, /if \(draft\.stage !== 'master'\) return 'completed'/);
   assert.match(renderer, /childrenwearReviewFilter: 'all'/);
   assert.match(renderer, /name === 'childrenwear-review' && currentPage !== name/);
   assert.match(renderer, /button\.dataset\.cwReviewFilter === state\.childrenwearReviewFilter/);
@@ -162,6 +179,9 @@ test('多嘻噜卡使用永沙式资产管理、左右任务台和五段生产�
   assert.match(renderer, /ondragstart/);
   assert.match(renderer, /function openCwCompare/);
   assert.match(renderer, /function setCwCompareActual/);
+  for (const metric of ['背景 ΔE', '中心误差', '占比误差', '轮廓相似', '关键点误差', '袖角误差', '裤腿角误差', '裆部误差']) {
+    assert.match(renderer, new RegExp(metric));
+  }
   assert.match(renderer, /async function loadCwCompareOriginal/);
   assert.match(renderer, /data-original-src/);
   assert.match(renderer, /source\.previewUrl \|\| source\.url/);

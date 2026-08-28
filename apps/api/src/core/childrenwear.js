@@ -62,19 +62,33 @@ const UNIVERSAL_REFERENCE_RULES = Object.freeze([
 
 function buildChildrenwearMasterPrompt(input = {}) {
   const extra = cleanText(input.extraInstruction);
+  const productTruth = input.productTruth || input.productManifest?.product_truth || input.productManifest || {};
+  const targetGeometry = input.targetGeometry || input.referenceSpec?.target_geometry || {};
+  const backgroundProfile = input.backgroundProfile || input.referenceSpec?.background_profile || {};
+  const transformPlan = input.transformPlan || buildChildrenwearFlatLayTransformPlan(
+    input.productManifest || productTruth,
+    input.referenceSpec || { target_geometry: targetGeometry, background_profile: backgroundProfile }
+  );
+  const detailCount = Math.max(0, Math.min(8, Number(input.detailImageCount) || 0));
   return [
-    'CHILDRENSWEAR_STRUCTURED_FLAT_LAY_EXECUTION',
-    'TASK: create one finished ecommerce flat-lay image. Use the target presentation from image 2, but replace its original garment identity with the exact SKU documented by image 1 and PRODUCT_MANIFEST.',
+    'CHILDRENSWEAR_STRUCTURED_FLAT_LAY_EXECUTION_V2',
+    'TASK: create one finished ecommerce flat-lay image by putting the real merchandise from image 1 into the exact commercial presentation template measured from image 2.',
     '',
     'INPUT ROLES — never swap them:',
-    '- image 1 is the original real product photo and the visual source of truth for product identity.',
-    '- image 2 is the finished flat-lay reference and the visual source of truth for presentation only.',
+    '- image 1 is the original real product photo and the sole source of truth for merchandise identity and authenticity.',
+    '- image 2 is the target finished flat-lay reference and controls only pose, displayed outline, geometry, composition, background and lighting.',
+    detailCount ? `- images 3 to ${detailCount + 2} are close-up photographs of the same real SKU. They may clarify product facts only and never override image 2 presentation geometry.` : '',
+    '第一张图是商品身份和真实性的唯一依据。第二张图是平铺姿态、轮廓、比例、构图、背景和光影的目标模板。将第一张图中的真实商品套入第二张图的商业展示模板。不得复制第二张图的印花、商品颜色、文字或装饰；不得修改第一张图中的真实商品细节。',
     '- WHY image 1 was selected: it identifies the exact product being sold and its visible selling points—component count, silhouette, construction, colour, artwork, craft and material signature.',
     '- WHY image 2 was selected: it demonstrates the desired ecommerce display action—how the garment is placed, spread, bent or folded; where natural wrinkles form; and how composition, occupancy, background, light and shadow should look.',
     '',
-    structuredAnalysisBlock('PRODUCT_MANIFEST — what the product is:', input.productManifest),
+    structuredAnalysisBlock('product_truth — immutable facts from image 1:', productTruth),
     '',
-    structuredAnalysisBlock('FLAT_REFERENCE_SPEC — how the final image must be presented:', input.referenceSpec),
+    structuredAnalysisBlock('target_geometry — measurable presentation geometry from image 2:', targetGeometry),
+    '',
+    structuredAnalysisBlock('background_profile — measured from safe blank regions of the original image-2 file:', backgroundProfile),
+    '',
+    structuredAnalysisBlock('transform_plan — explicit source/reference comparison for this exact pair:', transformPlan),
     '',
     'NON-NEGOTIABLE TWO-SOURCE LOCK — do not blend, average or trade attributes between the two images:',
     'A. REFERENCE PRESENTATION LOCK (image 2): reproduce the reference presentation with maximum visual fidelity. Lock the canvas and aspect ratio; crop; product occupancy; center and scale; rotation; the displayed outer envelope created by its laying pose; sleeve/leg/body direction; bending, spreading, folding and overlap; every major fold and wrinkle zone; contact-shadow footprint, direction, softness and opacity; lighting; and the complete background colour, gradient and texture. Background pixels must come from image 2, never from image 1.',
@@ -84,14 +98,15 @@ function buildChildrenwearMasterPrompt(input = {}) {
     'E. If an exact reference pose is physically impossible for the real component count or construction, change only the impossible local part. Keep every other reference-controlled pixel relationship unchanged. Never solve a conflict by changing product colour, fabric, artwork, material, construction or component count.',
     '',
     'EXECUTION CONTRACT:',
-    '1. PRODUCT_MANIFEST and image 1 control component count, garment type, visible side, silhouette, panel topology, colour, material, print, embroidery, applique, label, pocket, seam, binding, trim, closure and every other product-specific fact.',
-    '2. FLAT_REFERENCE_SPEC and image 2 control canvas, crop, product occupancy, placement, rotation, display pose, spreading/folding logic, fold direction, background, camera, lighting and shadow.',
+    '1. product_truth and image 1 control component count, garment type, visible side, real pattern-cut and panel topology, colour, material, print, embroidery, applique, label, pocket, seam, binding, trim, closure and every other product-specific fact.',
+    '2. target_geometry, background_profile and image 2 control canvas, crop, displayed garment bounding box, occupied area, centre, torso ratio, shoulder width, sleeve/crotch/leg/cuff geometry, placement, rotation, flatness, symmetry, fold direction, background, camera, lighting and shadow.',
     '3. Never copy product identity from image 2. Never preserve the casual pose, table, room, distortion or unrelated objects from image 1.',
     '4. The target is not a new composition inspired by image 2. It is the image-2 presentation with only its placeholder garment identity replaced by the exact image-1 SKU. When a local pose is physically incompatible, preserve all compatible reference geometry and make the smallest local adaptation only.',
     '5. Preserve exact motif/label count, colour, scale and relative coordinates. Preserve material micro-texture and construction-dependent wrinkles. Do not invent hidden structure or unreadable text.',
     '6. Transfer the reference action and fold flow, not the reference garment identity. Reproduce its natural relaxed placement and wrinkle zones as closely as the real SKU permits, while deriving wrinkle scale, depth, softness, drape, thickness and surface texture only from image 1 and PRODUCT_MANIFEST.',
-    '7. Protect all non-product pixels and protected scene elements from image 2 except where replacing its garment physically requires a clean boundary or contact shadow. Do not recolour, simplify, regenerate or “improve” the background.',
-    '8. Before output, perform a silent two-column audit. Reference column: canvas, background, display outline, pose, fold map, shadow map and detail-placement action match image 2. Product column: garment style, construction, fabric, colour, material, artwork and visible details match image 1. If any attribute came from the wrong column, correct it before output.',
+    '7. Render the background to background_profile.target_rgb/target_hex in sRGB. Keep measured uniformity/gradient/vignette properties and stay within color_tolerance_delta_e. Protect all non-product pixels from image 2 except where replacing its garment physically requires a clean boundary or contact shadow. Do not sample background from image 1.',
+    '8. Quantitatively target the supplied garment_bbox, garment_canvas_coverage and center_position. Coverage error should be no more than 0.03 and each centre-axis error no more than 0.02 of the canvas. Match all applicable neckline, shoulder, armpit, sleeve-cuff, crotch, leg and ankle-cuff keypoints; ignore null fields rather than inventing anatomy.',
+    '9. Before output, perform a silent two-column audit. Reference column: canvas, background, display outline, pose, fold map, shadow map and detail-placement action match image 2. Product column: garment style, construction, fabric, colour, material, artwork and visible details match image 1. If any attribute came from the wrong column, correct it before output.',
     '',
     'OUTPUT:',
     'Return exactly one finished ecommerce image with the same presentation and aspect ratio as image 2.',
@@ -123,16 +138,16 @@ function buildChildrenwearModelPrompt(input = {}) {
         ];
   return [
     'CHILDRENSWEAR_STRUCTURED_MODEL_DRESSING_EXECUTION',
-    'TASK: dress a model based on image 2 in the exact approved SKU from image 1, while applying one controlled small natural variation to the model. This is not a new outfit design and not an unrelated pose redesign.',
+    'TASK: dress a model based on image 2 in the exact generated SKU flat-lay from image 1, while applying one controlled small natural variation to the model. This is not a new outfit design and not an unrelated pose redesign.',
     '',
     'INPUT ROLES — never swap them:',
-    '- image 1 is the approved flat-lay master and is the primary source of truth for the exact SKU.',
+    '- image 1 is the selected generated flat-lay and is the primary source of truth for the exact SKU. Its manual review state is not an input requirement.',
     `- image 2 is the final model, action, pose and garment-deformation reference.${backgroundMode === 'model_reference' ? ' It also controls the scene.' : ' Its background is not authoritative in this mode.'} Its original garment identity must be replaced.`,
-    '- WHY image 1 was selected: it is the approved proof of the exact product being sold, including construction, artwork, craft and material behaviour.',
+    '- WHY image 1 was selected: it is the generated proof of the exact product being sold, including construction, artwork, craft and material behaviour.',
     `- WHY image 2 was selected: it demonstrates the desired selling-action family—body orientation, pose scale, body interaction, garment deformation, natural fold flow and crop.${backgroundMode === 'model_reference' ? ' It also supplies the scene and commercial mood.' : ''}`,
     `- CONTROLLED VARIATION ID: ${variationSeed}. Use it to choose a fresh but restrained expression-and-pose variation for this generation.`,
     '',
-    structuredAnalysisBlock('PRODUCT_MANIFEST — immutable SKU identity inherited from the approved flat-lay task:', input.productManifest),
+    structuredAnalysisBlock('PRODUCT_MANIFEST — immutable SKU identity inherited from the flat-lay task:', input.productManifest),
     '',
     structuredAnalysisBlock('MODEL_REFERENCE_SPEC — person, pose, deformation and occlusion blueprint; scene fields apply only in follow-model-reference mode:', input.referenceSpec),
     '',
@@ -141,7 +156,7 @@ function buildChildrenwearModelPrompt(input = {}) {
     'NON-NEGOTIABLE TWO-SOURCE LOCK — never blend the reference outfit with the sold SKU:',
     `REFERENCE PRESENTATION LOCK (image 2): keep the same model identity/type, anatomy, overall action category, body orientation, crop, garment occupancy, on-body outer envelope, detail-display intent, occlusion logic, fold-flow logic, tension/compression zones and relaxed asymmetry. Do not copy the exact expression or exact joint coordinates; apply only the controlled variation below.${backgroundMode === 'model_reference' ? ' Also keep its camera, complete background, lighting and shadow.' : ''}`,
     'PRODUCT IDENTITY LOCK (image 1 plus PRODUCT_MANIFEST): keep the exact sold garment style and cut, construction, component count, fabric, material, base colour, colour blocking, pattern, print, embroidery, applique, labels, pockets, seams, bindings, trims and closures.',
-    'The on-body outline and fold map are controlled by the reference pose; the garment pattern-cut and merchandise identity are controlled by the approved product. Render the reference deformation using the real product material behaviour. Do not borrow the reference outfit’s colour, fabric, artwork, construction or style, and do not borrow the flat-lay background from image 1.',
+    'The on-body outline and fold map are controlled by the reference pose; the garment pattern-cut and merchandise identity are controlled by the selected generated product. Render the reference deformation using the real product material behaviour. Do not borrow the reference outfit’s colour, fabric, artwork, construction or style, and do not borrow the flat-lay background from image 1.',
     '',
     'EXECUTION CONTRACT:',
     `Treat image 2 as an action blueprint, not a loose style suggestion. Preserve model identity/type, hair styling, body proportions, overall body orientation, action category and crop.${backgroundMode === 'model_reference' ? ' Preserve its scene, camera and lighting too.' : ' Obtain the background/environment under the selected structured background mode above.'}`,
@@ -175,10 +190,10 @@ function buildChildrenwearCombinationPrompt(input = {}) {
   });
   return [
     'CHILDRENSWEAR_STRUCTURED_MULTI_SKU_EXECUTION',
-    'TASK: replace the products in the final composition reference with all supplied approved SKUs. This is slot-by-slot product replacement, not product redesign or style blending.',
+    'TASK: replace the products in the final composition reference with all supplied generated SKU flat-lays. This is slot-by-slot product replacement, not product redesign or style blending.',
     '',
     'INPUT ROLES — calculated for this request and never fixed in settings:',
-    `Images 1 to ${count} are approved flat-lay masters. They are the only sources of truth for each SKU.`,
+    `Images 1 to ${count} are selected generated flat-lays. They are the only sources of truth for each SKU; their manual review states are not input requirements.`,
     `Image ${count + 1} is the target composition action blueprint. Preserve each slot's garment pose, sleeve and leg direction, natural bending, spreading or folding, fold flow, wrinkle zones, spacing, rotation, scale, front/back layer order, permitted overlap, crop, background, lighting and shadow style. It is never a product-identity source.`,
     `WHY images 1 to ${count} were selected: each one proves what exact SKU is being sold and locks its component count, construction, colour, artwork, craft, material signature and product-specific selling points.`,
     `WHY image ${count + 1} was selected: it demonstrates how those products should be sold visually—the action of every garment, relaxed placement, natural folds, spacing, hierarchy and finished ecommerce presentation.`,
@@ -199,11 +214,11 @@ function buildChildrenwearCombinationPrompt(input = {}) {
     'Never blend design details between SKUs. Never copy garment design, graphics or colours from the composition reference.',
     'Map SKU 1 to composition slot 1, SKU 2 to slot 2, and so on. Each slot receives one whole SKU, including every component belonging to a multi-component SKU.',
     'Treat every reference slot as a concrete pose/deformation target, not merely a bounding box. Reproduce the reference action of tops, sleeves, bodies, waists, crotches, legs and cuffs as closely as the real SKU structure permits, including asymmetric bends and relaxed non-rigid placement.',
-    'Match the location and direction of natural folds shown in the reference, but render their scale, depth, softness, thickness, drape and micro-texture from the corresponding approved SKU. Never make the garments look like stiff cut-outs, perfectly ironed vector shapes or duplicated templates.',
+    'Match the location and direction of natural folds shown in the reference, but render their scale, depth, softness, thickness, drape and micro-texture from the corresponding generated SKU flat-lay. Never make the garments look like stiff cut-outs, perfectly ironed vector shapes or duplicated templates.',
     'The reference may show fewer, more or different product types. Use its slot geometry and visual hierarchy only; never use that mismatch to omit, merge, split or redesign a supplied SKU.',
     'Natural partial overlap, folding or edge occlusion is allowed only when required by the reference layout and physically valid for the supplied product. Every SKU must remain identifiable and no required component may disappear.',
     'Keep each SKU material and fold behaviour independent. Do not transfer colour, texture, print, trim, label or construction from one SKU to another.',
-    'Before output, silently audit every slot: layout/background/fold/shadow/action matches the composition reference; product style/fabric/colour/material/artwork/construction matches its own approved master. Correct any cross-contamination.',
+    'Before output, silently audit every slot: layout/background/fold/shadow/action matches the composition reference; product style/fabric/colour/material/artwork/construction matches its own selected generated flat-lay. Correct any cross-contamination.',
     '',
     'OUTPUT:',
     'No model, text, watermark, border, collage frame, packaging or extra product.',
@@ -246,6 +261,445 @@ async function createChildrenwearEvidence(sourcePath, outputFolder) {
     files.push(target);
   }
   return files;
+}
+
+function median(values = []) {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function clampByte(value) {
+  return Math.max(0, Math.min(255, Math.round(Number(value) || 0)));
+}
+
+function rgbToHex(rgb = {}) {
+  return `#${[rgb.r, rgb.g, rgb.b].map(value => clampByte(value).toString(16).padStart(2, '0')).join('').toUpperCase()}`;
+}
+
+function rgbToLab(rgb = {}) {
+  const linear = [rgb.r, rgb.g, rgb.b].map(value => {
+    const channel = clampByte(value) / 255;
+    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+  });
+  const x = (linear[0] * 0.4124564 + linear[1] * 0.3575761 + linear[2] * 0.1804375) / 0.95047;
+  const y = (linear[0] * 0.2126729 + linear[1] * 0.7151522 + linear[2] * 0.0721750);
+  const z = (linear[0] * 0.0193339 + linear[1] * 0.1191920 + linear[2] * 0.9503041) / 1.08883;
+  const f = value => value > 0.008856 ? Math.cbrt(value) : 7.787 * value + 16 / 116;
+  return { l: 116 * f(y) - 16, a: 500 * (f(x) - f(y)), b: 200 * (f(y) - f(z)) };
+}
+
+function colorDeltaE(first, second) {
+  const a = rgbToLab(first);
+  const b = rgbToLab(second);
+  return Math.sqrt((a.l - b.l) ** 2 + (a.a - b.a) ** 2 + (a.b - b.b) ** 2);
+}
+
+function regionMedian(samples = []) {
+  if (!samples.length) return null;
+  return {
+    r: clampByte(median(samples.map(item => item.r))),
+    g: clampByte(median(samples.map(item => item.g))),
+    b: clampByte(median(samples.map(item => item.b)))
+  };
+}
+
+async function extractFlatReferenceBackgroundProfile(file) {
+  // Read from the original uploaded asset. Downsampling is only an in-memory
+  // sampling optimization; no thumbnail, preview or browser screenshot is used.
+  const { data, info } = await sharp(file, { failOn: 'none', animated: false, limitInputPixels: 120_000_000 })
+    .rotate()
+    .toColourspace('srgb')
+    .resize({ width: 900, height: 900, fit: 'inside', withoutEnlargement: true })
+    .removeAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const { width, height, channels } = info;
+  if (width < 16 || height < 16 || channels < 3) throw new Error('参考图尺寸过小，无法提取原始背景');
+  const band = Math.max(4, Math.round(Math.min(width, height) * 0.12));
+  const stride = Math.max(1, Math.ceil(width * height / 260_000));
+  const perimeter = [];
+  const bins = new Map();
+  for (let y = 0; y < height; y += stride) {
+    for (let x = 0; x < width; x += stride) {
+      if (!(x < band || x >= width - band || y < band || y >= height - band)) continue;
+      const offset = (y * width + x) * channels;
+      const sample = { x, y, r: data[offset], g: data[offset + 1], b: data[offset + 2] };
+      perimeter.push(sample);
+      const key = `${sample.r >> 4}:${sample.g >> 4}:${sample.b >> 4}`;
+      bins.set(key, (bins.get(key) || 0) + 1);
+    }
+  }
+  if (!perimeter.length) throw new Error('参考图没有可用的安全背景采样区域');
+  const dominantKey = [...bins.entries()].sort((a, b) => b[1] - a[1])[0][0];
+  const dominant = dominantKey.split(':').map(value => Number(value) * 16 + 8);
+  let backgroundSamples = perimeter.filter(item => Math.max(
+    Math.abs(item.r - dominant[0]),
+    Math.abs(item.g - dominant[1]),
+    Math.abs(item.b - dominant[2])
+  ) <= 28);
+  if (backgroundSamples.length < Math.max(40, perimeter.length * 0.08)) backgroundSamples = perimeter;
+  const targetRgb = regionMedian(backgroundSamples);
+  const deltas = backgroundSamples.map(item => colorDeltaE(item, targetRgb)).sort((a, b) => a - b);
+  const percentile = ratio => deltas[Math.min(deltas.length - 1, Math.max(0, Math.floor((deltas.length - 1) * ratio)))] || 0;
+  const subsets = {
+    left: backgroundSamples.filter(item => item.x < width * 0.35),
+    right: backgroundSamples.filter(item => item.x > width * 0.65),
+    top: backgroundSamples.filter(item => item.y < height * 0.35),
+    bottom: backgroundSamples.filter(item => item.y > height * 0.65),
+    corners: backgroundSamples.filter(item => (item.x < band || item.x >= width - band) && (item.y < band || item.y >= height - band))
+  };
+  const sideDelta = colorDeltaE(regionMedian(subsets.left) || targetRgb, regionMedian(subsets.right) || targetRgb);
+  const verticalDelta = colorDeltaE(regionMedian(subsets.top) || targetRgb, regionMedian(subsets.bottom) || targetRgb);
+  const cornerDelta = colorDeltaE(regionMedian(subsets.corners) || targetRgb, targetRgb);
+  const gradientStrength = Math.max(sideDelta, verticalDelta);
+  return {
+    type: percentile(0.95) <= 4.5 ? 'solid' : 'near_uniform',
+    target_hex: rgbToHex(targetRgb),
+    target_rgb: targetRgb,
+    uniformity: {
+      score: Number(Math.max(0, 1 - percentile(0.95) / 20).toFixed(4)),
+      median_delta_e: Number(percentile(0.5).toFixed(3)),
+      p95_delta_e: Number(percentile(0.95).toFixed(3)),
+      sampled_pixels: backgroundSamples.length,
+      source: 'original_reference_safe_perimeter_robust_median'
+    },
+    gradient: {
+      present: gradientStrength > 3,
+      direction: sideDelta >= verticalDelta ? 'horizontal' : 'vertical',
+      strength_delta_e: Number(gradientStrength.toFixed(3))
+    },
+    vignette: {
+      present: cornerDelta > 3,
+      strength_delta_e: Number(cornerDelta.toFixed(3))
+    },
+    color_tolerance_delta_e: 3
+  };
+}
+
+function mergeFlatReferenceBackgroundProfile(analysis = {}, measured = {}) {
+  const aiProfile = analysis.background_profile && typeof analysis.background_profile === 'object'
+    ? analysis.background_profile
+    : {};
+  return {
+    ...analysis,
+    background_profile: {
+      ...aiProfile,
+      ...measured,
+      shadow: aiProfile.shadow && typeof aiProfile.shadow === 'object' ? aiProfile.shadow : {},
+      color_tolerance_delta_e: 3
+    }
+  };
+}
+
+function buildChildrenwearFlatLayTransformPlan(productAnalysis = {}, referenceAnalysis = {}) {
+  const productTruth = productAnalysis.product_truth && typeof productAnalysis.product_truth === 'object'
+    ? productAnalysis.product_truth
+    : productAnalysis;
+  const targetGeometry = referenceAnalysis.target_geometry && typeof referenceAnalysis.target_geometry === 'object'
+    ? referenceAnalysis.target_geometry
+    : {};
+  return {
+    preserve_from_source: [
+      'category and real component structure', 'base colour and colour blocking',
+      'print content, scale, density, position and distribution', 'fabric texture and thickness',
+      'collar, sleeve cuffs, ankle cuffs, closure, seams, bindings, trims and unique craft',
+      ...(Array.isArray(productTruth.must_preserve) ? productTruth.must_preserve : [])
+    ],
+    match_from_reference: [
+      'flat-lay pose and displayed outer envelope', 'canvas ratio, garment occupancy and centre position',
+      'shoulder line, sleeve angles and lengths', 'crotch width/depth, leg angles and lengths',
+      'flatness, symmetry, natural fold zones', 'background colour/profile, lighting and contact shadow'
+    ],
+    allowed_shape_adjustments: [
+      'Only placement, spreading, bending, flattening and physically plausible fold changes needed to fit the real SKU into target_geometry.',
+      'If reference geometry conflicts with the real construction, adapt only the incompatible local pose while preserving the source construction.'
+    ],
+    forbidden_changes: [
+      'Do not copy reference colour, print, text, labels, decoration, material or garment construction.',
+      'Do not invent hidden product parts, seams, closures, pockets, trims or artwork.',
+      ...(Array.isArray(productTruth.must_not_invent) ? productTruth.must_not_invent : [])
+    ],
+    geometry_constraints: {
+      target: targetGeometry,
+      garment_canvas_coverage_tolerance: 0.03,
+      center_position_tolerance: 0.02,
+      background_color_tolerance_delta_e: 3,
+      product_truth_wins_on_structural_conflict: true
+    }
+  };
+}
+
+function normalizedNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+async function flatLayApiSizeForReference(file) {
+  const metadata = await sharp(file, { failOn: 'none', animated: false, limitInputPixels: 120_000_000 }).metadata();
+  let width = Number(metadata.width) || 0;
+  let height = Number(metadata.height) || 0;
+  if ([5, 6, 7, 8].includes(Number(metadata.orientation))) [width, height] = [height, width];
+  if (width < 1 || height < 1) throw new Error('参考图尺寸无效，无法决定平铺图输出比例');
+  const aspectRatio = width / height;
+  const choices = [
+    { size: '1024x1536', aspectRatio: 2 / 3, orientation: 'portrait' },
+    { size: '1024x1024', aspectRatio: 1, orientation: 'square' },
+    { size: '1536x1024', aspectRatio: 3 / 2, orientation: 'landscape' }
+  ];
+  const selected = choices.reduce((best, choice) => (
+    Math.abs(choice.aspectRatio - aspectRatio) < Math.abs(best.aspectRatio - aspectRatio) ? choice : best
+  ), choices[0]);
+  return {
+    width,
+    height,
+    aspectRatio: Number(aspectRatio.toFixed(6)),
+    orientation: selected.orientation,
+    size: selected.size
+  };
+}
+
+function fillSilhouetteInterior(seedMask, width, height) {
+  const rowMin = new Int32Array(height).fill(width);
+  const rowMax = new Int32Array(height).fill(-1);
+  const columnMin = new Int32Array(width).fill(height);
+  const columnMax = new Int32Array(width).fill(-1);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (!seedMask[y * width + x]) continue;
+      rowMin[y] = Math.min(rowMin[y], x);
+      rowMax[y] = Math.max(rowMax[y], x);
+      columnMin[x] = Math.min(columnMin[x], y);
+      columnMax[x] = Math.max(columnMax[x], y);
+    }
+  }
+  const filled = new Uint8Array(seedMask);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const horizontalInterior = rowMax[y] - rowMin[y] >= 2 && x >= rowMin[y] && x <= rowMax[y];
+      const verticalInterior = columnMax[x] - columnMin[x] >= 2 && y >= columnMin[x] && y <= columnMax[x];
+      if (horizontalInterior && verticalInterior) filled[y * width + x] = 1;
+    }
+  }
+  return filled;
+}
+
+async function flatLaySilhouette(file, backgroundRgb, dimension = 256) {
+  const ownProfile = await extractFlatReferenceBackgroundProfile(file);
+  const background = backgroundRgb || ownProfile.target_rgb;
+  const { data, info } = await sharp(file, { failOn: 'none', animated: false, limitInputPixels: 120_000_000 })
+    .rotate()
+    .toColourspace('srgb')
+    .resize({ width: dimension, height: dimension, fit: 'fill' })
+    .removeAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const threshold = Math.max(8, Number(ownProfile.uniformity?.p95_delta_e || 0) + 4);
+  const seedMask = new Uint8Array(info.width * info.height);
+  for (let y = 0; y < info.height; y += 1) {
+    for (let x = 0; x < info.width; x += 1) {
+      const index = y * info.width + x;
+      const offset = index * info.channels;
+      const pixel = { r: data[offset], g: data[offset + 1], b: data[offset + 2] };
+      if (colorDeltaE(pixel, background) > threshold) seedMask[index] = 1;
+    }
+  }
+  // A garment can be almost the same colour as its background. Colour-only
+  // counting then sees prints and shadows but misses the fabric interior.
+  // Cross-fill the bounded interior so coverage represents the silhouette,
+  // while the horizontal/vertical intersection preserves leg and sleeve gaps.
+  const mask = fillSilhouetteInterior(seedMask, info.width, info.height);
+  let minX = info.width;
+  let minY = info.height;
+  let maxX = -1;
+  let maxY = -1;
+  let foregroundPixels = 0;
+  for (let y = 0; y < info.height; y += 1) {
+    for (let x = 0; x < info.width; x += 1) {
+      const index = y * info.width + x;
+      if (!mask[index]) continue;
+      foregroundPixels += 1;
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  }
+  const boundary = new Uint8Array(mask.length);
+  for (let y = 0; y < info.height; y += 1) {
+    for (let x = 0; x < info.width; x += 1) {
+      const index = y * info.width + x;
+      if (!mask[index]) continue;
+      if (x === 0 || y === 0 || x + 1 === info.width || y + 1 === info.height
+        || !mask[index - 1] || !mask[index + 1] || !mask[index - info.width] || !mask[index + info.width]) boundary[index] = 1;
+    }
+  }
+  const detected = maxX >= minX && maxY >= minY;
+  const bbox = detected ? {
+    x: Number((minX / info.width).toFixed(4)),
+    y: Number((minY / info.height).toFixed(4)),
+    width: Number(((maxX - minX + 1) / info.width).toFixed(4)),
+    height: Number(((maxY - minY + 1) / info.height).toFixed(4))
+  } : null;
+  return {
+    width: info.width,
+    height: info.height,
+    mask,
+    boundary,
+    bbox,
+    center: bbox ? { x: Number((bbox.x + bbox.width / 2).toFixed(4)), y: Number((bbox.y + bbox.height / 2).toFixed(4)) } : null,
+    // In the structured contract garment_canvas_coverage means the occupied
+    // product rectangle, not the ratio of opaque fabric pixels. BBox coverage
+    // remains stable for openings between legs and similarly coloured fabric.
+    coverage: bbox ? Number((bbox.width * bbox.height).toFixed(4)) : 0,
+    foregroundCoverage: Number((foregroundPixels / mask.length).toFixed(4))
+  };
+}
+
+function maskIntersectionOverUnion(first, second) {
+  if (!first || !second || first.length !== second.length) return null;
+  let intersection = 0;
+  let union = 0;
+  for (let index = 0; index < first.length; index += 1) {
+    if (first[index] || second[index]) union += 1;
+    if (first[index] && second[index]) intersection += 1;
+  }
+  return union ? Number((intersection / union).toFixed(4)) : null;
+}
+
+function flattenedGeometryKeypoints(keypoints = {}) {
+  const points = [];
+  const add = (label, value) => {
+    if (!value || typeof value !== 'object') return;
+    const x = normalizedNumber(value.x);
+    const y = normalizedNumber(value.y);
+    if (x != null && y != null && x >= 0 && x <= 1 && y >= 0 && y <= 1) points.push({ label, x, y });
+  };
+  for (const key of ['neckline', 'crotch']) add(key, keypoints[key]);
+  for (const key of ['shoulders', 'armpits', 'sleeve_cuffs', 'legs', 'ankle_cuffs']) {
+    for (const [index, point] of (Array.isArray(keypoints[key]) ? keypoints[key] : []).entries()) add(`${key}.${index}`, point);
+  }
+  return points;
+}
+
+function nearestBoundaryPoint(silhouette, point) {
+  let best = null;
+  for (let index = 0; index < silhouette.boundary.length; index += 1) {
+    if (!silhouette.boundary[index]) continue;
+    const x = (index % silhouette.width) / silhouette.width;
+    const y = Math.floor(index / silhouette.width) / silhouette.height;
+    const distance = Math.hypot(x - point.x, y - point.y);
+    if (!best || distance < best.distance) best = { x: Number(x.toFixed(4)), y: Number(y.toFixed(4)), distance };
+  }
+  return best ? { ...best, distance: Number(best.distance.toFixed(4)) } : null;
+}
+
+function lineAngle(first, second) {
+  if (!first || !second) return null;
+  return Math.atan2(second.y - first.y, second.x - first.x) * 180 / Math.PI;
+}
+
+function angleDifference(first, second) {
+  if (first == null || second == null) return null;
+  let difference = Math.abs(first - second) % 360;
+  if (difference > 180) difference = 360 - difference;
+  return Number(difference.toFixed(2));
+}
+
+function limbAngleChecks(matches, keypoints, limbName, startName, endName) {
+  const ends = Array.isArray(keypoints[endName]) ? keypoints[endName] : [];
+  const sharedStart = !Array.isArray(keypoints[startName]) && keypoints[startName] && typeof keypoints[startName] === 'object' ? keypoints[startName] : null;
+  const starts = Array.isArray(keypoints[startName]) ? keypoints[startName] : sharedStart ? ends.map(() => sharedStart) : [];
+  const results = [];
+  for (let index = 0; index < Math.min(starts.length, ends.length); index += 1) {
+    const targetStart = starts[index];
+    const targetEnd = ends[index];
+    const outputStart = matches.get(sharedStart ? startName : `${startName}.${index}`)?.matched;
+    const outputEnd = matches.get(`${endName}.${index}`)?.matched;
+    const targetAngle = lineAngle(targetStart, targetEnd);
+    const outputAngle = lineAngle(outputStart, outputEnd);
+    if (targetAngle == null || outputAngle == null) continue;
+    results.push({ side: index + 1, target_degrees: Number(targetAngle.toFixed(2)), measured_degrees: Number(outputAngle.toFixed(2)), error_degrees: angleDifference(targetAngle, outputAngle) });
+  }
+  return { name: limbName, count: results.length, items: results, maximum_error_degrees: results.length ? Math.max(...results.map(item => item.error_degrees)) : null };
+}
+
+async function inspectFlatLayOutput(file, referenceAnalysis = {}, referenceFile = '') {
+  const targetProfile = referenceAnalysis.background_profile || {};
+  const targetRgb = targetProfile.target_rgb && typeof targetProfile.target_rgb === 'object'
+    ? targetProfile.target_rgb
+    : null;
+  const outputProfile = await extractFlatReferenceBackgroundProfile(file);
+  const backgroundDeltaE = targetRgb ? colorDeltaE(outputProfile.target_rgb, targetRgb) : null;
+  const targetGeometry = referenceAnalysis.target_geometry || {};
+  const outputSilhouette = await flatLaySilhouette(file, targetRgb || outputProfile.target_rgb);
+  const referenceSilhouette = referenceFile ? await flatLaySilhouette(referenceFile, targetRgb || outputProfile.target_rgb) : null;
+  const bbox = outputSilhouette.bbox;
+  const center = outputSilhouette.center;
+  const coverage = outputSilhouette.coverage;
+  const structuredTargetCoverage = normalizedNumber(targetGeometry.garment_canvas_coverage);
+  const structuredTargetCenter = targetGeometry.center_position && typeof targetGeometry.center_position === 'object'
+    ? targetGeometry.center_position
+    : null;
+  const targetCoverage = structuredTargetCoverage ?? referenceSilhouette?.coverage ?? null;
+  const targetCenter = structuredTargetCenter || referenceSilhouette?.center || {};
+  const centerError = center && normalizedNumber(targetCenter.x) != null && normalizedNumber(targetCenter.y) != null
+    ? {
+        x: Number(Math.abs(center.x - Number(targetCenter.x)).toFixed(4)),
+        y: Number(Math.abs(center.y - Number(targetCenter.y)).toFixed(4))
+      }
+    : null;
+  const keypoints = targetGeometry.keypoints && typeof targetGeometry.keypoints === 'object' ? targetGeometry.keypoints : {};
+  const landmarkItems = flattenedGeometryKeypoints(keypoints).map(point => ({
+    label: point.label,
+    target: { x: point.x, y: point.y },
+    matched: nearestBoundaryPoint(outputSilhouette, point)
+  }));
+  const landmarkMap = new Map(landmarkItems.map(item => [item.label, item]));
+  const landmarkDistances = landmarkItems.map(item => item.matched?.distance).filter(value => value != null);
+  const crotch = landmarkMap.get('crotch');
+  const sleeveAngles = limbAngleChecks(landmarkMap, keypoints, 'sleeves', 'shoulders', 'sleeve_cuffs');
+  const legAngles = limbAngleChecks(landmarkMap, keypoints, 'legs', 'crotch', 'ankle_cuffs');
+  return {
+    method: 'deterministic_background_and_silhouette_comparison',
+    advisory_only: true,
+    background: {
+      measured_hex: outputProfile.target_hex,
+      target_hex: String(targetProfile.target_hex || ''),
+      delta_e: backgroundDeltaE == null ? null : Number(backgroundDeltaE.toFixed(3)),
+      within_tolerance: backgroundDeltaE == null ? null : backgroundDeltaE <= 3
+    },
+    geometry: {
+      target_source: structuredTargetCoverage != null && structuredTargetCenter
+        ? 'structured_reference_analysis'
+        : 'original_reference_image',
+      target_bbox: targetGeometry.garment_bbox || referenceSilhouette?.bbox || null,
+      target_center: normalizedNumber(targetCenter.x) != null && normalizedNumber(targetCenter.y) != null
+        ? { x: Number(targetCenter.x), y: Number(targetCenter.y) }
+        : null,
+      target_coverage: targetCoverage,
+      detected_bbox: bbox,
+      detected_center: center,
+      detected_coverage: coverage,
+      detected_foreground_coverage: outputSilhouette.foregroundCoverage,
+      coverage_error: targetCoverage == null ? null : Number(Math.abs(coverage - targetCoverage).toFixed(4)),
+      center_error: centerError,
+      coverage_within_tolerance: targetCoverage == null ? null : Math.abs(coverage - targetCoverage) <= 0.03,
+      center_within_tolerance: centerError == null ? null : centerError.x <= 0.02 && centerError.y <= 0.02,
+      contour_similarity_iou: referenceSilhouette ? maskIntersectionOverUnion(outputSilhouette.mask, referenceSilhouette.mask) : null,
+      keypoint_alignment: {
+        checked: landmarkDistances.length,
+        mean_error: landmarkDistances.length ? Number((landmarkDistances.reduce((sum, value) => sum + value, 0) / landmarkDistances.length).toFixed(4)) : null,
+        maximum_error: landmarkDistances.length ? Number(Math.max(...landmarkDistances).toFixed(4)) : null,
+        within_tolerance: landmarkDistances.length ? landmarkDistances.every(value => value <= 0.03) : null,
+        items: landmarkItems
+      },
+      sleeve_angle_checks: sleeveAngles,
+      leg_angle_checks: legAngles,
+      crotch_check: crotch ? { target: crotch.target, matched: crotch.matched, error: crotch.matched?.distance ?? null, within_tolerance: crotch.matched ? crotch.matched.distance <= 0.03 : false } : null
+    }
+  };
 }
 
 function normalizeBackground(value) {
@@ -339,7 +793,7 @@ function combinationLayout(count, size) {
 
 async function createChildrenwearCombination(masterPaths, outputPath, options = {}) {
   const unique = [...new Set((masterPaths || []).map(String))].slice(0, 4);
-  if (unique.length < 2) throw new Error('组合图至少需要选择 2 个已审核母版');
+  if (unique.length < 2) throw new Error('组合图至少需要选择 2 个已生成平铺图');
   const size = Math.max(1024, Math.min(2400, Number(options.size) || 1600));
   const background = normalizeBackground(options.background);
   const layout = combinationLayout(unique.length, size);
@@ -372,5 +826,11 @@ module.exports = {
   buildChildrenwearCombinationPrompt,
   createChildrenwearCombination,
   createChildrenwearEvidence,
+  buildChildrenwearFlatLayTransformPlan,
+  colorDeltaE,
+  extractFlatReferenceBackgroundProfile,
+  flatLayApiSizeForReference,
+  inspectFlatLayOutput,
+  mergeFlatReferenceBackgroundProfile,
   normalizeBackground
 };
