@@ -219,6 +219,9 @@ test('多嘻噜卡使用永沙式资产管理、左右任务台和五段生产�
   assert.match(styles, /\.cw-review-group/);
   assert.doesNotMatch(styles, /\.cw-task-card \{[^}]*content-visibility:\s*auto/);
   assert.match(styles, /\.cw-task-card \{[^}]*contain:\s*layout paint/);
+  assert.match(styles, /\.cw-task-card > header label \{[^}]*flex:\s*1 1 auto/);
+  assert.match(styles, /\.cw-task-title-line \{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto/);
+  assert.match(styles, /\.cw-task-title-line > b \{[^}]*text-overflow:\s*ellipsis[^}]*white-space:\s*nowrap[^}]*word-break:\s*keep-all/);
   assert.match(styles, /\.cw-review-group \{[^}]*content-visibility:\s*auto/);
   assert.match(styles, /\.cw-review-card \{[^}]*content-visibility:\s*auto/);
   assert.match(styles, /grid-template-columns: repeat\(auto-fill, minmax\(168px, 1fr\)\)/);
@@ -234,6 +237,11 @@ test('多嘻噜卡使用永沙式资产管理、左右任务台和五段生产�
   assert.match(styles, /\.childrenwear-review-page\.active\s*\{\s*display:\s*grid/);
   assert.match(styles, /\.childrenwear-review-page\s*\{[^}]*grid-template-rows:\s*auto auto minmax\(0, 1fr\)[^}]*overflow:\s*hidden/);
   assert.match(styles, /\.cw-review-grid\s*\{[^}]*min-height:\s*0[^}]*overflow:\s*auto/);
+  assert.match(styles, /\.cw-review-toolbar h2 \{\s*font-size:\s*18px/);
+  assert.match(styles, /\.cw-review-filters button \{[^}]*font-size:\s*13px/);
+  assert.match(styles, /\.cw-review-group-head h3 \{[^}]*font-size:\s*15px/);
+  assert.match(styles, /\.cw-review-task-summary b \{[^}]*font-size:\s*13px/);
+  assert.match(styles, /\.cw-review-card > label b \{[^}]*font-size:\s*13px/);
   assert.match(styles, /\.cw-compare-dialog/);
   assert.match(styles, /\.cw-compare-panes/);
   assert.match(styles, /\.cw-compare-source-picker/);
