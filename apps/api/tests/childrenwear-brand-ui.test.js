@@ -53,14 +53,15 @@ test('多嘻噜卡使用永沙式资产管理、左右任务台和五段生产�
   assert.match(index, /id="cwCombinationActivity"/);
   assert.match(index, /id="imageHoverPreviewEnabled"/);
   assert.equal((index.match(/class="cw-queue-filters" data-stage="(?:master|model|combination)"/g) || []).length, 3);
-  for (const label of ['平铺图任务状态', '模特图任务状态', '组合图任务状态']) {
+  for (const label of ['平铺图任务筛选', '模特图任务筛选', '组合图任务筛选']) {
     const filterBar = index.match(new RegExp(`<div class="cw-queue-filters"[^>]*aria-label="${label}">([\\s\\S]*?)<\\/div>`))?.[1] || '';
-    assert.match(filterBar, /^<button class="active"[^>]+data-cw-queue-filter="all"/);
+    assert.match(filterBar, /data-cw-queue-date-filter/);
+    assert.match(filterBar, /<button class="active"[^>]+data-cw-queue-filter="all"/);
     for (const filter of ['all', 'incomplete', 'ready', 'running', 'pending', 'needs_regeneration', 'approved']) {
       assert.match(filterBar, new RegExp(`data-cw-queue-filter="${filter}"`));
     }
   }
-  assert.match(index, /class="cw-review-filters"><button class="active"[^>]+data-cw-review-filter="all">全部<\/button><button[^>]+data-cw-review-filter="pending">待审核/);
+  assert.match(index, /class="cw-review-filters">[\s\S]*?id="cwReviewDateFilter"[\s\S]*?<button class="active"[^>]+data-cw-review-filter="all">全部<\/button><button[^>]+data-cw-review-filter="pending">待审核/);
   assert.match(renderer, /childrenwearReviewFilter: 'all'/);
   assert.match(renderer, /name === 'childrenwear-review' && currentPage !== name/);
   assert.match(renderer, /button\.dataset\.cwReviewFilter === state\.childrenwearReviewFilter/);
@@ -195,6 +196,15 @@ test('多嘻噜卡使用永沙式资产管理、左右任务台和五段生产�
   assert.match(renderer, /refresh: true, throwOnError: true/);
   assert.match(renderer, /await refreshChildrenwearLibraryAfterImport\(key\)/);
   assert.match(renderer, /function setImagePreviewSize/);
+  assert.equal((index.match(/data-cw-queue-date-filter/g) || []).length, 3);
+  assert.match(index, /id="cwReviewDateFilter"/);
+  assert.match(renderer, /childrenwearQueueDateFilters:\s*\{ master: 'all', model: 'all', combination: 'all' \}/);
+  assert.match(renderer, /childrenwearReviewDateFilter:\s*'all'/);
+  assert.match(renderer, /function cwTaskDateKey/);
+  assert.match(renderer, /function cwTaskDateOptions/);
+  assert.match(renderer, /全部日期（\$\{items\.length\}）/);
+  assert.match(renderer, /state\.childrenwearQueueDateFilters\[stage\]/);
+  assert.match(renderer, /state\.childrenwearReviewDateFilter/);
   assert.match(index, /id="imageHoverPreviewViewport"/);
   assert.match(index, /id="imageHoverLens"/);
   assert.match(index, /id="brandDialogModal"/);
@@ -242,6 +252,7 @@ test('多嘻噜卡使用永沙式资产管理、左右任务台和五段生产�
   assert.match(styles, /\.cw-review-group-head h3 \{[^}]*font-size:\s*15px/);
   assert.match(styles, /\.cw-review-task-summary b \{[^}]*font-size:\s*13px/);
   assert.match(styles, /\.cw-review-card > label b \{[^}]*font-size:\s*13px/);
+  assert.match(styles, /\.cw-date-filter select \{[^}]*min-width:\s*150px/);
   assert.match(styles, /\.cw-compare-dialog/);
   assert.match(styles, /\.cw-compare-panes/);
   assert.match(styles, /\.cw-compare-source-picker/);

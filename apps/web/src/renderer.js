@@ -242,10 +242,12 @@ const state = {
   childrenwearDrafts: { master: [], model: [], combination: [] },
   childrenwearActiveDraft: { master: '', model: '', combination: '' },
   childrenwearQueueFilters: { master: 'all', model: 'all', combination: 'all' },
+  childrenwearQueueDateFilters: { master: 'all', model: 'all', combination: 'all' },
   childrenwearQueueVisibleLimits: { master: 36, model: 36, combination: 36 },
   childrenwearActivityCollapsed: { master: false, model: false, combination: false },
   childrenwearReviewSelection: new Set(),
   childrenwearReviewFilter: 'all',
+  childrenwearReviewDateFilter: 'all',
   childrenwearReviewGroupLimits: new Map(),
   childrenwearReviewVisibleGroupLimit: 12,
   childrenwearCompareId: '',
@@ -1692,6 +1694,7 @@ function setPage(name) {
   const nextPage = $(`#page-${name}`);
   if (name === 'childrenwear-review' && currentPage !== name) {
     state.childrenwearReviewFilter = 'all';
+    state.childrenwearReviewDateFilter = 'all';
     state.childrenwearReviewGroupLimits.clear();
     state.childrenwearReviewVisibleGroupLimit = 12;
   }
@@ -6962,7 +6965,56 @@ function syncCwDraftsFromTasks() {
 function cwFilteredDrafts(stage) {
   const drafts = state.childrenwearDrafts[stage] || [];
   const filter = state.childrenwearQueueFilters[stage] || 'all';
-  return filter !== 'all' ? drafts.filter(draft => cwDraftStatusKey(draft) === filter) : drafts;
+  const dateFilter = state.childrenwearQueueDateFilters[stage] || 'all';
+  return drafts.filter(draft => (filter === 'all' || cwDraftStatusKey(draft) === filter)
+    && (dateFilter === 'all' || cwTaskDateKey(draft, cwTaskForDraft(draft)) === dateFilter));
+}
+
+function cwLocalDateKey(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return '';
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function cwTaskDateKey(item = {}, task = null) {
+  const source = task || item.task || item;
+  const code = String(item.taskCode || source?.taskCode || item.title || source?.taskName || '').match(/(?:^|\s)(\d{2})(\d{2})-\d{3}(?:\s|$)/);
+  if (code) return `md-${code[1]}-${code[2]}`;
+  const dateKey = cwLocalDateKey(source?.createdAt || item.createdAt || source?.updatedAt || item.updatedAt || '');
+  return dateKey ? `ymd-${dateKey}` : 'undated';
+}
+
+function cwTaskDateLabel(key) {
+  if (key === 'undated') return '未标日期';
+  const match = String(key).match(/^(?:md-(\d{2})-(\d{2})|ymd-(\d{4})-(\d{2})-(\d{2}))$/);
+  if (!match) return '未标日期';
+  const year = match[3] ? `${Number(match[3])}年` : '';
+  const month = Number(match[1] || match[4]);
+  const day = Number(match[2] || match[5]);
+  return `${year}${month}月${day}日`;
+}
+
+function cwTaskDateOptions(items, keyForItem) {
+  const counts = new Map();
+  items.forEach(item => {
+    const key = keyForItem(item) || 'undated';
+    counts.set(key, (counts.get(key) || 0) + 1);
+  });
+  return [...counts.entries()].sort(([left], [right]) => {
+    if (left === 'undated') return 1;
+    if (right === 'undated') return -1;
+    return right.localeCompare(left);
+  });
+}
+
+function renderCwDateSelect(select, items, selected, keyForItem) {
+  if (!select) return 'all';
+  const options = cwTaskDateOptions(items, keyForItem);
+  const validSelection = selected === 'all' || options.some(([key]) => key === selected) ? selected : 'all';
+  select.innerHTML = `<option value="all">全部日期（${items.length}）</option>${options.map(([key, count]) => `<option value="${escapeHtml(key)}">${escapeHtml(cwTaskDateLabel(key))}（${count}）</option>`).join('')}`;
+  select.value = validSelection;
+  return validSelection;
 }
 
 function updateCwQueueProgress(stage, draft) {
@@ -7045,6 +7097,12 @@ function renderCwQueueFilters(stage) {
   filterBar.hidden = false;
   filterBar.setAttribute('data-stage', stage);
   const drafts = state.childrenwearDrafts[stage] || [];
+  state.childrenwearQueueDateFilters[stage] = renderCwDateSelect(
+    filterBar.querySelector('[data-cw-queue-date-filter]'),
+    drafts,
+    state.childrenwearQueueDateFilters[stage] || 'all',
+    draft => cwTaskDateKey(draft, cwTaskForDraft(draft))
+  );
   const counts = drafts.reduce((result, draft) => {
     const key = cwDraftStatusKey(draft);
     result[key] = (result[key] || 0) + 1;
@@ -7080,12 +7138,13 @@ function renderCwQueue(stage) {
   const drafts = state.childrenwearDrafts[stage];
   syncCwGenerationPreviewState();
   const filter = state.childrenwearQueueFilters[stage] || 'all';
+  const dateFilter = state.childrenwearQueueDateFilters[stage] || 'all';
   const visibleDrafts = cwFilteredDrafts(stage);
   const visibleLimit = Math.max(12, Number(state.childrenwearQueueVisibleLimits[stage]) || 36);
   const renderedDrafts = visibleDrafts.slice(0, visibleLimit);
   const remainingDrafts = Math.max(0, visibleDrafts.length - renderedDrafts.length);
   const reviewIndex = cwTaskReviewIndex();
-  $(meta.count).textContent = filter !== 'all' ? `${visibleDrafts.length} / ${drafts.length} 项` : `${drafts.length} 项`;
+  $(meta.count).textContent = filter !== 'all' || dateFilter !== 'all' ? `${visibleDrafts.length} / ${drafts.length} 项` : `${drafts.length} 项`;
   const cards = renderedDrafts.map((draft, index) => cwTaskCardMarkup(stage, draft, index, reviewIndex)).join('');
   panel.innerHTML = visibleDrafts.length
     ? `${cards}${remainingDrafts ? `<button class="cw-review-load-more" type="button" data-cw-queue-more="${stage}">继续显示 ${Math.min(36, remainingDrafts)} 个任务（剩余 ${remainingDrafts} 个）</button>` : ''}`
@@ -7575,7 +7634,9 @@ function cwReviewTaskMetricsHtml(items) {
 }
 
 function cwVisibleReviewItems() {
-  const items = cwReviewItems();
+  let items = cwReviewItems();
+  const dateFilter = state.childrenwearReviewDateFilter || 'all';
+  if (dateFilter !== 'all') items = items.filter(item => cwTaskDateKey(item.task || item, item.task) === dateFilter);
   if (state.childrenwearReviewFilter === 'pending') return items.filter(item => cwReviewStatus(item) === 'pending');
   if (state.childrenwearReviewFilter === 'needs_regeneration') return items.filter(item => cwReviewStatus(item) === 'needs_regeneration');
   if (state.childrenwearReviewFilter === 'approved') return items.filter(item => item.approved);
@@ -7589,6 +7650,8 @@ function cwCompareQueue() {
   if (state.childrenwearCompareContext !== 'master') return cwVisibleReviewItems();
   let items = cwReviewItems().filter(item => item.stage === 'master');
   const filter = state.childrenwearQueueFilters.master || 'all';
+  const dateFilter = state.childrenwearQueueDateFilters.master || 'all';
+  if (dateFilter !== 'all') items = items.filter(item => cwTaskDateKey(item.task || item, item.task) === dateFilter);
   if (filter === 'pending') items = items.filter(item => cwReviewStatus(item) === 'pending');
   if (filter === 'needs_regeneration') items = items.filter(item => cwReviewStatus(item) === 'needs_regeneration');
   if (filter === 'approved') items = items.filter(item => item.approved);
@@ -7865,7 +7928,15 @@ function renderCwReview() {
     button.classList.toggle('active', button.dataset.cwReviewFilter === state.childrenwearReviewFilter);
   });
   const allItems = cwReviewItems();
+  const reviewTasks = [...new Map(allItems.map(item => [item.folder, item.task || item])).values()];
+  state.childrenwearReviewDateFilter = renderCwDateSelect(
+    $('#cwReviewDateFilter'),
+    reviewTasks,
+    state.childrenwearReviewDateFilter || 'all',
+    task => cwTaskDateKey(task)
+  );
   let items = allItems;
+  if (state.childrenwearReviewDateFilter !== 'all') items = items.filter(item => cwTaskDateKey(item.task || item, item.task) === state.childrenwearReviewDateFilter);
   if (state.childrenwearReviewFilter === 'pending') items = items.filter(item => cwReviewStatus(item) === 'pending');
   if (state.childrenwearReviewFilter === 'needs_regeneration') items = items.filter(item => cwReviewStatus(item) === 'needs_regeneration');
   if (state.childrenwearReviewFilter === 'approved') items = items.filter(item => item.approved);
@@ -8192,6 +8263,13 @@ function bindChildrenwearEvents() {
     state.childrenwearQueueVisibleLimits[stage] = 36;
     renderCwQueue(stage);
   });
+  $$('[data-cw-queue-date-filter]').forEach(select => select.onchange = () => {
+    const stage = select.closest('[data-childrenwear-production-panel]')?.dataset.childrenwearProductionPanel;
+    if (!stage) return;
+    state.childrenwearQueueDateFilters[stage] = select.value || 'all';
+    state.childrenwearQueueVisibleLimits[stage] = 36;
+    renderCwQueue(stage);
+  });
   $$('[data-cw-activity-toggle]').forEach(button => button.onclick = () => {
     const stage = button.dataset.cwActivityToggle;
     state.childrenwearActivityCollapsed[stage] = !state.childrenwearActivityCollapsed[stage];
@@ -8205,6 +8283,7 @@ function bindChildrenwearEvents() {
     const stage = entry.dataset.stage;
     const id = entry.dataset.cwActivityJump;
     state.childrenwearQueueFilters[stage] = 'all';
+    state.childrenwearQueueDateFilters[stage] = 'all';
     const draftIndex = Math.max(0, state.childrenwearDrafts[stage]?.findIndex(item => item.id === id) ?? 0);
     state.childrenwearQueueVisibleLimits[stage] = Math.max(36, draftIndex + 1);
     state.childrenwearActiveDraft[stage] = id;
@@ -8263,6 +8342,12 @@ function bindChildrenwearEvents() {
     button.parentElement.querySelectorAll('button').forEach(item => item.classList.toggle('active', item === button));
     renderCwReview();
   });
+  $('#cwReviewDateFilter').onchange = event => {
+    state.childrenwearReviewDateFilter = event.target.value || 'all';
+    state.childrenwearReviewGroupLimits.clear();
+    state.childrenwearReviewVisibleGroupLimit = 12;
+    renderCwReview();
+  };
   $('#cwReviewSelectAll').onclick = () => { cwVisibleReviewItems().forEach(item => state.childrenwearReviewSelection.add(item.id)); renderCwReview(); };
   $('#cwReviewClear').onclick = () => { state.childrenwearReviewSelection.clear(); renderCwReview(); };
   $('#cwReviewCompareSelected').onclick = () => {
