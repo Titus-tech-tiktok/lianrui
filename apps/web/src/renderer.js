@@ -245,7 +245,7 @@ const state = {
   childrenwearQueueVisibleLimits: { master: 36, model: 36, combination: 36 },
   childrenwearActivityCollapsed: { master: false, model: false, combination: false },
   childrenwearReviewSelection: new Set(),
-  childrenwearReviewFilter: 'pending',
+  childrenwearReviewFilter: 'all',
   childrenwearReviewGroupLimits: new Map(),
   childrenwearReviewVisibleGroupLimit: 12,
   childrenwearCompareId: '',
@@ -1690,6 +1690,11 @@ function setPage(name) {
     else if (state.settingsTab === 'team' && !isTeamAdmin()) state.settingsTab = 'general';
   }
   const nextPage = $(`#page-${name}`);
+  if (name === 'childrenwear-review' && currentPage !== name) {
+    state.childrenwearReviewFilter = 'all';
+    state.childrenwearReviewGroupLimits.clear();
+    state.childrenwearReviewVisibleGroupLimit = 12;
+  }
   const productionScrollLock = name === 'childrenwear' || name === 'childrenwear-review';
   if (productionScrollLock) {
     document.documentElement.classList.remove('production-scroll-lock');
@@ -7035,13 +7040,17 @@ function cwTaskCardMarkup(stage, draft, index, reviewIndex) {
 function renderCwQueueFilters(stage) {
   const panel = document.querySelector(`[data-childrenwear-production-panel="${stage}"]`);
   if (!panel) return;
+  const filterBar = panel.querySelector('.cw-queue-filters');
+  if (!filterBar) return;
+  filterBar.hidden = false;
+  filterBar.setAttribute('data-stage', stage);
   const drafts = state.childrenwearDrafts[stage] || [];
   const counts = drafts.reduce((result, draft) => {
     const key = cwDraftStatusKey(draft);
     result[key] = (result[key] || 0) + 1;
     return result;
   }, { all: drafts.length });
-  panel.querySelectorAll('[data-cw-queue-filter]').forEach(button => {
+  filterBar.querySelectorAll('[data-cw-queue-filter]').forEach(button => {
     const key = button.dataset.cwQueueFilter;
     button.innerHTML = `${escapeHtml(button.dataset.label || key)}<small>${Number(counts[key]) || 0}</small>`;
     button.classList.toggle('active', (state.childrenwearQueueFilters[stage] || 'all') === key);
@@ -7852,6 +7861,9 @@ async function regenerateCurrentCwCompare() {
 function renderCwReview() {
   const grid = $('#cwReviewGrid');
   if (!grid) return;
+  $$('.cw-review-filters [data-cw-review-filter]').forEach(button => {
+    button.classList.toggle('active', button.dataset.cwReviewFilter === state.childrenwearReviewFilter);
+  });
   const allItems = cwReviewItems();
   let items = allItems;
   if (state.childrenwearReviewFilter === 'pending') items = items.filter(item => cwReviewStatus(item) === 'pending');

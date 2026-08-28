@@ -8828,9 +8828,9 @@ body.production-scroll-lock { height: 100vh; overflow: hidden; overflow-anchor: 
 .cw-task-toolbar button { min-height: 34px; padding: 0 11px; font-size: 10px; }
 .index.pale { color: #9f7841; background: #f5ecdb; border: 1px solid #e3d3b7; }
 .cw-task-guide { color: var(--muted); border-bottom: 1px solid var(--line); margin: 0; padding: 11px 18px; font-size: 10px; }
-.cw-task-guide-block { border-bottom: 1px solid var(--line); }
+.cw-task-guide-block { border-bottom: 1px solid var(--line); min-width: 0; min-height: 78px; flex: 0 0 auto; display: block; }
 .cw-task-guide-block .cw-task-guide { border-bottom: 0; padding-bottom: 7px; }
-.cw-queue-filters { align-items: center; gap: 18px; min-height: 38px; padding: 0 18px; overflow-x: auto; display: flex; }
+.cw-queue-filters { align-items: center; gap: 18px; min-height: 38px; padding: 0 18px; overflow-x: auto; flex: 0 0 auto; display: flex !important; }
 .cw-queue-filters button { color: var(--muted); background: transparent; border: 0; min-height: 38px; padding: 0 2px; font-size: 12px; font-weight: 800; position: relative; }
 .cw-queue-filters button small { color: inherit; background: #ecece7; border-radius: 999px; min-width: 20px; margin-left: 5px; padding: 2px 6px; font-size: 11px; display: inline-block; }
 .cw-queue-filters button.active small { background: var(--teal-soft); }
