@@ -1,3 +1,33 @@
+const BUSINESS_SNAPSHOT_SCHEMA_VERSION = 1;
+const BILLING_AMOUNT_SCALE = 1_000_000;
+
+function nonNegativeInteger(value) {
+  return Math.max(0, Math.trunc(Number(value) || 0));
+}
+
+function aggregateSnapshotDaily(points = []) {
+  const byDate = new Map();
+  for (const point of Array.isArray(points) ? points : []) {
+    const date = String(point?.date || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    const current = byDate.get(date) || {
+      date,
+      apiConsumptionCnyMinor: 0,
+      apiRequestCount: 0,
+      imageRequestCount: 0,
+      analysisRequestCount: 0
+    };
+    const imageRequestCount = nonNegativeInteger(point?.successfulImages);
+    const analysisRequestCount = nonNegativeInteger(point?.successfulAnalyses);
+    current.apiConsumptionCnyMinor += nonNegativeInteger(point?.revenueCnyMinor);
+    current.imageRequestCount += imageRequestCount;
+    current.analysisRequestCount += analysisRequestCount;
+    current.apiRequestCount += imageRequestCount + analysisRequestCount;
+    byDate.set(date, current);
+  }
+  return [...byDate.values()].sort((left, right) => left.date.localeCompare(right.date));
+}
+
 function createBusinessSnapshotService(options) {
   const { auth, runtime, alipayRecharge } = options;
   const businessId = String(options.businessId || 'business').trim();
@@ -49,16 +79,49 @@ function createBusinessSnapshotService(options) {
       }),
       query.includeRecharges === false ? Promise.resolve([]) : alipayRecharge.listReview()
     ]);
-    const totals = stats?.totals || {};
-    const upstreamRequestCount = Math.max(0, Number(requestReport?.metrics?.imageCount) || 0);
+    const relayRates = new Map((Array.isArray(accountingData.relays) ? accountingData.relays : []).map(relay => [
+      String(relay?.relayId || ''),
+      Math.max(0.000001, Number(relay?.customerCnyPerUsd) || 7)
+    ]));
+    const teamWorkspaceIds = users
+      .filter(user => user?.role !== 'superadmin')
+      .map(user => String(user?.workspaceId || '').trim())
+      .filter(Boolean);
+    const accounts = await runtime.billing.listAccounts(teamWorkspaceIds, [...relayRates.keys()]);
+    const currentTeamAvailableBalanceCnyMinor = (Array.isArray(accounts) ? accounts : []).reduce((total, account) => {
+      return total + (Array.isArray(account?.wallets) ? account.wallets : []).reduce((walletTotal, wallet) => {
+        const rate = relayRates.get(String(wallet?.relayId || ''));
+        if (!rate) return walletTotal;
+        return walletTotal + Math.round((nonNegativeInteger(wallet?.availableMinor) / BILLING_AMOUNT_SCALE) * rate * 100);
+      }, 0);
+    }, 0);
+    const daily = aggregateSnapshotDaily(accountingData.daily);
+    const actualApiConsumptionCnyMinor = nonNegativeInteger(accountingData?.totals?.confirmedRevenueCnyMinor);
+    const apiRequestCount = nonNegativeInteger(accountingData?.totals?.successfulImages)
+      + nonNegativeInteger(accountingData?.totals?.successfulAnalyses);
+    const upstreamRequestCount = nonNegativeInteger(requestReport?.metrics?.imageCount);
+    const statsTotals = stats?.totals || {};
+
+    // Stable internal contract v1: retain all compatibility fields and only add fields in future versions.
     return {
+      schemaVersion: BUSINESS_SNAPSHOT_SCHEMA_VERSION,
+      businessId,
+      businessName,
       id: businessId,
       name: businessName,
       generatedAt: new Date().toISOString(),
+      currency: 'CNY',
+      range: String(accountingData.range || query.range || 'month'),
+      startDate: String(accountingData.startDate || ''),
+      endDate: String(accountingData.endDate || ''),
+      currentTeamAvailableBalanceCnyMinor,
+      actualApiConsumptionCnyMinor,
+      apiRequestCount,
+      daily,
       accounting: accountingData,
       stats: {
         ...stats,
-        totals: { ...totals, upstreamRequestCount }
+        totals: { ...statsTotals, upstreamRequestCount }
       },
       upstreamRequests: {
         count: upstreamRequestCount,
@@ -92,4 +155,4 @@ function createBusinessSnapshotService(options) {
   return { accounting, financeEntryAction, rechargeAction, snapshot };
 }
 
-module.exports = { createBusinessSnapshotService };
+module.exports = { BUSINESS_SNAPSHOT_SCHEMA_VERSION, aggregateSnapshotDaily, createBusinessSnapshotService };

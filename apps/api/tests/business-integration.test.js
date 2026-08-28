@@ -1,5 +1,8 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
 const http = require('node:http');
+const os = require('node:os');
+const path = require('node:path');
 const test = require('node:test');
 const { openBusinessData, requestBusiness, sealBusinessData, verifyBusinessRequest } = require('../src/business-link');
 const { createBusinessSnapshotService } = require('../src/business-snapshot');
@@ -47,46 +50,136 @@ test('业务服务器之间可以完成签名请求和加密响应', async t => 
   assert.deepEqual(result, { received: 42 });
 });
 
-test('业务快照汇总上游请求和经营账目', async () => {
+test('只读业务快照返回稳定安全的练锐统计字段', async () => {
+  let requestedOptions;
+  let requestedWorkspaceIds;
   const service = createBusinessSnapshotService({
-    businessId: 'demo',
-    businessName: '示例业务',
-    auth: { listUsers: async () => [{ workspaceId: 'workspace-1', username: 'tester' }] },
+    businessId: 'duoxiluka',
+    businessName: '练锐',
+    auth: { listUsers: async () => [
+      { workspaceId: 'workspace-1', username: 'tester', role: 'member' },
+      { workspaceId: 'workspace-root', username: 'root', role: 'superadmin' }
+    ] },
     runtime: {
-      loadApiSettings: async () => ({ relays: [] }),
+      loadApiSettings: async () => ({ relays: [{ id: 'relay-a', apiKey: 'must-not-leak' }, { id: 'relay-b' }] }),
       billing: {
-        getAccountingReport: async () => ({
-          startDate: '2026-08-01',
-          endDate: '2026-08-27',
-          relays: [],
-          daily: [],
-          totals: { customerTopupCnyMinor: 10000, confirmedRevenueCnyMinor: 2300, upstreamCostCnyMinor: 2000 }
-        }),
-        getGlobalStats: async () => ({
-          totals: { imageGenerated: 3, imageRegenerated: 2, masterGenerated: 1, freeGenerated: 4 }
-        }),
-        getLedgerReport: async () => ({ metrics: { imageCount: 10 } })
+        getAccountingReport: async (_relays, _userLookup, options) => {
+          requestedOptions = options;
+          return {
+            range: 'custom',
+            startDate: '2026-08-01',
+            endDate: '2026-08-27',
+            relays: [
+              { relayId: 'relay-a', customerCnyPerUsd: 7 },
+              { relayId: 'relay-b', customerCnyPerUsd: 8 }
+            ],
+            daily: [
+              { date: '2026-08-01', relayId: 'relay-a', revenueCnyMinor: 700, successfulImages: 2, successfulAnalyses: 1 },
+              { date: '2026-08-01', relayId: 'relay-b', revenueCnyMinor: 300, successfulImages: 1, successfulAnalyses: 0 },
+              { date: '2026-08-02', relayId: 'relay-a', revenueCnyMinor: 1300, successfulImages: 0, successfulAnalyses: 1 }
+            ],
+            totals: { confirmedRevenueCnyMinor: 2300, successfulImages: 3, successfulAnalyses: 2 }
+          };
+        },
+        getGlobalStats: async () => ({ totals: { imageGenerated: 3, imageRegenerated: 2 } }),
+        getLedgerReport: async () => ({ metrics: { imageCount: 7 } }),
+        listAccounts: async workspaceIds => {
+          requestedWorkspaceIds = workspaceIds;
+          return [{
+            workspaceId: 'workspace-1',
+            wallets: [
+              { relayId: 'relay-a', availableMinor: 2_000_000 },
+              { relayId: 'relay-b', availableMinor: 500_000 }
+            ]
+          }];
+        }
       },
       financeLedger: {
         listRange: async () => ({
-          entries: [],
-          summary: { otherIncomeCnyMinor: 500, operatingExpensesCnyMinor: 300 }
+          entries: [{ id: 'income-1', category: 'other_income' }],
+          summary: { otherIncomeCnyMinor: 500 }
         })
       }
     },
-    alipayRecharge: {
-      listReview: async () => [{ id: 'ALI-1', submittedAt: '2026-08-27T00:00:00.000Z' }]
-    }
+    alipayRecharge: { listReview: async () => [{ id: 'ALI-1' }] }
   });
-  const snapshot = await service.snapshot({ range: 'month' });
-  assert.equal(snapshot.id, 'demo');
-  assert.equal(snapshot.upstreamRequests.count, 10);
-  assert.equal(snapshot.accounting.totals.customerTopupCnyMinor, 10000);
-  assert.equal(snapshot.accounting.totals.upstreamCostCnyMinor, 2000);
+  const snapshot = await service.snapshot({ range: 'custom', startDate: '2026-08-01', endDate: '2026-08-27' });
+  assert.equal(snapshot.schemaVersion, 1);
+  assert.equal(snapshot.businessId, 'duoxiluka');
+  assert.equal(snapshot.businessName, '练锐');
+  assert.equal(snapshot.id, 'duoxiluka');
+  assert.equal(snapshot.name, '练锐');
+  assert.match(snapshot.generatedAt, /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(snapshot.currentTeamAvailableBalanceCnyMinor, 1800);
+  assert.equal(snapshot.actualApiConsumptionCnyMinor, 2300);
+  assert.equal(snapshot.apiRequestCount, 5);
+  assert.deepEqual(snapshot.daily, [
+    { date: '2026-08-01', apiConsumptionCnyMinor: 1000, apiRequestCount: 4, imageRequestCount: 3, analysisRequestCount: 1 },
+    { date: '2026-08-02', apiConsumptionCnyMinor: 1300, apiRequestCount: 1, imageRequestCount: 0, analysisRequestCount: 1 }
+  ]);
+  assert.deepEqual(requestedOptions, { range: 'custom', startDate: '2026-08-01', endDate: '2026-08-27', relayId: '' });
+  assert.deepEqual(requestedWorkspaceIds, ['workspace-1']);
   assert.equal(snapshot.accounting.totals.businessRevenueCnyMinor, 500);
   assert.equal(snapshot.accounting.totals.totalExpensesCnyMinor, 2300);
-  assert.equal(snapshot.accounting.totals.netProfitCnyMinor, -1800);
-  assert.equal(snapshot.recharges[0].businessName, '示例业务');
+  assert.deepEqual(snapshot.stats.totals, { imageGenerated: 3, imageRegenerated: 2, upstreamRequestCount: 7 });
+  assert.deepEqual(snapshot.upstreamRequests, {
+    count: 7,
+    source: 'project-attempt-ledger',
+    description: '项目实际发起并进入计费流水的上游图片请求次数'
+  });
+  assert.equal(snapshot.accounting.daily.length, 3);
+  assert.equal(snapshot.recharges[0].businessId, 'duoxiluka');
+  assert.doesNotMatch(JSON.stringify(snapshot), /apiKey|password|material|lianrui/i);
+});
+
+test('练锐业务快照接口拒绝无签名请求并返回加密只读统计', async t => {
+  const previous = {
+    dataDir: process.env.CAISHEN_DATA_DIR,
+    host: process.env.CAISHEN_HOST,
+    port: process.env.PORT,
+    secret: process.env.CAISHEN_BUSINESS_LINK_SECRET
+  };
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'duoxiluka-business-snapshot-'));
+  const port = 24000 + Math.floor(Math.random() * 1000);
+  process.env.CAISHEN_DATA_DIR = temp;
+  process.env.CAISHEN_HOST = '127.0.0.1';
+  process.env.PORT = String(port);
+  process.env.CAISHEN_BUSINESS_LINK_SECRET = 'test-secret-at-least-32-characters-long';
+  for (const modulePath of ['../src/server', '../src/runtime', '../src/auth']) delete require.cache[require.resolve(modulePath)];
+  const { startServer } = require('../src/server');
+  const server = await startServer();
+  t.after(async () => {
+    await new Promise(resolve => server.close(resolve));
+    await fs.rm(temp, { recursive: true, force: true });
+    for (const [key, value] of Object.entries({
+      CAISHEN_DATA_DIR: previous.dataDir,
+      CAISHEN_HOST: previous.host,
+      PORT: previous.port,
+      CAISHEN_BUSINESS_LINK_SECRET: previous.secret
+    })) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  });
+
+  const unsigned = await fetch(`http://127.0.0.1:${port}/api/internal/business/snapshot`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ range: 'today' })
+  });
+  assert.equal(unsigned.status, 401);
+
+  const snapshot = await requestBusiness(`http://127.0.0.1:${port}`, '/api/internal/business/snapshot', { range: 'today' });
+  assert.equal(snapshot.businessId, 'duoxiluka');
+  assert.equal(snapshot.businessName, '练锐');
+  assert.equal(snapshot.schemaVersion, 1);
+  assert.equal(typeof snapshot.currentTeamAvailableBalanceCnyMinor, 'number');
+  assert.equal(typeof snapshot.actualApiConsumptionCnyMinor, 'number');
+  assert.equal(typeof snapshot.apiRequestCount, 'number');
+  assert.ok(Array.isArray(snapshot.daily));
+  assert.equal(snapshot.id, 'duoxiluka');
+  assert.ok(snapshot.accounting && snapshot.stats && snapshot.upstreamRequests);
+  assert.doesNotMatch(JSON.stringify(snapshot), /lianrui/i);
 });
 
 test('业务收入操作只写入手工收入分类', async () => {

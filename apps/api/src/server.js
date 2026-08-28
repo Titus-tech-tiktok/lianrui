@@ -13,7 +13,7 @@ const runtime = require('./runtime');
 const { createAuthService } = require('./auth');
 const { createAlipayRechargeService } = require('./alipay-recharge');
 const { requestBusiness, sealBusinessData, verifyBusinessRequest } = require('./business-link');
-const { createBusinessSnapshotService } = require('./business-snapshot');
+const { BUSINESS_SNAPSHOT_SCHEMA_VERSION, createBusinessSnapshotService } = require('./business-snapshot');
 const { metadataPaths, normalizeSourceMetadata } = require('./core/review-engine');
 const { isSameOrChildPath } = require('./core/path-utils');
 
@@ -26,7 +26,7 @@ const businessSnapshot = createBusinessSnapshotService({
   runtime,
   alipayRecharge,
   businessId: 'duoxiluka',
-  businessName: '多嘻噜卡科技'
+  businessName: '练锐'
 });
 const YONGSHA_BUSINESS_URL = String(process.env.CAISHEN_YONGSHA_BUSINESS_URL || '').trim().replace(/\/+$/, '');
 const tempRoot = () => path.join(runtime.WORKSPACE_ROOT, 'tmp');
@@ -1322,6 +1322,11 @@ async function startServer() {
       activeBackgroundJobs: activeJobs,
       queuedBackgroundJobs: pendingJobs.length,
       maxBackgroundJobs: MAX_ACTIVE_JOBS,
+      businessSnapshot: {
+        configured: Boolean(String(process.env.CAISHEN_BUSINESS_LINK_SECRET || '').trim()),
+        schemaVersion: BUSINESS_SNAPSHOT_SCHEMA_VERSION,
+        signedOnly: true
+      },
       currentImageConcurrency: queue.currentConcurrency,
       maxImageConcurrency: queue.maxConcurrency,
       imageStartIntervalMs: queue.minStartIntervalMs
