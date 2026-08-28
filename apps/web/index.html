@@ -46,6 +46,11 @@
         <button class="nav-item" data-index="07" data-icon="设" data-page="settings" title="系统设置">系统设置</button>
       </nav>
       <div class="sidebar-finance">
+        <section class="sidebar-theme" aria-label="界面背景设置">
+          <div><span>界面背景</span><button class="text-button" id="resetWorkspaceBackgroundButton" type="button">恢复默认</button></div>
+          <div class="sidebar-theme-controls"><input id="workspaceBackgroundColor" type="color" value="#efeee9" aria-label="选择界面背景颜色"><input id="workspaceBackgroundHex" type="text" value="#EFEEE9" maxlength="7" spellcheck="false" aria-label="输入十六进制背景颜色"><button id="pickWorkspaceBackgroundButton" type="button" title="从屏幕任意位置吸取颜色">屏幕取色</button></div>
+          <small id="workspaceBackgroundStatus">颜色仅改变工作区背景，不影响图片本身</small>
+        </section>
         <button class="sidebar-balance" id="openBillingDetailButton" type="button"><span>算力余额</span><b id="currentBalance">读取中…</b><small id="currentBillingHint">点击查看费用明细</small></button>
         <button class="alipay-entry" id="openAlipayButton" type="button" hidden><span class="alipay-mark">支</span><b>Alipay</b></button>
         <div class="sidebar-account"><div><span>当前账号</span><b id="currentUserName">正在读取…</b></div><div class="sidebar-account-actions"><button class="text-button" id="changePasswordButton" type="button">改密</button><button class="text-button" id="logoutButton" type="button">退出</button></div></div>

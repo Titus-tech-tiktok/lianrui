@@ -233,6 +233,16 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .sidebar-account-actions .text-button { min-height: 26px; }
 .sidebar-finance { margin-top: auto; }
 .sidebar-finance .sidebar-account { margin-top: 8px; }
+.sidebar-theme { background: #f4f1e90a; border: 1px solid #f4f1e920; border-radius: 9px; margin-bottom: 9px; padding: 10px; }
+.sidebar-theme > div:first-child { align-items: center; justify-content: space-between; gap: 8px; display: flex; }
+.sidebar-theme > div:first-child > span { color: #f4f1e9c7; font-size: 10px; font-weight: 800; }
+.sidebar-theme > div:first-child > button { color: #f4f1e98f; min-height: 24px; padding: 0; font-size: 9px; }
+.sidebar-theme-controls { grid-template-columns: 31px minmax(0, 1fr); gap: 7px; margin-top: 8px; display: grid; }
+.sidebar-theme-controls input[type="color"] { background: transparent; border: 1px solid #f4f1e940; border-radius: 7px; width: 31px; height: 31px; padding: 2px; cursor: pointer; }
+.sidebar-theme-controls input[type="text"] { color: #f7f4ec; background: #f4f1e90d; border: 1px solid #f4f1e92e; border-radius: 7px; width: 100%; min-width: 0; height: 31px; padding: 0 8px; text-transform: uppercase; font-size: 10px; font-weight: 750; }
+.sidebar-theme-controls button { color: #f7f4ec; background: #f4f1e90d; border: 1px solid #f4f1e92e; border-radius: 7px; grid-column: 1 / -1; min-height: 30px; font-size: 10px; font-weight: 800; }
+.sidebar-theme-controls button:hover { background: #f4f1e918; border-color: #b4935870; }
+.sidebar-theme > small { color: #f4f1e96e; margin-top: 7px; line-height: 1.4; font-size: 8px; display: block; }
 .sidebar-balance { width: 100%; padding: 11px 10px; border: 1px solid #f4f1e920; border-radius: 9px; background: #f4f1e90a; color: #f7f4ec; text-align: left; transition: background .16s ease, border-color .16s ease; }
 .sidebar-balance:hover { border-color: #b4935870; background: #f4f1e912; }
 .sidebar-balance span, .sidebar-balance small { display: block; color: #f4f1e978; font-size: 9px; }
@@ -243,6 +253,8 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
   margin-top: auto;
   display: none;
 }
+
+html, body, .app-shell, .app-shell > main { transition: background-color .2s ease; }
 
 .app-shell.sidebar-collapsed .sidebar-account {
   justify-content: center;
@@ -8591,13 +8603,13 @@ label input, label textarea {
 
 /* 童装业务：沿用永沙项目的克制型素材库与生产工作台 */
 .childrenwear-assets-workspace {
-  background: #fbfaf7;
+  background: var(--workspace-surface, #fbfaf7);
   height: calc(100vh - 32px);
   min-height: 620px;
   grid-template-rows: 58px minmax(0, 1fr);
   box-shadow: 0 12px 34px #181f2a0b;
 }
-.childrenwear-assets-workspace .asset-library-tabs-bar { background: #fbfaf7; }
+.childrenwear-assets-workspace .asset-library-tabs-bar { background: var(--workspace-surface, #fbfaf7); }
 .childrenwear-analysis-automation { margin-left: auto; align-items: center; gap: 8px; display: flex; white-space: nowrap; }
 .childrenwear-analysis-automation label { color: var(--muted); align-items: center; gap: 6px; font-size: 11px; display: flex; }
 .childrenwear-analysis-switch { color: var(--ink) !important; font-weight: 750; cursor: pointer; }
@@ -8609,7 +8621,7 @@ label input, label textarea {
 .childrenwear-assets-workspace .asset-library-tabs-actions > .text-button { color: var(--subtle); font-size: 11px; }
 .childrenwear-assets-workspace .asset-library-tabs-actions > .secondary { min-height: 34px; padding: 8px 12px; font-size: 11px; }
 .childrenwear-library-grid { min-height: 0; display: block; overflow: hidden; }
-.childrenwear-library-card { background: #fbfaf7; min-width: 0; height: 100%; display: grid; grid-template-rows: auto auto auto minmax(0, 1fr) auto; overflow: hidden; }
+.childrenwear-library-card { background: var(--workspace-surface, #fbfaf7); min-width: 0; height: 100%; display: grid; grid-template-rows: auto auto auto minmax(0, 1fr) auto; overflow: hidden; }
 .childrenwear-library-card > header { border-bottom: 1px solid var(--line); justify-content: space-between; align-items: center; gap: 24px; padding: 19px 22px; display: flex; }
 .childrenwear-library-card h2 { margin: 0 0 4px; font-size: 16px; }
 .childrenwear-library-card header p { color: var(--muted); margin: 0; font-size: 11px; line-height: 1.5; }
@@ -8656,7 +8668,7 @@ label input, label textarea {
 .childrenwear-library-item b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
 .childrenwear-library-item small { color: var(--muted); font-size: 10px; }
 .childrenwear-library-item.selected small { color: var(--teal); font-weight: 800; }
-.childrenwear-library-pagination { border-top: 1px solid var(--line); background: #fbfaf7; justify-content: center; align-items: center; gap: 12px; min-height: 52px; padding: 8px 18px; display: flex; }
+.childrenwear-library-pagination { border-top: 1px solid var(--line); background: var(--workspace-surface, #fbfaf7); justify-content: center; align-items: center; gap: 12px; min-height: 52px; padding: 8px 18px; display: flex; }
 .childrenwear-library-pagination:empty { min-height: 0; padding: 0; border-top: 0; }
 .childrenwear-library-pagination span { color: var(--muted); font-size: 11px; }
 .childrenwear-library-pagination button { min-height: 32px; padding: 0 12px; font-size: 11px; }
@@ -8786,9 +8798,9 @@ body.production-scroll-lock { height: 100vh; overflow: hidden; overflow-anchor: 
 .app-shell.production-scroll-lock > main { height: 100vh; min-height: 0; overflow: hidden; }
 .app-shell.production-scroll-lock .childrenwear-page,
 .app-shell.production-scroll-lock .childrenwear-review-page { height: calc(100vh - 32px); min-height: 0; overflow: hidden; }
-.cw-production-panel { background: #f4f3ef; height: 100%; min-width: 0; grid-template-columns: minmax(300px, 28%) minmax(540px, 1fr) minmax(240px, 300px); gap: 14px; display: grid; transition: grid-template-columns .2s ease; }
+.cw-production-panel { background: var(--canvas); height: 100%; min-width: 0; grid-template-columns: minmax(300px, 28%) minmax(540px, 1fr) minmax(240px, 300px); gap: 14px; display: grid; transition: grid-template-columns .2s ease, background-color .2s ease; }
 .cw-production-panel.activity-collapsed { grid-template-columns: minmax(300px, 28%) minmax(540px, 1fr) 48px; }
-.cw-source-column, .cw-task-column, .cw-activity-column, .childrenwear-review-page { background: #fbfaf7; border: 1px solid var(--line); border-radius: 12px; min-width: 0; overflow: hidden; box-shadow: 0 12px 34px #181f2a0b; }
+.cw-source-column, .cw-task-column, .cw-activity-column, .childrenwear-review-page { background: var(--workspace-surface, #fbfaf7); border: 1px solid var(--line); border-radius: 12px; min-width: 0; overflow: hidden; box-shadow: 0 12px 34px #181f2a0b; transition: background-color .2s ease; }
 .cw-source-column { min-height: 0; display: flex; flex-direction: column; }
 .cw-source-column > header { border-bottom: 1px solid var(--line); align-items: center; gap: 11px; min-height: 70px; padding: 14px 18px; display: flex; }
 .cw-source-column h2, .cw-task-toolbar h2, .cw-review-toolbar h2 { margin: 0; font-size: 16px; }

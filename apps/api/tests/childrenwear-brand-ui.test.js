@@ -52,6 +52,10 @@ test('多嘻噜卡使用永沙式资产管理、左右任务台和五段生产�
   assert.match(index, /id="cwModelActivity"/);
   assert.match(index, /id="cwCombinationActivity"/);
   assert.match(index, /id="imageHoverPreviewEnabled"/);
+  assert.match(index, /id="workspaceBackgroundColor"[^>]+type="color"/);
+  assert.match(index, /id="workspaceBackgroundHex"/);
+  assert.match(index, /id="pickWorkspaceBackgroundButton"[^>]*>屏幕取色/);
+  assert.match(index, /id="resetWorkspaceBackgroundButton"[^>]*>恢复默认/);
   assert.equal((index.match(/class="cw-queue-filters" data-stage="(?:master|model|combination)"/g) || []).length, 3);
   for (const label of ['平铺图任务筛选', '模特图任务筛选', '组合图任务筛选']) {
     const filterBar = index.match(new RegExp(`<div class="cw-queue-filters"[^>]*aria-label="${label}">([\\s\\S]*?)<\\/div>`))?.[1] || '';
@@ -196,6 +200,13 @@ test('多嘻噜卡使用永沙式资产管理、左右任务台和五段生产�
   assert.match(renderer, /refresh: true, throwOnError: true/);
   assert.match(renderer, /await refreshChildrenwearLibraryAfterImport\(key\)/);
   assert.match(renderer, /function setImagePreviewSize/);
+  assert.match(renderer, /function normalizeWorkspaceBackgroundColor/);
+  assert.match(renderer, /function applyWorkspaceBackgroundColor/);
+  assert.match(renderer, /function workspaceSurfaceColor/);
+  assert.match(renderer, /--workspace-surface/);
+  assert.match(renderer, /new window\.EyeDropper\(\)\.open\(\)/);
+  assert.match(renderer, /scopedStorageKey\(WORKSPACE_BACKGROUND_STORAGE_KEY\)/);
+  assert.match(renderer, /bindWorkspaceBackgroundControls\(\)/);
   assert.equal((index.match(/data-cw-queue-date-filter/g) || []).length, 3);
   assert.match(index, /id="cwReviewDateFilter"/);
   assert.match(renderer, /childrenwearQueueDateFilters:\s*\{ master: 'all', model: 'all', combination: 'all' \}/);
@@ -253,6 +264,7 @@ test('多嘻噜卡使用永沙式资产管理、左右任务台和五段生产�
   assert.match(styles, /\.cw-review-task-summary b \{[^}]*font-size:\s*13px/);
   assert.match(styles, /\.cw-review-card > label b \{[^}]*font-size:\s*13px/);
   assert.match(styles, /\.cw-date-filter select \{[^}]*min-width:\s*150px/);
+  assert.match(styles, /\.sidebar-theme-controls/);
   assert.match(styles, /\.cw-compare-dialog/);
   assert.match(styles, /\.cw-compare-panes/);
   assert.match(styles, /\.cw-compare-source-picker/);

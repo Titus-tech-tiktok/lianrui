@@ -5,6 +5,8 @@ const REVIEW_VIEWED_STORAGE_KEY = 'caishen-web-viewed-review-jobs-v1';
 const REVIEW_REGENERATION_RECORDS_STORAGE_KEY = 'caishen-web-review-regeneration-records-v1';
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'caishen-web-sidebar-collapsed-v1';
 const IMAGE_PREVIEW_SIZE_STORAGE_KEY = 'duoxiluka-image-preview-size-v1';
+const WORKSPACE_BACKGROUND_STORAGE_KEY = 'duoxiluka-workspace-background-v1';
+const DEFAULT_WORKSPACE_BACKGROUND = '#EFEEE9';
 let storageScope = 'anonymous';
 const scopedStorageKey = key => `${key}:${storageScope}`;
 
@@ -422,6 +424,73 @@ function applySidebarCollapsed(collapsed) {
 
 function loadSidebarCollapsed() {
   try { return localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === '1'; } catch { return false; }
+}
+
+function normalizeWorkspaceBackgroundColor(value) {
+  const raw = String(value || '').trim();
+  const short = raw.match(/^#([0-9a-f]{3})$/i);
+  if (short) return `#${[...short[1]].map(part => part.repeat(2)).join('').toUpperCase()}`;
+  return /^#[0-9a-f]{6}$/i.test(raw) ? raw.toUpperCase() : '';
+}
+
+function loadWorkspaceBackgroundColor() {
+  try { return normalizeWorkspaceBackgroundColor(localStorage.getItem(scopedStorageKey(WORKSPACE_BACKGROUND_STORAGE_KEY))) || DEFAULT_WORKSPACE_BACKGROUND; }
+  catch { return DEFAULT_WORKSPACE_BACKGROUND; }
+}
+
+function workspaceSurfaceColor(color) {
+  const hex = normalizeWorkspaceBackgroundColor(color) || DEFAULT_WORKSPACE_BACKGROUND;
+  const channels = [1, 3, 5].map(index => Number.parseInt(hex.slice(index, index + 2), 16));
+  return `#${channels.map(channel => Math.round(channel * .24 + 255 * .76).toString(16).padStart(2, '0')).join('').toUpperCase()}`;
+}
+
+function applyWorkspaceBackgroundColor(value, { persist = true, message = '' } = {}) {
+  const color = normalizeWorkspaceBackgroundColor(value);
+  if (!color) return false;
+  document.documentElement.style.setProperty('--canvas', color);
+  document.documentElement.style.setProperty('--workspace-surface', workspaceSurfaceColor(color));
+  const picker = $('#workspaceBackgroundColor');
+  const hex = $('#workspaceBackgroundHex');
+  const status = $('#workspaceBackgroundStatus');
+  if (picker && picker.value.toUpperCase() !== color) picker.value = color;
+  if (hex && hex.value.toUpperCase() !== color) hex.value = color;
+  if (status) status.textContent = message || `当前背景 ${color} · 不影响图片原色`;
+  if (persist) {
+    try { localStorage.setItem(scopedStorageKey(WORKSPACE_BACKGROUND_STORAGE_KEY), color); } catch {}
+  }
+  return true;
+}
+
+async function pickWorkspaceBackgroundFromScreen() {
+  const status = $('#workspaceBackgroundStatus');
+  if (typeof window.EyeDropper !== 'function') {
+    if (status) status.textContent = '当前访问环境不支持屏幕取色，已打开系统颜色面板';
+    $('#workspaceBackgroundColor')?.click();
+    return;
+  }
+  try {
+    if (status) status.textContent = '请点击屏幕上需要使用的颜色';
+    const result = await new window.EyeDropper().open();
+    applyWorkspaceBackgroundColor(result.sRGBHex, { message: `已从屏幕取色 ${String(result.sRGBHex).toUpperCase()}` });
+  } catch (error) {
+    if (error?.name !== 'AbortError' && status) status.textContent = `屏幕取色失败：${errorText(error)}`;
+    else if (status) status.textContent = '已取消屏幕取色';
+  }
+}
+
+function bindWorkspaceBackgroundControls() {
+  applyWorkspaceBackgroundColor(loadWorkspaceBackgroundColor(), { persist: false });
+  $('#workspaceBackgroundColor').oninput = event => applyWorkspaceBackgroundColor(event.target.value);
+  $('#workspaceBackgroundHex').onchange = event => {
+    if (applyWorkspaceBackgroundColor(event.target.value)) return;
+    event.target.value = loadWorkspaceBackgroundColor();
+    $('#workspaceBackgroundStatus').textContent = '请输入 #RRGGBB 格式的颜色值';
+  };
+  $('#workspaceBackgroundHex').onkeydown = event => {
+    if (event.key === 'Enter') { event.preventDefault(); event.target.blur(); }
+  };
+  $('#pickWorkspaceBackgroundButton').onclick = pickWorkspaceBackgroundFromScreen;
+  $('#resetWorkspaceBackgroundButton').onclick = () => applyWorkspaceBackgroundColor(DEFAULT_WORKSPACE_BACKGROUND, { message: '已恢复默认背景颜色' });
 }
 
 function errorText(error) {
@@ -8979,6 +9048,7 @@ async function start() {
   }
   ensureMobileStatsPage();
   applyCurrentUser(authStatus.user);
+  bindWorkspaceBackgroundControls();
   applySidebarCollapsed(loadSidebarCollapsed());
   bindEvents();
   if (authStatus.user.passwordChangeRequired) {
