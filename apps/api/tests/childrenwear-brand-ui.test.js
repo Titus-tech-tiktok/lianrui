@@ -45,7 +45,13 @@ test('多嘻噜卡使用永沙式资产管理、左右任务台和五段生产�
   assert.match(index, /id="cwMasterQueue"/);
   assert.match(index, /data-cw-queue-filter="needs_regeneration"/);
   assert.match(index, /data-cw-batch="approve" data-stage="master"/);
-  assert.match(index, /data-cw-batch="mark-issue" data-stage="master"/);
+  assert.doesNotMatch(index, /data-cw-batch="mark-issue"/);
+  assert.match(index, /data-cw-batch="generate" data-stage="master">生成未出图选中/);
+  assert.match(index, /data-cw-batch="regenerate" data-stage="master">重新生成选中/);
+  assert.match(index, /id="cwMasterActivity"/);
+  assert.match(index, /id="cwModelActivity"/);
+  assert.match(index, /id="cwCombinationActivity"/);
+  assert.match(index, /id="imageHoverPreviewEnabled"/);
   assert.doesNotMatch(index, /id="cwCompareFlag"/);
   assert.doesNotMatch(index, /id="cwReviewFlagSelected"/);
   assert.match(index, /id="cwReviewCompareSelected"/);
@@ -62,6 +68,13 @@ test('多嘻噜卡使用永沙式资产管理、左右任务台和五段生产�
   assert.doesNotMatch(index, /childrenwear-hero/);
   assert.match(renderer, /function setChildrenwearAssetTab/);
   assert.match(renderer, /function setChildrenwearProductionTab/);
+  assert.match(renderer, /state\.childrenwearDrafts\[stage\]\.unshift\(draft\)/);
+  assert.match(renderer, /function cwOldestDraft/);
+  assert.match(renderer, /function cwRemoveLastSelectedSource/);
+  assert.match(renderer, /data-cw-remove-last-source/);
+  assert.match(renderer, /async function runCwBatch\(stage, mode = 'generate'\)/);
+  assert.doesNotMatch(renderer, /function flagCurrentCwCompare/);
+  assert.doesNotMatch(renderer, /function markCwReviewItemNeedsRegeneration/);
   assert.match(renderer, /function toggleAllChildrenwearLibraryItems/);
   assert.match(renderer, /function prepareChildrenwearFolderUpload/);
   assert.match(renderer, /function parseChildrenwearStylePackage/);
@@ -86,7 +99,7 @@ test('多嘻噜卡使用永沙式资产管理、左右任务台和五段生产�
   assert.match(renderer, /saved-\$\{stage\}:\$\{task\.folder\}:\$\{output\.id\}/);
   assert.match(renderer, /output\.masterPaths\?\.length/);
   assert.match(renderer, /function cwFilteredDrafts/);
-  assert.match(renderer, /function markCwReviewItemNeedsRegeneration/);
+  assert.doesNotMatch(renderer, /function markCwReviewItemNeedsRegeneration/);
   assert.match(renderer, /function cwCompareQueue/);
   assert.match(renderer, /task\.masterThumbnailUrl/);
   assert.match(renderer, /item\.thumbnailUrl \|\| item\.url/);

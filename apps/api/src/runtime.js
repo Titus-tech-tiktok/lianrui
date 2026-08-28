@@ -1147,6 +1147,7 @@ function defaultConfig() {
     childrenwearCombinationAssetsPath: '',
     childrenwearAutoAnalysisEnabled: false,
     childrenwearAutoAnalysisIntervalMinutes: 5,
+    imageHoverPreviewEnabled: true,
     outputPath: currentDefaultOutputRoot(),
     imageSize: '1024x1024',
     imageQuality: 'auto',
@@ -1182,6 +1183,7 @@ async function saveConfig(next) {
     childrenwearAutoAnalysisIntervalMinutes: [1, 5, 10, 30, 60].includes(Number(next.childrenwearAutoAnalysisIntervalMinutes))
       ? Number(next.childrenwearAutoAnalysisIntervalMinutes)
       : 5,
+    imageHoverPreviewEnabled: next.imageHoverPreviewEnabled !== false,
     outputPath: String(next.outputPath || currentDefaultOutputRoot()).trim(),
     imageSize: String(next.imageSize || '1024x1024'),
     imageQuality: String(next.imageQuality || 'auto'),
