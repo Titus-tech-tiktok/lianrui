@@ -1301,6 +1301,16 @@ async function startServer() {
     }
   });
 
+  app.post('/api/internal/business/finance-entry-action', async (req, res) => {
+    const verification = verifyBusinessRequest(req);
+    if (!verification.ok) return res.status(verification.status).json({ error: verification.error });
+    try {
+      return res.json({ data: sealBusinessData(await businessSnapshot.financeEntryAction(req.body || {})) });
+    } catch (error) {
+      return res.status(400).json({ error: error?.message || String(error) });
+    }
+  });
+
   app.get('/api/health', (_req, res) => {
     const queue = runtime.getImageSchedulerSnapshot();
     return res.json({

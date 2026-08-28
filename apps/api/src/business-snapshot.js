@@ -17,22 +17,19 @@ function createBusinessSnapshotService(options) {
       endDate: report.endDate,
       relayId: report.relayId
     });
-    const otherIncomeCnyMinor = Number(finance.summary.otherIncomeCnyMinor) || 0;
-    const customerTopupCnyMinor = Number(report.totals.customerTopupCnyMinor) || 0;
-    const businessRevenueCnyMinor = customerTopupCnyMinor + otherIncomeCnyMinor;
-    const operatingExpensesCnyMinor = Number(finance.summary.operatingExpensesCnyMinor) || 0;
-    const upstreamCostCnyMinor = Number(report.totals.upstreamCostCnyMinor) || 0;
-    const totalExpensesCnyMinor = upstreamCostCnyMinor + operatingExpensesCnyMinor;
+    const manualIncomeCnyMinor = Number(finance.summary.otherIncomeCnyMinor) || 0;
+    const actualConsumptionCnyMinor = Number(report.totals.confirmedRevenueCnyMinor) || 0;
     return {
       ...report,
       finance,
       totals: {
         ...report.totals,
-        otherIncomeCnyMinor,
-        businessRevenueCnyMinor,
-        operatingExpensesCnyMinor,
-        totalExpensesCnyMinor,
-        netProfitCnyMinor: businessRevenueCnyMinor - totalExpensesCnyMinor
+        otherIncomeCnyMinor: manualIncomeCnyMinor,
+        manualIncomeCnyMinor,
+        actualConsumptionCnyMinor,
+        businessRevenueCnyMinor: manualIncomeCnyMinor,
+        totalExpensesCnyMinor: actualConsumptionCnyMinor,
+        netProfitCnyMinor: manualIncomeCnyMinor - actualConsumptionCnyMinor
       }
     };
   }
@@ -81,7 +78,18 @@ function createBusinessSnapshotService(options) {
     throw new Error('不支持的充值核验操作');
   }
 
-  return { accounting, rechargeAction, snapshot };
+  async function financeEntryAction(payload = {}) {
+    const action = String(payload.action || '');
+    const id = String(payload.id || '');
+    const entry = { ...(payload.entry || {}), category: 'other_income' };
+    if (action === 'create') return runtime.financeLedger.create(entry);
+    if (!id) throw new Error('收入记录编号不能为空');
+    if (action === 'update') return runtime.financeLedger.update(id, entry);
+    if (action === 'delete') return runtime.financeLedger.remove(id);
+    throw new Error('不支持的收入记录操作');
+  }
+
+  return { accounting, financeEntryAction, rechargeAction, snapshot };
 }
 
 module.exports = { createBusinessSnapshotService };

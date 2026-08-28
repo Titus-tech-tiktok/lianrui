@@ -60,7 +60,7 @@ test('业务快照汇总上游请求和经营账目', async () => {
           endDate: '2026-08-27',
           relays: [],
           daily: [],
-          totals: { customerTopupCnyMinor: 10000, upstreamCostCnyMinor: 2000 }
+          totals: { customerTopupCnyMinor: 10000, confirmedRevenueCnyMinor: 2300, upstreamCostCnyMinor: 2000 }
         }),
         getGlobalStats: async () => ({
           totals: { imageGenerated: 3, imageRegenerated: 2, masterGenerated: 1, freeGenerated: 4 }
@@ -81,8 +81,33 @@ test('业务快照汇总上游请求和经营账目', async () => {
   const snapshot = await service.snapshot({ range: 'month' });
   assert.equal(snapshot.id, 'demo');
   assert.equal(snapshot.upstreamRequests.count, 10);
-  assert.equal(snapshot.accounting.totals.businessRevenueCnyMinor, 10500);
+  assert.equal(snapshot.accounting.totals.customerTopupCnyMinor, 10000);
+  assert.equal(snapshot.accounting.totals.upstreamCostCnyMinor, 2000);
+  assert.equal(snapshot.accounting.totals.businessRevenueCnyMinor, 500);
   assert.equal(snapshot.accounting.totals.totalExpensesCnyMinor, 2300);
-  assert.equal(snapshot.accounting.totals.netProfitCnyMinor, 8200);
+  assert.equal(snapshot.accounting.totals.netProfitCnyMinor, -1800);
   assert.equal(snapshot.recharges[0].businessName, '示例业务');
+});
+
+test('业务收入操作只写入手工收入分类', async () => {
+  const calls = [];
+  const service = createBusinessSnapshotService({
+    auth: {},
+    runtime: {
+      financeLedger: {
+        create: async entry => { calls.push(['create', entry]); return { id: 'fin-1', ...entry }; },
+        update: async (id, entry) => { calls.push(['update', id, entry]); return { id, ...entry }; },
+        remove: async id => { calls.push(['delete', id]); return { id }; }
+      }
+    },
+    alipayRecharge: {}
+  });
+  const created = await service.financeEntryAction({ action: 'create', entry: { category: 'server', amount: '100' } });
+  const updated = await service.financeEntryAction({ action: 'update', id: 'fin-1', entry: { category: 'refund', amount: '80' } });
+  await service.financeEntryAction({ action: 'delete', id: 'fin-1' });
+  assert.equal(created.category, 'other_income');
+  assert.equal(updated.category, 'other_income');
+  assert.equal(calls[0][1].category, 'other_income');
+  assert.equal(calls[1][2].category, 'other_income');
+  assert.deepEqual(calls[2], ['delete', 'fin-1']);
 });
