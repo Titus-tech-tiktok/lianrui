@@ -117,13 +117,16 @@ function persistReviewRegenerationRecords() {
 function loadFixedModelReferencePreference() {
   try {
     const saved = JSON.parse(localStorage.getItem(scopedStorageKey(FIXED_MODEL_REFERENCE_STORAGE_KEY)) || 'null');
-    if (!saved || typeof saved !== 'object') return { enabled: false, asset: null };
+    if (!saved || typeof saved !== 'object') return { enabled: false, asset: null, operationType: 'dress', backgroundMode: 'model_reference', solidColor: '#FFFFFF' };
     return {
       enabled: Boolean(saved.enabled),
-      asset: saved.asset?.path ? { path: String(saved.asset.path), name: String(saved.asset.name || ''), folder: String(saved.asset.folder || '') } : null
+      asset: saved.asset?.path ? { path: String(saved.asset.path), name: String(saved.asset.name || ''), folder: String(saved.asset.folder || '') } : null,
+      operationType: saved.operationType === 'scene_only' ? 'scene_only' : 'dress',
+      backgroundMode: ['solid', 'scene_reference'].includes(saved.backgroundMode) ? saved.backgroundMode : 'model_reference',
+      solidColor: /^#[0-9a-f]{6}$/i.test(String(saved.solidColor || '')) ? String(saved.solidColor).toUpperCase() : '#FFFFFF'
     };
   } catch {
-    return { enabled: false, asset: null };
+    return { enabled: false, asset: null, operationType: 'dress', backgroundMode: 'model_reference', solidColor: '#FFFFFF' };
   }
 }
 
@@ -134,7 +137,13 @@ function persistFixedModelReferencePreference() {
     folder: state.childrenwearFixedModelReference.folder || ''
   } : null;
   try {
-    localStorage.setItem(scopedStorageKey(FIXED_MODEL_REFERENCE_STORAGE_KEY), JSON.stringify({ enabled: Boolean(state.childrenwearFixedModelEnabled), asset }));
+    localStorage.setItem(scopedStorageKey(FIXED_MODEL_REFERENCE_STORAGE_KEY), JSON.stringify({
+      enabled: Boolean(state.childrenwearFixedModelEnabled),
+      asset,
+      operationType: state.childrenwearModelOperationType,
+      backgroundMode: state.childrenwearModelBackgroundMode,
+      solidColor: state.childrenwearModelSolidColor
+    }));
   } catch {}
 }
 
@@ -207,7 +216,12 @@ const state = {
   freeSource: null,
   freeResult: null,
   promptSettings: null,
+  childrenwearGenerationPrompts: { master: '', model: '', combination: '' },
+  childrenwearGenerationPromptRoutes: {},
+  childrenwearGenerationPromptsLoaded: false,
   activePromptId: '',
+  activePromptStage: 'master',
+  activePromptRoute: 'dress_follow',
   apiSettings: null,
   relayChoices: null,
   selectedRelayId: '',
@@ -243,6 +257,7 @@ const state = {
     childrenwearReferenceAssetsPath: [],
     childrenwearModelAssetsPath: [],
     childrenwearSceneAssetsPath: [],
+    childrenwearFlatAssetsPath: [],
     childrenwearCombinationAssetsPath: []
   },
   childrenwearProductionLibraries: {
@@ -250,6 +265,7 @@ const state = {
     childrenwearReferenceAssetsPath: [],
     childrenwearModelAssetsPath: [],
     childrenwearSceneAssetsPath: [],
+    childrenwearFlatAssetsPath: [],
     childrenwearCombinationAssetsPath: []
   },
   childrenwearProductionFolders: {
@@ -257,6 +273,7 @@ const state = {
     childrenwearReferenceAssetsPath: [],
     childrenwearModelAssetsPath: [],
     childrenwearSceneAssetsPath: [],
+    childrenwearFlatAssetsPath: [],
     childrenwearCombinationAssetsPath: []
   },
   childrenwearLibraryUploading: new Set(),
@@ -265,7 +282,14 @@ const state = {
   childrenwearAssetTab: 'childrenwearRealAssetsPath',
   childrenwearProductionTab: 'master',
   childrenwearSourceTabs: { master: 'master-real', model: 'model-master', combination: 'combination-master' },
+  childrenwearSourcePages: {},
+  childrenwearSourceBuilderModes: { master: false, model: false, combination: false },
+  childrenwearSourceBuilderSelections: { master: new Map(), model: new Map(), combination: new Map() },
+  childrenwearSourceBuilderTargetCounts: { master: 1, model: 1, combination: 1 },
+  childrenwearCombinationBuilderGroupSize: 2,
+  childrenwearModelOperationType: 'dress',
   childrenwearModelBackgroundMode: 'model_reference',
+  childrenwearModelSolidColor: '#FFFFFF',
   childrenwearFixedModelEnabled: false,
   childrenwearFixedModelReference: null,
   childrenwearLineageSelectedPath: '',
@@ -274,13 +298,13 @@ const state = {
   childrenwearActiveDraft: { master: '', model: '', combination: '' },
   childrenwearQueueFilters: { master: 'all', model: 'all', combination: 'all' },
   childrenwearQueueDateFilters: { master: 'all', model: 'all', combination: 'all' },
-  childrenwearQueueVisibleLimits: { master: 36, model: 36, combination: 36 },
+  childrenwearQueuePages: { master: 1, model: 1, combination: 1 },
   childrenwearActivityCollapsed: { master: false, model: false, combination: false },
   childrenwearReviewSelection: new Set(),
   childrenwearReviewFilter: 'all',
   childrenwearReviewDateFilter: 'all',
-  childrenwearReviewGroupLimits: new Map(),
-  childrenwearReviewVisibleGroupLimit: 12,
+  childrenwearReviewGroupPages: new Map(),
+  childrenwearReviewPage: 1,
   childrenwearCompareId: '',
   childrenwearCompareContext: 'review',
   childrenwearCompareZoom: 1,
@@ -288,11 +312,16 @@ const state = {
   childrenwearCompareBusy: false,
   childrenwearCompareVisibility: {},
   childrenwearCompareOrder: {},
+  childrenwearCompareColorPicking: false,
+  childrenwearComparePickedColor: null,
+  childrenwearLocalEdit: null,
+  childrenwearLocalEditJobs: new Map(),
   childrenwearLibraryFolders: {
     childrenwearRealAssetsPath: [],
     childrenwearReferenceAssetsPath: [],
     childrenwearModelAssetsPath: [],
     childrenwearSceneAssetsPath: [],
+    childrenwearFlatAssetsPath: [],
     childrenwearCombinationAssetsPath: []
   },
   childrenwearLibraryFolder: {
@@ -300,6 +329,7 @@ const state = {
     childrenwearReferenceAssetsPath: 'auto',
     childrenwearModelAssetsPath: 'auto',
     childrenwearSceneAssetsPath: 'auto',
+    childrenwearFlatAssetsPath: 'auto',
     childrenwearCombinationAssetsPath: 'auto'
   },
   childrenwearLibraryPage: {
@@ -307,6 +337,7 @@ const state = {
     childrenwearReferenceAssetsPath: 1,
     childrenwearModelAssetsPath: 1,
     childrenwearSceneAssetsPath: 1,
+    childrenwearFlatAssetsPath: 1,
     childrenwearCombinationAssetsPath: 1
   },
   childrenwearLibraryTotals: {
@@ -314,6 +345,7 @@ const state = {
     childrenwearReferenceAssetsPath: { total: 0, totalPages: 0, pageSize: 48 },
     childrenwearModelAssetsPath: { total: 0, totalPages: 0, pageSize: 48 },
     childrenwearSceneAssetsPath: { total: 0, totalPages: 0, pageSize: 48 },
+    childrenwearFlatAssetsPath: { total: 0, totalPages: 0, pageSize: 48 },
     childrenwearCombinationAssetsPath: { total: 0, totalPages: 0, pageSize: 48 }
   },
   childrenwearLibraryDeleteSelection: {
@@ -321,6 +353,7 @@ const state = {
     childrenwearReferenceAssetsPath: new Set(),
     childrenwearModelAssetsPath: new Set(),
     childrenwearSceneAssetsPath: new Set(),
+    childrenwearFlatAssetsPath: new Set(),
     childrenwearCombinationAssetsPath: new Set()
   },
   childrenwearPickerKey: '',
@@ -372,6 +405,7 @@ function openBrandDialog({
   inputLabel = '请输入',
   inputType = 'text',
   readOnly = false,
+  multiline = false,
   confirmText = '确定',
   cancelText = '取消',
   danger = false
@@ -380,14 +414,18 @@ function openBrandDialog({
   if (!modal) return Promise.resolve(input ? null : false);
   if (activeBrandDialogResolve) closeBrandDialog(input ? null : false);
   const field = $('#brandDialogField');
-  const control = $('#brandDialogInput');
+  const inputControl = $('#brandDialogInput');
+  const textareaControl = $('#brandDialogTextarea');
+  const control = multiline ? textareaControl : inputControl;
   const cancel = $('#brandDialogCancelButton');
   const confirm = $('#brandDialogConfirmButton');
   $('#brandDialogTitle').textContent = title;
   $('#brandDialogMessage').textContent = message;
   $('#brandDialogFieldLabel').textContent = inputLabel;
   field.hidden = !input;
-  control.type = inputType;
+  inputControl.hidden = multiline;
+  textareaControl.hidden = !multiline;
+  if (!multiline) inputControl.type = inputType;
   control.value = String(value ?? '');
   control.readOnly = readOnly;
   cancel.hidden = !cancelText;
@@ -403,7 +441,7 @@ function openBrandDialog({
     modal.onclick = event => { if (event.target === modal) closeBrandDialog(cancelResult); };
     modal.onkeydown = event => {
       if (event.key === 'Escape') closeBrandDialog(cancelResult);
-      if (event.key === 'Enter' && event.target === control && !readOnly) {
+      if (event.key === 'Enter' && event.target === control && !readOnly && !multiline) {
         event.preventDefault();
         closeBrandDialog(control.value);
       }
@@ -430,6 +468,7 @@ function brandPrompt(title, value = '', options = {}) {
     inputLabel: options.inputLabel || '请输入',
     inputType: options.inputType || 'text',
     readOnly: options.readOnly === true,
+    multiline: options.multiline === true,
     confirmText: options.confirmText || '确定',
     cancelText: options.cancelText === undefined ? '取消' : options.cancelText
   });
@@ -528,6 +567,9 @@ function errorText(error) {
 
 function childrenwearFriendlyError(error) {
   const message = errorText(error);
+  if (/内容政策|content policy|policy violation|违反.*政策/i.test(message)) {
+    return '上游图像审核拒绝了当前指令。请删除可能触发审核的品牌、角色或敏感描述，改为描述颜色、形状、纹理和位置后重试。';
+  }
   if (/fetch failed|ECONNRESET|socket|network/i.test(message)) {
     return '连接小恐龙中转站失败，系统已自动尝试备用上传方式。请稍后点击“重新生成这一张”；若持续失败，请到系统设置测试接口线路。';
   }
@@ -564,6 +606,9 @@ function applyCurrentUser(user) {
   const fixedModelPreference = loadFixedModelReferencePreference();
   state.childrenwearFixedModelEnabled = fixedModelPreference.enabled;
   state.childrenwearFixedModelReference = fixedModelPreference.asset;
+  state.childrenwearModelOperationType = fixedModelPreference.operationType;
+  state.childrenwearModelBackgroundMode = fixedModelPreference.backgroundMode;
+  state.childrenwearModelSolidColor = fixedModelPreference.solidColor;
   $('#currentUserName').textContent = user.displayName || user.username;
   $('#currentUserName').title = `${user.username} · ${roleLabel(user.role)}`;
   $('#promptSettingsNav').hidden = true;
@@ -1274,11 +1319,11 @@ function isTeamAdmin() {
 }
 
 function canManagePrompts() {
-  return isSuperAdmin();
+  return Boolean(state.currentUser);
 }
 
 function canViewPrompts() {
-  return canManagePrompts() || (state.currentUser?.role === 'admin' && state.allowAdminPromptView);
+  return Boolean(state.currentUser);
 }
 
 function feeRangeLabel(minorMin = 0, minorMax = 0) {
@@ -1796,8 +1841,8 @@ function setPage(name) {
   if (name === 'childrenwear-review' && currentPage !== name) {
     state.childrenwearReviewFilter = 'all';
     state.childrenwearReviewDateFilter = 'all';
-    state.childrenwearReviewGroupLimits.clear();
-    state.childrenwearReviewVisibleGroupLimit = 12;
+    state.childrenwearReviewGroupPages.clear();
+    state.childrenwearReviewPage = 1;
   }
   const productionScrollLock = name === 'childrenwear' || name === 'childrenwear-review';
   if (productionScrollLock) {
@@ -1829,7 +1874,12 @@ function setPage(name) {
   requestAnimationFrame(() => {
     if (currentPage !== name) return;
     if (name === 'review') loadReviews({ silent: state.reviews.length > 0 });
-    if (name === 'childrenwear') setChildrenwearProductionTab(state.childrenwearProductionTab);
+    if (name === 'childrenwear') {
+      activateChildrenwearProductionTab(state.childrenwearProductionTab);
+      requestAnimationFrame(() => {
+        if (currentPage === 'childrenwear') setChildrenwearProductionTab(state.childrenwearProductionTab);
+      });
+    }
     if (name === 'childrenwear-review') renderCwReview();
     if (name === 'prompts' && canViewPrompts() && !state.promptSettings) loadPromptSettings();
     if (name === 'assets') loadChildrenwearLibraries();
@@ -1914,7 +1964,7 @@ function isClientSubPath(root, candidate) {
 async function sanitizeConfigWorkspacePaths() {
   if (!state.config?.workspaceRoot) return;
   let changed = false;
-  for (const key of ['categoriesPath', 'printsPath', 'detailSetsPath', 'childrenwearRealAssetsPath', 'childrenwearReferenceAssetsPath', 'childrenwearModelAssetsPath', 'childrenwearSceneAssetsPath', 'childrenwearCombinationAssetsPath']) {
+  for (const key of ['categoriesPath', 'printsPath', 'detailSetsPath', 'childrenwearRealAssetsPath', 'childrenwearReferenceAssetsPath', 'childrenwearModelAssetsPath', 'childrenwearSceneAssetsPath', 'childrenwearFlatAssetsPath', 'childrenwearCombinationAssetsPath']) {
     if (state.config[key] && !isClientSubPath(state.config.workspaceRoot, state.config[key])) {
       state.config[key] = '';
       changed = true;
@@ -4713,119 +4763,326 @@ function activePrompt() {
   return state.promptSettings?.prompts?.find(item => item.id === state.activePromptId) || null;
 }
 
-function renderPromptSettingList() {
+function activePromptPreset(prompt = activePrompt()) {
+  if (!prompt) return null;
+  state.promptPresetSelections ||= {};
+  const selectedId = state.promptPresetSelections[prompt.id] || prompt.activePresetId || prompt.presets?.[0]?.id || '';
+  const selected = (prompt.presets || []).find(item => item.id === selectedId) || prompt.presets?.[0] || null;
+  if (selected) state.promptPresetSelections[prompt.id] = selected.id;
+  return selected;
+}
+
+function promptStageDefinition(stageId = state.activePromptStage) {
+  return state.promptSettings?.stages?.find(item => item.id === stageId) || null;
+}
+
+function promptForStage(stageId = state.activePromptStage) {
   const prompts = state.promptSettings?.prompts || [];
-  $('#promptCount').textContent = `${prompts.length} 项`;
-  $('#promptSettingList').innerHTML = prompts.length
-    ? prompts.map(item => `<button class="prompt-setting-item${item.id === state.activePromptId ? ' active' : ''}" data-prompt-id="${escapeHtml(item.id)}"><b>${escapeHtml(item.title)}</b><span>${escapeHtml(item.group)}${item.customized ? '<em class="customized"> · 已修改</em>' : ''}</span></button>`).join('')
-    : '<div class="empty-inline">没有可配置的提示词</div>';
+  const routeGroupId = stageId === 'model' ? state.promptSettings?.routeBindings?.[state.activePromptRoute] || '' : '';
+  const groupId = routeGroupId || state.promptSettings?.stageBindings?.[stageId] || '';
+  return prompts.find(item => item.id === groupId)
+    || prompts.find(item => item.stageId === stageId && item.activeForStage)
+    || prompts.find(item => item.stageId === stageId)
+    || null;
+}
+
+function selectPromptStage(stageId) {
+  if (!['master', 'model', 'combination'].includes(stageId)) return;
+  state.activePromptStage = stageId;
+  state.activePromptId = promptForStage(stageId)?.id || '';
+  renderPromptSettingList();
+  renderPromptEditor();
+}
+
+async function ensureActiveStagePrompt() {
+  let prompt = promptForStage();
+  if (prompt) {
+    state.activePromptId = prompt.id;
+    return prompt;
+  }
+  const stage = promptStageDefinition();
+  if (!stage) throw new Error('当前提示词板块不存在');
+  state.promptSettings = await window.caishen.createPromptGroup({
+    id: stage.legacyPromptId,
+    title: stage.defaultTitle,
+    stageId: stage.id,
+    makeStageActive: true
+  });
+  prompt = promptForStage(stage.id);
+  state.activePromptId = prompt?.id || '';
+  return prompt;
+}
+
+function renderPromptSettingList() {
+  const stages = state.promptSettings?.stages || [];
+  const presetCount = stages.reduce((sum, stage) => sum + (promptForStage(stage.id)?.presets?.length || 0), 0);
+  $('#promptCount').textContent = `3 个板块 · ${presetCount} 条预设`;
+  $$('#promptStageTabs [data-prompt-stage]').forEach(button => {
+    const stageId = button.dataset.promptStage;
+    const prompt = promptForStage(stageId);
+    const active = stageId === state.activePromptStage;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-selected', String(active));
+    const small = button.querySelector('small');
+    if (small) small.textContent = prompt?.activePresetName
+      ? `${prompt.presets?.length || 0} 条 · 当前：${prompt.activePresetName}`
+      : `${prompt?.presets?.length || 0} 条预设`;
+  });
+  const routePanel = $('#promptRoutePanel');
+  const routeSelect = $('#promptRouteSelect');
+  if (routePanel && routeSelect) {
+    routePanel.hidden = state.activePromptStage !== 'model';
+    const routes = state.promptSettings?.promptRoutes || [];
+    if (routes.length && !routes.some(route => route.id === state.activePromptRoute)) state.activePromptRoute = routes[0].id;
+    routeSelect.innerHTML = routes.map(route => `<option value="${escapeHtml(route.id)}"${route.id === state.activePromptRoute ? ' selected' : ''}>${escapeHtml(route.label)}</option>`).join('');
+  }
+}
+
+function promptOrderDiagramMarkup(stageId = state.activePromptStage) {
+  const diagrams = {
+    master: {
+      inputs: [
+        { number: '图1', label: '实拍产品图', kind: 'real-product' },
+        { number: '图2', label: '成品参考图', kind: 'finished-reference' }
+      ],
+      result: '平铺母版图', resultKind: 'flat-result'
+    },
+    model: {
+      inputs: [
+        { number: '图1', label: '平铺图', kind: 'flat-source' },
+        { number: '图2', label: '模特参考图', kind: 'model-source' },
+        { number: '图3', label: '场景图·可选', kind: 'scene-reference' }
+      ],
+      result: '模特上身图', resultKind: 'model-result'
+    },
+    combination: {
+      inputs: [
+        { number: '图1', label: '平铺图 A', kind: 'flat-source' },
+        { number: '图2', label: '平铺图 B', kind: 'flat-source' },
+        { number: '图3…', label: '更多平铺图', kind: 'more' },
+        { number: '末图', label: '组合参考图', kind: 'combination-reference' }
+      ],
+      result: '多 SKU 组合图', resultKind: 'combination-result'
+    }
+  };
+  const diagram = diagrams[stageId] || diagrams.master;
+  const inputMarkup = diagram.inputs.map((input, index) => `${index ? '<span class="prompt-order-operator" aria-hidden="true">＋</span>' : ''}<span class="prompt-order-node"><span class="prompt-order-thumb semantic ${escapeHtml(input.kind)}"><b>${escapeHtml(input.number)}</b><i aria-hidden="true">${input.kind === 'more' ? '' : cwExampleArt(input.kind)}</i></span><small>${escapeHtml(input.label)}</small></span>`).join('');
+  return `<div class="prompt-order-card"><span class="prompt-order-card-label">任务卡片图示</span><div class="prompt-order-track">${inputMarkup}<span class="prompt-order-arrow" aria-hidden="true">→</span><span class="prompt-order-node result"><span class="prompt-order-thumb semantic ${escapeHtml(diagram.resultKind)}"><i aria-hidden="true">${cwExampleArt(diagram.resultKind)}</i></span><small>${escapeHtml(diagram.result)}<em>不编号</em></small></span></div></div>`;
 }
 
 function renderPromptEditor() {
-  const prompt = activePrompt();
+  const stage = promptStageDefinition();
+  const stageLabel = String(stage?.label || '').replace(/^\d+\s*/, '') || '提示词设置';
+  const prompt = promptForStage();
+  state.activePromptId = prompt?.id || '';
+  const preset = activePromptPreset(prompt);
   const canEdit = canManagePrompts();
-  $('#promptEditor').disabled = !prompt || !canEdit;
-  $('#resetCurrentPromptButton').hidden = !canEdit;
-  $('#resetAllPromptsButton').hidden = !canEdit;
-  $('#resetCurrentPromptButton').disabled = !prompt || !prompt.customized || !canEdit;
-  $('#promptEditorTitle').textContent = prompt?.title || '选择一条提示词';
-  $('#promptEditorGroup').textContent = prompt?.group || 'PROMPT';
-  $('#promptEditorDescription').textContent = prompt?.description || '左侧列出网站当前实际使用的固定提示词。';
-  $('#promptEditor').value = prompt?.value || '';
-  $('#promptCharacterCount').textContent = `${prompt?.value?.length || 0} 字`;
+  $('#promptEditor').disabled = !preset || !canEdit;
+  $('#promptEditorTitle').textContent = stageLabel;
+  $('#promptEditorGroup').textContent = String(stage?.label || 'PROMPT').split(' ')[0] || 'PROMPT';
+  $('#promptEditorDescription').textContent = `本账号的${stageLabel}提示词独立保存，生成和重新生成都会调用当前使用预设。`;
+  if (state.activePromptStage === 'model') {
+    const routeLabel = state.promptSettings?.promptRoutes?.find(item => item.id === state.activePromptRoute)?.label || '当前生成路线';
+    $('#promptEditorDescription').textContent = `正在配置“${routeLabel}”；只有使用这条路线的 03 任务会调用当前预设。`;
+  }
+  const orderDiagram = $('#promptOrderDiagram');
+  if (orderDiagram) orderDiagram.innerHTML = promptOrderDiagramMarkup(state.activePromptStage);
+  $('#promptAddPresetButton').disabled = !canEdit;
+  $('#promptStageBindingBadge').textContent = '本账号独立';
+  $('#promptStageBindingBadge').classList.add('active');
+  const presetSelect = $('#promptPresetSelect');
+  presetSelect.disabled = !prompt || !prompt.presets?.length || !canEdit;
+  presetSelect.innerHTML = prompt?.presets?.length
+    ? prompt.presets.map(item => `<option value="${escapeHtml(item.id)}"${item.id === preset?.id ? ' selected' : ''}>${escapeHtml(item.name)}</option>`).join('')
+    : '<option value="">尚无预设，请先新建</option>';
+  const activePreset = prompt?.presets?.find(item => item.id === prompt.activePresetId) || null;
+  $('#promptActivePresetBadge').textContent = activePreset ? `当前使用：${activePreset.name}` : '当前使用：未设置';
+  $('#promptActivePresetBadge').classList.toggle('empty', !activePreset);
+  $('#promptPresetName').disabled = !preset || !canEdit;
+  $('#promptPresetName').value = preset?.name || '';
+  $('#promptEditor').value = preset?.value || '';
+  $('#promptCharacterCount').textContent = `${preset?.value?.length || 0} 字`;
+  $('#promptActivatePresetButton').disabled = !preset || preset.id === prompt?.activePresetId || !canEdit;
+  $('#promptActivatePresetButton').textContent = preset?.id === prompt?.activePresetId ? '本板块正在使用' : '设为本板块使用';
+  $('#promptActivatePresetButton').setAttribute('aria-pressed', preset?.id === prompt?.activePresetId ? 'true' : 'false');
+  $('#promptSavePresetButton').disabled = !preset || !canEdit;
+  $('#promptDeletePresetButton').disabled = !preset || !canEdit;
   const placeholders = prompt?.placeholders || [];
   $('#promptPlaceholderRow').hidden = placeholders.length === 0;
   $('#promptPlaceholderList').innerHTML = placeholders.map(value => `<code class="prompt-placeholder">${escapeHtml(value)}</code>`).join('');
   $('#promptSaveStatus').className = '';
-  $('#promptSaveStatus').textContent = prompt
-    ? canEdit
-      ? (prompt.customized ? '已使用自定义内容' : '当前使用系统默认')
-      : '只读查看'
-    : '尚未选择';
+  $('#promptSaveStatus').textContent = !prompt
+    ? '尚未选择'
+    : !preset
+      ? '本板块尚无预设，不能生图'
+      : preset.id === prompt.activePresetId
+        ? '当前账号的本板块正在使用这条预设'
+        : '正在编辑备用预设；设为本板块使用后才会用于生图';
 }
 
 async function loadPromptSettings() {
   if (!canViewPrompts()) return;
   try {
     state.promptSettings = await window.caishen.getPromptSettings();
-    if (!state.activePromptId || !state.promptSettings.prompts.some(item => item.id === state.activePromptId)) {
-      state.activePromptId = state.promptSettings.prompts[0]?.id || '';
-    }
+    state.activePromptStage = ['master', 'model', 'combination'].includes(state.activePromptStage) ? state.activePromptStage : 'master';
+    state.activePromptId = promptForStage()?.id || '';
     renderPromptSettingList();
     renderPromptEditor();
   } catch (error) {
-    $('#promptSettingList').innerHTML = `<div class="empty-inline">${escapeHtml(errorText(error))}</div>`;
+    $('#promptCount').textContent = '读取失败';
     toast(errorText(error), true);
   }
 }
 
-function selectPromptSetting(id) {
-  if (!state.promptSettings?.prompts.some(item => item.id === id)) return;
-  state.activePromptId = id;
-  renderPromptSettingList();
+async function loadPromptSyncAccounts() {
+  const select = $('#promptSyncSource');
+  const groupSelect = $('#promptSyncGroup');
+  const button = $('#syncPromptGroupButton');
+  if (!select || !button || !canManagePrompts()) return;
+  try {
+    const accounts = await window.caishen.getPromptSyncAccounts();
+    select.innerHTML = '<option value="">选择来源账号</option>' + (accounts || []).map(account =>
+      `<option value="${escapeHtml(account.id)}">${escapeHtml(account.displayName || '其他账号')}</option>`
+    ).join('');
+    groupSelect.innerHTML = '<option value="">先选择来源账号</option>';
+    button.disabled = true;
+  } catch {
+    select.innerHTML = '<option value="">账号列表读取失败</option>';
+    groupSelect.innerHTML = '<option value="">暂无可复制分类</option>';
+    button.disabled = true;
+  }
+}
+
+async function loadPromptSyncGroups(sourceUserId) {
+  const select = $('#promptSyncGroup');
+  const button = $('#syncPromptGroupButton');
+  select.innerHTML = sourceUserId ? '<option value="">正在读取来源分类…</option>' : '<option value="">先选择来源账号</option>';
+  button.disabled = true;
+  if (!sourceUserId) return;
+  try {
+    const groups = await window.caishen.getPromptSyncGroups(sourceUserId);
+    const stageGroups = (groups || []).filter(item => !item.stageId || item.stageId === state.activePromptStage);
+    select.innerHTML = '<option value="">选择要复制的预设组</option>' + stageGroups.map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.stageLabel || promptStageDefinition()?.label || '')} · ${item.presetCount} 条预设</option>`).join('');
+  } catch (error) {
+    select.innerHTML = '<option value="">来源分类读取失败</option>';
+    toast(errorText(error), true);
+  }
+}
+
+async function syncPromptGroupFromAccount() {
+  const select = $('#promptSyncSource');
+  const sourceUserId = String(select?.value || '');
+  const sourceGroupId = String($('#promptSyncGroup')?.value || '');
+  if (!sourceUserId) return toast('请先选择来源账号', true);
+  if (!sourceGroupId) return toast('请选择来源账号中的本板块预设', true);
+  const sourceLabel = $('#promptSyncGroup').selectedOptions?.[0]?.textContent || '所选预设组';
+  if (!await brandConfirm(`将来源账号的“${sourceLabel}”复制到当前账号？复制后双方数据彼此独立。`, {
+    title: '复制本板块提示词', confirmText: '确认复制'
+  })) return;
+  const button = $('#syncPromptGroupButton');
+  button.disabled = true;
+  try {
+    const existingIds = new Set(state.promptSettings?.prompts?.map(item => item.id) || []);
+    state.promptSettings = await window.caishen.syncPromptPresetGroup(sourceUserId, sourceGroupId);
+    const copied = state.promptSettings.prompts.find(item => !existingIds.has(item.id));
+    if (copied) {
+      state.activePromptStage = copied.stageId || state.activePromptStage;
+      state.promptSettings = await window.caishen.selectStagePromptGroup(state.activePromptStage, copied.id);
+      state.activePromptId = copied.id;
+    }
+    state.promptPresetSelections ||= {};
+    state.promptPresetSelections[state.activePromptId] = activePrompt()?.activePresetId || '';
+    renderPromptSettingList();
+    renderPromptEditor();
+    await loadChildrenwearGenerationPrompts({ silent: true });
+    toast('来源账号的本板块预设已复制到当前账号');
+  } catch (error) {
+    toast(errorText(error), true);
+  } finally {
+    button.disabled = !select.value || !$('#promptSyncGroup').value;
+  }
+}
+
+function selectPromptPresetInEditor(presetId) {
+  const prompt = activePrompt();
+  if (!prompt?.presets?.some(item => item.id === presetId)) return;
+  state.promptPresetSelections ||= {};
+  state.promptPresetSelections[prompt.id] = presetId;
   renderPromptEditor();
 }
 
-function schedulePromptSave(prompt, value) {
-  if (!canManagePrompts()) {
-    renderPromptEditor();
-    return;
-  }
-  const previousValue = prompt.value;
-  prompt.value = value;
-  prompt.customized = true;
-  $('#promptCharacterCount').textContent = `${value.length} 字`;
-  $('#promptSaveStatus').className = 'saving';
-  $('#promptSaveStatus').textContent = '等待自动保存…';
-  renderPromptSettingList();
-  clearTimeout(promptSaveTimers.get(prompt.id));
-  promptSaveTimers.set(prompt.id, setTimeout(async () => {
-    promptSaveTimers.delete(prompt.id);
-    if (state.activePromptId === prompt.id) {
-      $('#promptSaveStatus').className = 'saving';
-      $('#promptSaveStatus').textContent = '正在保存…';
-    }
-    try {
-      await window.caishen.savePromptSetting(prompt.id, value);
-      if (state.activePromptId === prompt.id && activePrompt()?.value === value) {
-        $('#promptSaveStatus').className = 'saved';
-        $('#promptSaveStatus').textContent = '已自动保存 · 新任务立即生效';
-        $('#resetCurrentPromptButton').disabled = false;
-      }
-    } catch (error) {
-      if (state.activePromptId === prompt.id) {
-        $('#promptSaveStatus').className = 'error';
-        $('#promptSaveStatus').textContent = `保存失败：${errorText(error)}`;
-      }
-    }
-  }, 650));
-}
-
-async function resetCurrentPrompt() {
-  if (!canManagePrompts()) return toast('只有超级管理员可以修改提示词', true);
-  const prompt = activePrompt();
-  if (!prompt || !await brandConfirm(`确定将“${prompt.title}”恢复为系统默认吗？`, { title: '恢复默认提示词' })) return;
-  clearTimeout(promptSaveTimers.get(prompt.id));
-  promptSaveTimers.delete(prompt.id);
+async function createPromptPreset() {
+  if (!canManagePrompts()) return;
+  let prompt = activePrompt();
+  try { prompt ||= await ensureActiveStagePrompt(); }
+  catch (error) { return toast(errorText(error), true); }
+  if (!prompt) return;
+  const name = await brandPrompt('新建提示词预设', `预设 ${prompt.presets.length + 1}`, { message: `为“${prompt.title}”新建一条只属于当前账号的预设。`, inputLabel: '预设名称' });
+  if (name === null) return;
   try {
-    state.promptSettings = await window.caishen.resetPromptSetting(prompt.id);
+    const oldIds = new Set(prompt.presets.map(item => item.id));
+    state.promptSettings = await window.caishen.savePromptPreset(prompt.id, { name, value: '', makeActive: prompt.presets.length === 0 });
+    const updated = activePrompt();
+    const created = updated?.presets?.find(item => !oldIds.has(item.id));
+    state.promptPresetSelections ||= {};
+    if (created) state.promptPresetSelections[prompt.id] = created.id;
     renderPromptSettingList();
     renderPromptEditor();
-    toast('已恢复系统默认提示词');
+    toast('已新建本板块预设，请填写内容并保存');
   } catch (error) { toast(errorText(error), true); }
 }
 
-async function resetAllPrompts() {
-  if (!canManagePrompts()) return toast('只有超级管理员可以修改提示词', true);
-  if (!await brandConfirm('确定将全部提示词恢复为系统默认吗？当前自定义内容会被清除。', { title: '恢复全部提示词', danger: true, confirmText: '恢复默认' })) return;
-  for (const timer of promptSaveTimers.values()) clearTimeout(timer);
-  promptSaveTimers.clear();
+async function saveCurrentPromptPreset() {
+  const prompt = activePrompt();
+  const preset = activePromptPreset(prompt);
+  if (!prompt || !preset || !canManagePrompts()) return;
+  const button = $('#promptSavePresetButton');
+  button.disabled = true;
+  $('#promptSaveStatus').className = 'saving';
+  $('#promptSaveStatus').textContent = '正在保存…';
   try {
-    state.promptSettings = await window.caishen.resetPromptSetting('');
-    state.activePromptId = state.promptSettings.prompts[0]?.id || '';
+    state.promptSettings = await window.caishen.savePromptPreset(prompt.id, {
+      presetId: preset.id,
+      name: $('#promptPresetName').value,
+      value: $('#promptEditor').value
+    });
     renderPromptSettingList();
     renderPromptEditor();
-    toast('全部提示词已恢复默认');
+    await loadChildrenwearGenerationPrompts({ silent: true });
+    toast('预设已保存');
+  } catch (error) { toast(errorText(error), true); }
+}
+
+async function activateCurrentPromptPreset() {
+  const prompt = activePrompt();
+  const preset = activePromptPreset(prompt);
+  if (!prompt || !preset || !canManagePrompts()) return;
+  try {
+    state.promptSettings = await window.caishen.selectPromptPreset(prompt.id, preset.id);
+    state.promptSettings = prompt.stageId === 'model'
+      ? await window.caishen.selectPromptRouteGroup(state.activePromptRoute, prompt.id)
+      : await window.caishen.selectStagePromptGroup(prompt.stageId, prompt.id);
+    renderPromptSettingList();
+    renderPromptEditor();
+    await loadChildrenwearGenerationPrompts({ silent: true });
+    const routeLabel = state.promptSettings?.promptRoutes?.find(item => item.id === state.activePromptRoute)?.label;
+    toast(`“${preset.name}”已设为${prompt.stageId === 'model' && routeLabel ? routeLabel : prompt.stageLabel}当前使用预设`);
+  } catch (error) { toast(errorText(error), true); }
+}
+
+async function deleteCurrentPromptPreset() {
+  const prompt = activePrompt();
+  const preset = activePromptPreset(prompt);
+  if (!prompt || !preset || !canManagePrompts()) return;
+  if (!await brandConfirm(`确定删除预设“${preset.name}”吗？此操作只影响当前账号。`, { title: '删除提示词预设', danger: true, confirmText: '删除' })) return;
+  try {
+    state.promptSettings = await window.caishen.deletePromptPreset(prompt.id, preset.id);
+    state.promptPresetSelections ||= {};
+    state.promptPresetSelections[prompt.id] = activePrompt()?.activePresetId || activePrompt()?.presets?.[0]?.id || '';
+    renderPromptSettingList();
+    renderPromptEditor();
+    await loadChildrenwearGenerationPrompts({ silent: true });
+    toast('预设已删除');
   } catch (error) { toast(errorText(error), true); }
 }
 
@@ -5619,6 +5876,7 @@ async function resetSettings() {
     childrenwearReferenceAssetsPath: state.config.childrenwearReferenceAssetsPath,
     childrenwearModelAssetsPath: state.config.childrenwearModelAssetsPath,
     childrenwearSceneAssetsPath: state.config.childrenwearSceneAssetsPath,
+    childrenwearFlatAssetsPath: state.config.childrenwearFlatAssetsPath,
     childrenwearCombinationAssetsPath: state.config.childrenwearCombinationAssetsPath
   };
   state.config = await window.caishen.resetConfig();
@@ -5661,6 +5919,13 @@ const CHILDRENWEAR_LIBRARY_META = Object.freeze({
     selected: '当前场景参考图',
     analysisRole: 'scene_reference'
   },
+  childrenwearFlatAssetsPath: {
+    grid: '#childrenwearFlatAssetsGrid',
+    summary: '#childrenwearFlatAssetsSummary',
+    empty: '尚未导入外部平铺图',
+    selected: '当前外部平铺图',
+    analysisRole: ''
+  },
   childrenwearCombinationAssetsPath: {
     grid: '#childrenwearCombinationAssetsGrid',
     summary: '#childrenwearCombinationAssetsSummary',
@@ -5669,6 +5934,15 @@ const CHILDRENWEAR_LIBRARY_META = Object.freeze({
     analysisRole: 'combination_reference'
   }
 });
+
+const CHILDRENWEAR_DIRECT_FLAT_LAY_KEYS = new Set([
+  'childrenwearRealAssetsPath',
+  'childrenwearReferenceAssetsPath',
+  'childrenwearModelAssetsPath',
+  'childrenwearSceneAssetsPath',
+  'childrenwearFlatAssetsPath',
+  'childrenwearCombinationAssetsPath'
+]);
 
 function childrenwearAnalysisLabel(value) {
   const status = value?.status || 'pending';
@@ -5689,9 +5963,7 @@ function renderChildrenwearLibrary(key) {
   const totals = state.childrenwearLibraryTotals[key] || { total: items.length, totalPages: 0, pageSize: 48 };
   const page = state.childrenwearLibraryPage[key] || 1;
   const deleteSelection = state.childrenwearLibraryDeleteSelection[key] || new Set();
-  const analyzedCount = items.filter(item => item.analysis?.analyzed).length;
-  const failedCount = items.filter(item => item.analysis?.status === 'failed').length;
-  summary.textContent = `${totals.total} 张素材${totals.totalPages > 1 ? ` · 第 ${page}/${totals.totalPages} 页` : ''} · 本页已分析 ${analyzedCount}${failedCount ? ` · 失败 ${failedCount}` : ''}${deleteSelection.size ? ` · 已勾选 ${deleteSelection.size} 张` : ''}`;
+  summary.textContent = `${totals.total} 张素材${totals.totalPages > 1 ? ` · 第 ${page}/${totals.totalPages} 页` : ''}${deleteSelection.size ? ` · 已勾选 ${deleteSelection.size} 张` : ''}`;
   const folderList = $(`[data-childrenwear-folder-list="${key}"]`);
   if (folderList) {
     folderList.innerHTML = folders.length ? folders.map(folder => `
@@ -5704,10 +5976,8 @@ function renderChildrenwearLibrary(key) {
   }
   grid.innerHTML = items.length ? items.map(item => {
     const checked = deleteSelection.has(item.path);
-    const analysisStatus = item.analysis?.status || 'pending';
-    const analysisTitle = item.analysis?.error || item.analysis?.summary || childrenwearAnalysisLabel(item.analysis);
-    return `<article class="childrenwear-library-item analysis-${escapeHtml(analysisStatus)}${checked ? ' selected' : ''}" title="${escapeHtml(item.name)}">
-      <button class="childrenwear-library-select" type="button" data-childrenwear-delete-key="${key}" data-childrenwear-delete-path="${escapeHtml(item.path)}" aria-pressed="${checked}"><span class="childrenwear-select-mark">${checked ? '✓' : ''}</span><span class="childrenwear-analysis-badge" title="${escapeHtml(analysisTitle)}">${escapeHtml(childrenwearAnalysisLabel(item.analysis))}</span><img loading="lazy" decoding="async" src="${escapeHtml(item.thumbnailUrl || item.url)}" data-preview-src="${escapeHtml(item.previewUrl || item.url)}" alt="${escapeHtml(item.name)}"><span class="childrenwear-library-caption"><b>${escapeHtml(item.name)}</b><small>${escapeHtml(item.folder && item.folder !== '根目录' ? item.folder : '未分类文件')}</small></span></button>
+    return `<article class="childrenwear-library-item${checked ? ' selected' : ''}" title="${escapeHtml(item.name)}">
+      <button class="childrenwear-library-select" type="button" data-childrenwear-delete-key="${key}" data-childrenwear-delete-path="${escapeHtml(item.path)}" aria-pressed="${checked}"><span class="childrenwear-select-mark">${checked ? '✓' : ''}</span><img loading="lazy" decoding="async" src="${escapeHtml(item.thumbnailUrl || item.url)}" data-preview-src="${escapeHtml(item.previewUrl || item.url)}" alt="${escapeHtml(item.name)}"><span class="childrenwear-library-caption"><b>${escapeHtml(item.name)}</b><small>${escapeHtml(item.folder && item.folder !== '根目录' ? item.folder : '未分类文件')}</small></span></button>
     </article>`;
   }).join('') : `<div class="empty-inline"><b>${meta.empty}</b><span>点击右上角按钮，可添加文件或上传整个文件夹。</span></div>`;
   const pagination = $(`[data-childrenwear-pagination="${key}"]`);
@@ -5783,9 +6053,14 @@ function setChildrenwearProductionTabLegacy(tab) {
 }
 
 function openChildrenwearProduction(tab) {
-  setChildrenwearProductionTab(tab);
+  const next = CW_STAGE_META[tab] ? tab : 'master';
+  const alreadyOpen = currentPage === 'childrenwear';
+  state.childrenwearProductionTab = next;
   setPage('childrenwear');
-  setChildrenwearProductionTab(tab);
+  activateChildrenwearProductionTab(next);
+  if (alreadyOpen) requestAnimationFrame(() => requestAnimationFrame(() => {
+    if (currentPage === 'childrenwear' && state.childrenwearProductionTab === next) setChildrenwearProductionTab(next);
+  }));
 }
 
 function openChildrenwearLibrary(key) {
@@ -5797,7 +6072,8 @@ const CHILDRENWEAR_PICKER_COPY = Object.freeze({
   childrenwearRealAssetsPath: ['选择实拍产品图', '实拍图决定商品版型、颜色、材质和全部细节。'],
   childrenwearReferenceAssetsPath: ['选择成品参考图', '参考图只决定平铺姿态、背景、光影和构图。'],
   childrenwearModelAssetsPath: ['选择参考模特图', '模特参考图决定人物、动作、服装受力、褶皱和细节展示姿势。'],
-  childrenwearSceneAssetsPath: ['选择场景参考图', '场景图只决定背景环境、道具、灯光和接地阴影。']
+  childrenwearSceneAssetsPath: ['选择场景参考图', '场景图只决定背景环境、道具、灯光和接地阴影。'],
+  childrenwearFlatAssetsPath: ['选择外部平铺图', '直接导入已有平铺成品，不需要先经过 02 生成或审核。']
 });
 
 function closeChildrenwearPicker() {
@@ -5986,9 +6262,8 @@ function renderChildrenwearAnalysisAutomation() {
 }
 
 function scheduleChildrenwearAutoAnalysis(options = {}) {
+  // 当前生图流程直接使用运营导入的原图和账号提示词，不再后台调用素材 AI 分析。
   renderChildrenwearAnalysisAutomation();
-  if (state.config?.childrenwearAutoAnalysisEnabled !== true) return;
-  if (options.runNow === true) void runChildrenwearAnalysisScan({ manual: false });
 }
 
 async function saveChildrenwearAnalysisAutomation(changes, options = {}) {
@@ -6126,6 +6401,8 @@ const CHILDRENWEAR_STYLE_PACKAGE_KINDS = Object.freeze({
   参考模特图: 'childrenwearModelAssetsPath',
   场景图: 'childrenwearSceneAssetsPath',
   场景参考图: 'childrenwearSceneAssetsPath',
+  外部平铺图: 'childrenwearFlatAssetsPath',
+  平铺成品图: 'childrenwearFlatAssetsPath',
   组合图: 'childrenwearCombinationAssetsPath',
   SKU组合图: 'childrenwearCombinationAssetsPath'
 });
@@ -6135,6 +6412,7 @@ const CHILDRENWEAR_STYLE_PACKAGE_LABELS = Object.freeze({
   childrenwearReferenceAssetsPath: '成品图',
   childrenwearModelAssetsPath: '模特图',
   childrenwearSceneAssetsPath: '场景图',
+  childrenwearFlatAssetsPath: '外部平铺图',
   childrenwearCombinationAssetsPath: '组合图'
 });
 
@@ -6225,11 +6503,7 @@ async function importChildrenwearStylePackage(button) {
       state.childrenwearLibraryPage[key] = 1;
     }
     await Promise.all(activeKeys.map(refreshChildrenwearLibraryAfterImport));
-    const analysis = await window.caishen.scanPendingChildrenwearAnalysis({ includeFailed: false });
-    const analyzed = Number(analysis.analyzed) || 0;
-    const failed = Number(analysis.failed) || 0;
-    await Promise.all(activeKeys.map(refreshChildrenwearLibraryAfterImport));
-    toast(`款式整包导入完成：${parsed.styles.size} 个款式，${added} 张素材，AI 已分析 ${analyzed} 张${failed ? `，失败 ${failed} 张（不会进入生成选材区）` : ''}${skipped ? `，跳过 ${skipped} 张` : ''}`, failed > 0);
+    toast(`款式整包导入完成：${parsed.styles.size} 个款式，${added} 张素材；全部素材均可直接用于对应生图板块${skipped ? `，跳过 ${skipped} 张` : ''}`);
   } catch (error) {
     let rollbackFailed = false;
     for (const item of completed.reverse()) {
@@ -6294,13 +6568,11 @@ async function uploadChildrenwearLibrary(key, source = 'files') {
     else state.childrenwearLibraryFolder[key] = 'root';
     state.childrenwearLibraryPage[key] = 1;
     await refreshChildrenwearLibraryAfterImport(key);
-    const analysis = await analyzeChildrenwearPaths(key, result.paths || []);
-    await refreshChildrenwearLibraryAfterImport(key);
     const latest = (state.childrenwearLibraries[key] || []).find(item => result.paths?.includes?.(item.path))
       || state.childrenwearLibraries[key]?.at(-1);
     if (latest && meta.stateKey && !state[meta.stateKey]) state[meta.stateKey] = latest;
     renderChildrenwear();
-    toast(`${isFolder ? '文件夹导入完成' : '上传完成'}：${result.added} 张素材，AI 已分析 ${analysis.analyzed} 张${analysis.failed ? `，失败 ${analysis.failed} 张（不会进入生成选材区）` : ''}${result.skipped ? `，跳过 ${result.skipped} 个文件` : ''}`, analysis.failed > 0);
+    toast(`${isFolder ? '文件夹导入完成' : '上传完成'}：${result.added} 张素材，无需 AI 分析，可直接用于对应生图板块${result.skipped ? `，跳过 ${result.skipped} 个文件` : ''}`);
   } catch (error) {
     toast(errorText(error), true);
   } finally {
@@ -6475,7 +6747,7 @@ function renderChildrenwearModelResults() {
 function renderChildrenwearMasterLibrary() {
   const container = $('#childrenwearMasterLibrary');
   if (!container) return;
-  const tasks = state.childrenwearTasks.filter(task => task.masterPath && task.masterUrl);
+  const tasks = state.childrenwearTasks.filter(task => task.type !== 'external_flat' && task.masterPath && task.masterUrl);
   const availablePaths = new Set(tasks.map(task => task.masterPath));
   for (const selected of [...state.childrenwearCombinationSelection]) {
     if (!availablePaths.has(selected)) state.childrenwearCombinationSelection.delete(selected);
@@ -6530,7 +6802,7 @@ function newChildrenwearMasterTask() {
 function renderChildrenwearApprovedMasters() {
   const container = $('#childrenwearApprovedMasterList');
   if (!container) return;
-  const tasks = state.childrenwearTasks.filter(task => task.masterPath && task.masterUrl);
+  const tasks = state.childrenwearTasks.filter(task => task.type !== 'external_flat' && task.masterPath && task.masterUrl);
   container.innerHTML = tasks.length ? `<div class="childrenwear-approved-master-head"><b>选择已生成平铺图</b><span>${tasks.length} 个可用</span></div><div>` + tasks.map(task => `
     <button class="childrenwear-approved-master${task.folder === state.childrenwearActiveTask?.folder ? ' active' : ''}" type="button" data-childrenwear-model-task-folder="${escapeHtml(task.folder)}"><img loading="lazy" src="${escapeHtml(task.masterUrl)}" alt="${escapeHtml(task.category || '平铺图')}"><span><b>${escapeHtml(task.category || '童装')}</b><small>${escapeHtml(task.material || '')} · ${task.masterApproved ? '平铺已通过' : '平铺待审核'}</small></span></button>`).join('') + '</div>' : '<div class="empty-inline">还没有已生成平铺图，请先在 02 生成。</div>';
 }
@@ -6796,9 +7068,11 @@ function cwNewDraft(stage) {
   const now = new Date().toISOString();
   const draft = { id: createClientId(), stage, title: '', taskCode: '', styleName: '', selected: true, status: '待补齐素材', progress: '', result: null, createdAt: now, updatedAt: now };
   if (stage === 'model') {
+    draft.operationType = state.childrenwearModelOperationType || 'dress';
     draft.backgroundMode = state.childrenwearModelBackgroundMode || 'model_reference';
+    draft.solidBackgroundColor = cwNormalizeHexColor(state.childrenwearModelSolidColor, '#FFFFFF');
     const fixedModel = cwHydratedFixedModelReference();
-    if (state.childrenwearFixedModelEnabled && fixedModel?.path) draft.reference = fixedModel;
+    if (draft.operationType === 'dress' && state.childrenwearFixedModelEnabled && fixedModel?.path) draft.reference = fixedModel;
   }
   if (stage === 'combination') draft.masters = [];
   state.childrenwearDrafts[stage].unshift(draft);
@@ -6809,6 +7083,31 @@ function cwNewDraft(stage) {
 function cwDraft(stage) {
   const drafts = state.childrenwearDrafts[stage];
   return drafts.find(item => item.id === state.childrenwearActiveDraft[stage]) || drafts[0] || cwNewDraft(stage);
+}
+
+async function importCwExternalFlat(source = 'files') {
+  await uploadChildrenwearLibrary('childrenwearFlatAssetsPath', source === 'folder' ? 'folder' : 'files');
+  await loadChildrenwearLibrary('childrenwearFlatAssetsPath');
+  if (state.childrenwearProductionTab === 'model' || state.childrenwearProductionTab === 'combination') {
+    renderCwSource(state.childrenwearProductionTab);
+  }
+}
+
+function cwCombinationDraftIsSealed(draft) {
+  if (!draft || draft.stage !== 'combination') return false;
+  return Boolean(draft.result?.path
+    || cwDraftActiveOperation(draft)
+    || ((draft.masters?.length || 0) >= 2 && draft.reference?.path));
+}
+
+function createCwCombinationDraft({ notify = false } = {}) {
+  const draft = cwNewDraft('combination');
+  state.childrenwearQueueFilters.combination = 'all';
+  state.childrenwearQueueDateFilters.combination = 'all';
+  state.childrenwearQueuePages.combination = 1;
+  renderCwQueue('combination');
+  if (notify) toast('已新建组合任务，请先选择 2～4 张 SKU，最后选择组合参考图');
+  return draft;
 }
 
 function cwOldestDraft(stage, predicate) {
@@ -6823,20 +7122,28 @@ function cwImage(value, fallback = '待选择') {
 
 function cwDraftReady(draft) {
   if (draft.stage === 'master') return Boolean(draft.real?.path && draft.reference?.path);
-  if (draft.stage === 'model') return Boolean(draft.master?.path && draft.reference?.path
-    && (draft.backgroundMode !== 'scene_reference' || draft.scene?.path));
+  if (draft.stage === 'model') {
+    const operation = draft.operationType === 'scene_only' ? 'scene_only' : 'dress';
+    if (operation === 'scene_only') return Boolean(draft.existingModel?.path
+      && ['solid', 'scene_reference'].includes(draft.backgroundMode)
+      && (draft.backgroundMode !== 'scene_reference' || draft.scene?.path));
+    return Boolean(draft.master?.path && draft.reference?.path
+      && (draft.backgroundMode !== 'scene_reference' || draft.scene?.path));
+  }
   return Boolean(draft.masters?.length >= 2 && draft.reference?.path);
 }
 
 function cwDraftFlow(draft) {
   if (draft.stage === 'master') return `${cwImage(draft.real, '实拍产品图')}<i>+</i>${cwImage(draft.reference, '成品参考图')}<i>→</i>${cwImage(draft.result, '平铺母版图')}`;
   if (draft.stage === 'model') {
+    const operation = draft.operationType === 'scene_only' ? 'scene_only' : 'dress';
     const backgroundMode = draft.backgroundMode || 'model_reference';
-    const background = backgroundMode === 'white'
-      ? '<figure class="cw-flow-figure cw-background-mode"><span>白</span><figcaption>纯白背景</figcaption></figure>'
+    const background = backgroundMode === 'solid'
+      ? `<figure class="cw-flow-figure cw-background-mode cw-solid-background"><span style="background:${escapeHtml(cwNormalizeHexColor(draft.solidBackgroundColor))}"></span><figcaption>${escapeHtml(cwModelBackgroundLabel('solid', draft.solidBackgroundColor))}</figcaption></figure>`
       : backgroundMode === 'scene_reference'
         ? cwImage(draft.scene, '场景参考图')
         : '<figure class="cw-flow-figure cw-background-mode"><span>同</span><figcaption>跟随模特背景</figcaption></figure>';
+    if (operation === 'scene_only') return `${cwImage(draft.existingModel, '已有模特图')}<i>+</i>${background}<i>→</i>${cwImage(draft.result, '换场景结果')}`;
     return `${cwImage(draft.master, '已生成平铺图')}<i>+</i>${cwImage(draft.reference, '参考模特图')}<i>+</i>${background}<i>→</i>${cwImage(draft.result, '模特上身图')}`;
   }
   const masters = draft.masters?.length ? draft.masters.map((item, index) => `${index ? '<i>+</i>' : ''}<div class="cw-ordered-sku"><em>SKU ${String.fromCharCode(65 + index)}</em>${cwImage(item, `平铺图 ${index + 1}`)}<div><button type="button" data-cw-master-move="-1" data-cw-master-index="${index}"${index === 0 ? ' disabled' : ''}>←</button><button type="button" data-cw-master-move="1" data-cw-master-index="${index}"${index === draft.masters.length - 1 ? ' disabled' : ''}>→</button></div></div>`).join('') : cwImage(null, '选择 2～4 张平铺图');
@@ -6847,8 +7154,106 @@ function cwTaskForDraft(draft) {
   return draft?.taskFolder ? state.childrenwearTasks.find(task => task.folder === draft.taskFolder) : null;
 }
 
+function cwNormalizeHexColor(value, fallback = '#FFFFFF') {
+  const normalized = String(value || '').trim().toUpperCase();
+  if (/^#[0-9A-F]{6}$/.test(normalized)) return normalized;
+  if (/^#[0-9A-F]{3}$/.test(normalized)) return `#${normalized.slice(1).split('').map(char => `${char}${char}`).join('')}`;
+  return fallback;
+}
+
+function cwModelOperationLabel(value) {
+  return value === 'scene_only' ? '仅更换已有模特图场景' : '生成模特上身图';
+}
+
+function cwModelBackgroundLabel(value, color = '#FFFFFF') {
+  if (value === 'scene_reference') return '独立场景图';
+  if (value === 'solid') return `指定纯色 ${cwNormalizeHexColor(color)}`;
+  return '跟随模特参考';
+}
+
+function cwModelPromptRoute(draft = {}) {
+  const operation = draft.operationType === 'scene_only' ? 'scene_only' : 'dress';
+  const background = draft.backgroundMode === 'scene_reference' ? 'scene' : draft.backgroundMode === 'solid' ? 'solid' : 'follow';
+  const fixed = operation === 'dress' && (draft.useFixedModel === true
+    || (state.childrenwearFixedModelEnabled && draft.reference?.path && draft.reference.path === cwHydratedFixedModelReference()?.path));
+  return `${operation}_${background}${fixed ? '_fixed' : ''}`;
+}
+
+const CW_ACTIVE_OPERATION_STATUSES = new Set(['submitting', 'queued', 'running']);
+
+function cwDraftReviewId(draft) {
+  if (!draft?.taskFolder) return '';
+  if (draft.stage === 'master') return `master:${draft.taskFolder}`;
+  return draft.outputId ? `${draft.stage}:${draft.taskFolder}:${draft.outputId}` : '';
+}
+
+function cwDraftForReviewItem(item) {
+  if (!item) return null;
+  return (state.childrenwearDrafts[item.stage] || []).find(draft => draft.taskFolder === item.folder
+    && (item.stage === 'master'
+      || (draft.outputId && draft.outputId === item.outputId)
+      || (draft.result?.path && draft.result.path === item.path))) || null;
+}
+
+function cwLocalEditJobForDraft(draft) {
+  const exactId = cwDraftReviewId(draft);
+  if (exactId && state.childrenwearLocalEditJobs.has(exactId)) return state.childrenwearLocalEditJobs.get(exactId);
+  return [...state.childrenwearLocalEditJobs.values()].find(job => job.stage === draft?.stage
+    && job.folder === draft?.taskFolder
+    && (!job.outputId || !draft?.outputId || job.outputId === draft.outputId)) || null;
+}
+
+function cwDraftActiveOperation(draft) {
+  if (!draft) return null;
+  const localEditJob = cwLocalEditJobForDraft(draft);
+  if (CW_ACTIVE_OPERATION_STATUSES.has(localEditJob?.status)) {
+    return {
+      key: 'regenerating',
+      kind: 'local_edit',
+      label: '局部微调中',
+      detail: localEditJob.message || '正在局部微调选中区域',
+      updatedAt: localEditJob.updatedAt || draft.updatedAt || ''
+    };
+  }
+  if (draft.status === '生成中' && draft.activeOperation === 'regeneration') {
+    return {
+      key: 'regenerating',
+      kind: 'regeneration',
+      label: '整张重新生成中',
+      detail: draft.progress || '正在重新生成整张图片',
+      updatedAt: draft.updatedAt || ''
+    };
+  }
+  if (draft.status === '生成中') {
+    return {
+      key: 'running',
+      kind: 'generation',
+      label: '首次生成中',
+      detail: draft.progress || '正在首次生成图片',
+      updatedAt: draft.updatedAt || ''
+    };
+  }
+  return null;
+}
+
+function cwReviewActiveOperation(item) {
+  if (!item) return null;
+  const localEditJob = state.childrenwearLocalEditJobs.get(item.id);
+  if (CW_ACTIVE_OPERATION_STATUSES.has(localEditJob?.status)) {
+    return {
+      key: 'regenerating',
+      kind: 'local_edit',
+      label: '局部微调中',
+      detail: localEditJob.message || '正在局部微调选中区域',
+      updatedAt: localEditJob.updatedAt || ''
+    };
+  }
+  return cwDraftActiveOperation(cwDraftForReviewItem(item));
+}
+
 function cwReviewStatus(item) {
   if (!item) return 'pending';
+  if (cwReviewActiveOperation(item)?.key === 'regenerating') return 'regenerating';
   const value = item.stage === 'master' ? item.task?.masterReviewStatus : item.output?.reviewStatus;
   if (value === 'needs_regeneration') return 'needs_regeneration';
   if (item.stage !== 'master') return 'completed';
@@ -6856,7 +7261,8 @@ function cwReviewStatus(item) {
 }
 
 function cwDraftStatusKey(draft) {
-  if (draft.status === '生成中') return 'running';
+  const activeOperation = cwDraftActiveOperation(draft);
+  if (activeOperation) return activeOperation.key;
   if (draft.status === '失败') return 'needs_regeneration';
   if (!cwDraftReady(draft)) return 'incomplete';
   const task = cwTaskForDraft(draft);
@@ -6876,7 +7282,9 @@ function cwDraftStatusKey(draft) {
 }
 
 function cwDraftStatusLabel(draft) {
-  return ({ incomplete: '缺少素材', ready: '待生成', running: '生成中', pending: '待审核', completed: '已完成', needs_regeneration: '需重生成', approved: '已通过' })[cwDraftStatusKey(draft)] || '待处理';
+  const activeOperation = cwDraftActiveOperation(draft);
+  if (activeOperation) return activeOperation.label;
+  return ({ incomplete: '缺少素材', ready: '待生成', running: '首次生成中', regenerating: '重新生成中', pending: '待审核', completed: '已完成', needs_regeneration: '需重生成', approved: '已通过' })[cwDraftStatusKey(draft)] || '待处理';
 }
 
 function cwDraftMissingLabels(draft) {
@@ -6885,8 +7293,13 @@ function cwDraftMissingLabels(draft) {
     if (!draft.real?.path) missing.push('实拍产品图');
     if (!draft.reference?.path) missing.push('成品参考图');
   } else if (draft.stage === 'model') {
-    if (!draft.master?.path) missing.push('已生成平铺图');
-    if (!draft.reference?.path) missing.push('参考模特图');
+    if (draft.operationType === 'scene_only') {
+      if (!draft.existingModel?.path) missing.push('已有模特图');
+      if (!['solid', 'scene_reference'].includes(draft.backgroundMode)) missing.push('新背景来源');
+    } else {
+      if (!draft.master?.path) missing.push('已生成平铺图');
+      if (!draft.reference?.path) missing.push('参考模特图');
+    }
     if (draft.backgroundMode === 'scene_reference' && !draft.scene?.path) missing.push('场景参考图');
   } else {
     if ((draft.masters?.length || 0) < 2) missing.push(`平铺图（还需 ${2 - (draft.masters?.length || 0)} 张）`);
@@ -6896,17 +7309,21 @@ function cwDraftMissingLabels(draft) {
 }
 
 function cwDraftStatusText(draft) {
+  const activeOperation = cwDraftActiveOperation(draft);
+  if (activeOperation) return activeOperation.detail;
   const status = cwDraftStatusKey(draft);
   if (status === 'approved') return '审核已通过，已解锁后续步骤';
   if (status === 'completed') return '图片已生成，可直接查看、下载或用于后续流程';
   if (status === 'needs_regeneration') return draft.progress || '生成失败或结果待重新生成';
   if (status === 'pending') return `${CW_STAGE_META[draft.stage]?.label || '图片'}已生成，等待审核`;
-  if (status === 'running') return draft.progress || '正在生成';
+  if (status === 'running') return draft.progress || '正在首次生成';
   if (status === 'ready') return '素材已齐全，可以生成';
   return draft.status || '待补齐素材';
 }
 
 function cwDraftActivityTime(draft) {
+  const activeOperation = cwDraftActiveOperation(draft);
+  if (activeOperation?.updatedAt) return activeOperation.updatedAt;
   const task = cwTaskForDraft(draft);
   const output = draft.stage === 'model'
     ? (task?.modelOutputs || []).find(item => item.id === draft.outputId || item.path === draft.result?.path)
@@ -6968,7 +7385,7 @@ function syncCwDraftsFromTasks() {
   const drafts = state.childrenwearDrafts.master;
   const masterDraftByFolder = new Map(drafts.filter(draft => draft.taskFolder).map(draft => [draft.taskFolder, draft]));
   for (const task of state.childrenwearTasks) {
-    if (!task.masterPath || !task.masterUrl) continue;
+    if (task.type === 'external_flat' || !task.masterPath || !task.masterUrl) continue;
     let draft = masterDraftByFolder.get(task.folder);
     if (!draft) {
       draft = {
@@ -7047,6 +7464,7 @@ function syncCwDraftsFromTasks() {
       draft.progress = '';
       draft.updatedAt = output.createdAt || task.updatedAt || draft.updatedAt;
       if (stage === 'model') {
+        draft.operationType = output.operationType === 'scene_only' ? 'scene_only' : 'dress';
         draft.master = cwTaskMasterImage(task, output.masterPath || task.masterPath, -1, taskByMasterPath);
         draft.reference = {
           path: output.modelReferencePath,
@@ -7057,6 +7475,19 @@ function syncCwDraftsFromTasks() {
           folder: ''
         };
         draft.backgroundMode = output.backgroundMode || 'model_reference';
+        draft.solidBackgroundColor = cwNormalizeHexColor(output.solidBackgroundColor || '#FFFFFF');
+        draft.promptRoute = output.promptRoute || cwModelPromptRoute(draft);
+        draft.useFixedModel = Boolean(output.useFixedModel);
+        draft.existingModel = output.sourceModelPath ? {
+          path: output.sourceModelPath,
+          url: output.sourceModelUrl,
+          thumbnailUrl: output.sourceModelThumbnailUrl,
+          previewUrl: output.sourceModelPreviewUrl,
+          name: output.sourceModelPath.split(/[\\/]/).at(-1) || '已有模特图',
+          folder: task.styleName || task.category || '',
+          taskFolder: task.folder,
+          outputId: output.sourceModelOutputId || ''
+        } : null;
         draft.scene = output.sceneReferencePath ? {
           path: output.sceneReferencePath,
           url: output.sceneReferenceUrl,
@@ -7159,11 +7590,20 @@ function updateCwQueueProgress(stage, draft) {
     const dirty = cwQueueProgressDirty.get(stage) || new Map();
     cwQueueProgressDirty.set(stage, new Map());
     for (const changedDraft of dirty.values()) {
-      const status = cards.get(changedDraft.id)?.querySelector('.cw-task-status');
+      const card = cards.get(changedDraft.id);
+      const status = card?.querySelector('.cw-task-status');
       if (!status) continue;
-      const next = changedDraft.progress || cwDraftStatusText(changedDraft);
+      const statusKey = cwDraftStatusKey(changedDraft);
+      const next = cwDraftStatusText(changedDraft);
       if (status.textContent !== next) status.textContent = next;
-      status.classList.toggle('error', changedDraft.status === '失败' || cwDraftStatusKey(changedDraft) === 'needs_regeneration');
+      status.classList.toggle('error', changedDraft.status === '失败' || statusKey === 'needs_regeneration');
+      const badge = card.querySelector('.cw-task-state-badge');
+      if (badge) {
+        badge.className = `cw-task-state-badge ${statusKey}`;
+        badge.textContent = cwDraftStatusLabel(changedDraft);
+      }
+      card.classList.remove('incomplete', 'ready', 'running', 'regenerating', 'pending', 'completed', 'needs_regeneration', 'approved');
+      card.classList.add(statusKey);
     }
     scheduleCwActivityRender(stage);
   }, 250));
@@ -7219,30 +7659,86 @@ function cwFlatLayValidationMarkup(validation) {
 }
 
 function syncCwGenerationPreviewState() {
-  const generationActive = Object.values(state.childrenwearDrafts).some(items => items.some(item => item.status === '生成中'));
+  const generationActive = Object.values(state.childrenwearDrafts).some(items => items.some(item => Boolean(cwDraftActiveOperation(item))))
+    || [...state.childrenwearLocalEditJobs.values()].some(job => CW_ACTIVE_OPERATION_STATUSES.has(job?.status));
   document.documentElement.classList.toggle('childrenwear-generation-active', generationActive);
   if (!generationActive) return;
   $('#imageHoverPreview')?.classList.remove('show', 'positioning');
   $('#imageHoverLens')?.classList.remove('show');
 }
 
+function cwExampleArt(kind = 'romper') {
+  const iconStroke = '#314f5c';
+  const iconLine = `fill="none" stroke="${iconStroke}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"`;
+  const cuteSpriteKinds = new Set(['real-product', 'finished-reference', 'flat-result', 'flat-source', 'model-source', 'follow-background', 'solid-background', 'scene-reference', 'model-result', 'combination-reference', 'combination-result']);
+  if (cuteSpriteKinds.has(kind)) return `<span class="cw-cute-sprite ${escapeHtml(kind)}" aria-hidden="true"></span>`;
+  const bearFace = `<circle cx="0" cy="0" r="4.8" fill="#d69d6f" stroke="${iconStroke}" stroke-width="1.4"/><circle cx="-3.5" cy="-3.4" r="1.8" fill="#d69d6f"/><circle cx="3.5" cy="-3.4" r="1.8" fill="#d69d6f"/><circle cx="-1.5" cy="-.4" r=".55" fill="#314f5c"/><circle cx="1.5" cy="-.4" r=".55" fill="#314f5c"/><path d="M-1.4 2c.9.7 1.9.7 2.8 0" ${iconLine}/>`;
+  const iconSparkle = `<path d="m49 7 2.4 5.5L57 15l-5.6 2.4L49 23l-2.4-5.6L41 15l5.6-2.5L49 7Z" fill="#ffd878" stroke="${iconStroke}" stroke-width="1.4"/><path d="m56 28 1.3 3 3 1.3-3 1.3-1.3 3-1.3-3-3-1.3 3-1.3 1.3-3Z" fill="#fff4c5" stroke="${iconStroke}" stroke-width="1"/>`;
+  const babyTop = `<path d="M18 28 25 20h14l7 8 7 4-4.5 8-6-3v15h-21V37l-6 3-4.5-8 7-4Z" fill="#fff8e9" stroke="${iconStroke}" stroke-width="2.2" stroke-linejoin="round"/><path d="M27 21c.2 5.2 9.8 5.2 10 0M31.5 26 24 34v18" ${iconLine}/><path d="M24 34c-4-2-5 3-1 3-3 2 1 5 2 1 1 4 5 1 2-1 4 1 5-3 1-4-4-3-5 0Z" fill="#f4c19f" stroke="${iconStroke}" stroke-width="1.2"/><g transform="translate(36 37) scale(.62)">${bearFace}</g>`;
+  const babyBloomer = `<path d="M36 34h19l2 6-3 13c-3 2-7 2-10 0l-1-7-1 7c-3 2-7 2-10 0l-2-13 6-6Z" fill="#b9d4c1" stroke="${iconStroke}" stroke-width="2" stroke-linejoin="round"/><path d="M34 39h21M34 51c3 1 6 1 9 0m1 0c3 1 6 1 9 0" ${iconLine}/>`;
+  const babyRomper = `<path d="M23 18h18l7 7-4 7-4-3v10l4 14h-9l-3-9-3 9h-9l4-14V29l-4 3-4-7 7-7Z" fill="#fff6e7" stroke="${iconStroke}" stroke-width="2.2" stroke-linejoin="round"/><path d="M27 18c0 5 10 5 10 0M32 23v21" ${iconLine}/><g transform="translate(35 32) scale(.55)">${bearFace}</g>`;
+  const babyPortrait = `<rect x="13" y="8" width="38" height="48" rx="9" fill="#fff8e9" stroke="${iconStroke}" stroke-width="2"/><path d="M16 17c8-7 25-7 32 0v15H16Z" fill="#cfe3ed"/><circle cx="32" cy="25" r="7" fill="#f3bea1" stroke="${iconStroke}" stroke-width="1.7"/><path d="M25 23c1-8 13-8 14 0-4-3-9-4-14 0Z" fill="#855b3d"/><circle cx="29.5" cy="25" r=".7" fill="#314f5c"/><circle cx="34.5" cy="25" r=".7" fill="#314f5c"/><path d="M30 28c1.3 1 2.7 1 4 0" ${iconLine}/><path d="M20 51c2-13 7-18 12-18s10 5 12 18Z" fill="#fff2d6" stroke="${iconStroke}" stroke-width="1.8"/><g transform="translate(32 43) scale(.55)">${bearFace}</g><path d="M18 18c2-3 5-3 7 0" fill="#fff" stroke="#fff" stroke-width="3" stroke-linecap="round"/>`;
+  const nursery = `<rect x="8" y="9" width="48" height="46" rx="8" fill="#fff7e9" stroke="${iconStroke}" stroke-width="2"/><path d="M9 41h46v13H9Z" fill="#eadbc7"/><path d="M18 36h23v8H18Zm2 8v7m18-7v7m-18-12v-8m6 8v-8m6 8v-8m6 8v-8" ${iconLine}/><path d="M46 15c-5 1-7 8-2 11 3 2 7 0 8-3-5 1-8-4-6-8Z" fill="#ffd878" stroke="${iconStroke}" stroke-width="1.4"/><path d="M13 29c0-4 6-5 8-2 4-2 8 1 7 5H13c-4 0-4-3 0-3Z" fill="#d6e8ed" stroke="${iconStroke}" stroke-width="1.2"/>`;
+  const iconCombination = `<rect x="7" y="9" width="50" height="46" rx="8" fill="#fff8ea" stroke="${iconStroke}" stroke-width="2"/><path d="M33 10v44" ${iconLine}/><g transform="translate(-5 3) scale(.68)">${babyTop}</g><g transform="translate(8 -1) scale(.82)">${babyBloomer}</g>`;
+  if (kind === 'real-product') return `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M11 24h8l4-5h17l4 5h8a6 6 0 0 1 6 6v20a6 6 0 0 1-6 6H11a6 6 0 0 1-6-6V30a6 6 0 0 1 6-6Z" fill="#f6c78f" stroke="${iconStroke}" stroke-width="2.2"/><circle cx="32" cy="40" r="11" fill="#d5e5eb" stroke="${iconStroke}" stroke-width="2"/><circle cx="32" cy="40" r="6" fill="#fff8e9" stroke="${iconStroke}" stroke-width="1.5"/><g transform="translate(17 34) scale(.52)">${bearFace}</g><path d="M47 16h9m-4.5-4.5v9" stroke="#ffd878" stroke-width="3" stroke-linecap="round"/><path d="M8 19c0-4 6-5 8-2 4-2 7 1 6 5H8c-4 0-4-3 0-3Z" fill="#fff" opacity=".9"/></svg>`;
+  if (kind === 'finished-reference') return `<svg viewBox="0 0 64 64" aria-hidden="true"><rect x="7" y="8" width="49" height="48" rx="9" fill="#fff4e8" stroke="${iconStroke}" stroke-width="2"/><path d="M17 16h29" stroke="#e8b58f" stroke-width="2" stroke-linecap="round"/><path d="m31 16 3-4 3 4" ${iconLine}/><g transform="translate(1 3) scale(.92)">${babyRomper}</g>${iconSparkle}<g transform="translate(15 47) scale(.52)">${bearFace}</g></svg>`;
+  if (kind === 'flat-result') return `<svg viewBox="0 0 64 64" aria-hidden="true"><g transform="translate(-6 -3) scale(.88)">${babyTop}</g><g transform="translate(4 -2) scale(.9)">${babyBloomer}</g>${iconSparkle}<circle cx="11" cy="51" r="4" fill="#fff" opacity=".8"/></svg>`;
+  if (kind === 'flat-source') return `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M8 20V9h11M45 9h11v11M56 44v11H45M19 55H8V44" ${iconLine}/><g transform="translate(-6 -3) scale(.88)">${babyTop}</g><g transform="translate(4 -2) scale(.9)">${babyBloomer}</g></svg>`;
+  if (kind === 'model-source') return `<svg viewBox="0 0 64 64" aria-hidden="true">${babyPortrait}<circle cx="52" cy="49" r="6" fill="#fff8e9" stroke="${iconStroke}" stroke-width="1.3"/><path d="M48 46c-2-5 2-7 4-2 2-5 6-3 4 2" fill="#fff8e9" stroke="${iconStroke}" stroke-width="1.3"/></svg>`;
+  if (kind === 'follow-background') return `<svg viewBox="0 0 64 64" aria-hidden="true"><g transform="translate(-6 -1) scale(.78)">${babyPortrait}</g><g transform="translate(16 10) scale(.78)">${babyPortrait}</g><path d="M25 15c4-5 11-5 15 0" stroke="#fff" stroke-width="3" stroke-linecap="round"/><path d="m29 24 4-4 4 4" ${iconLine}/></svg>`;
+  if (kind === 'solid-background') return `<svg viewBox="0 0 64 64" aria-hidden="true"><rect x="7" y="8" width="38" height="48" rx="9" fill="#e9def3" stroke="${iconStroke}" stroke-width="2"/><g transform="translate(-5 2) scale(.82)">${babyRomper}</g><circle cx="50" cy="45" r="10" fill="#fff8ea" stroke="${iconStroke}" stroke-width="1.6"/><circle cx="46" cy="42" r="2.2" fill="#b9d4c1"/><circle cx="52" cy="42" r="2.2" fill="#f4c19f"/><circle cx="49" cy="48" r="2.2" fill="#cfe3ed"/><path d="m45 15 9-8 4 4-9 8-5 2 1-6Z" fill="#f3bea1" stroke="${iconStroke}" stroke-width="1.4"/></svg>`;
+  if (kind === 'scene-reference') return `<svg viewBox="0 0 64 64" aria-hidden="true">${nursery}<circle cx="48" cy="46" r="5" fill="#d69d6f" opacity=".95"/></svg>`;
+  if (kind === 'model-result') return `<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M5 44h54v15H5Z" fill="#d9e7dc"/><path d="M7 27c0-5 7-6 9-2 5-2 9 2 8 6H7c-4 0-4-4 0-4Z" fill="#fff"/><circle cx="32" cy="18" r="7" fill="#f3bea1" stroke="${iconStroke}" stroke-width="1.6"/><path d="M25 16c2-7 12-7 14 0-5-3-9-3-14 0Z" fill="#855b3d"/><path d="M21 29c5-6 17-6 22 0l4 13-7 2-3-9v20h-10V35l-3 9-7-2 4-13Z" fill="#fff2d6" stroke="${iconStroke}" stroke-width="1.8"/><g transform="translate(32 36) scale(.52)">${bearFace}</g>${iconSparkle}</svg>`;
+  if (kind === 'combination-reference') return `<svg viewBox="0 0 64 64" aria-hidden="true">${iconCombination}<g transform="translate(52 47) scale(.5)">${bearFace}</g></svg>`;
+  if (kind === 'combination-result') return `<svg viewBox="0 0 64 64" aria-hidden="true"><g transform="translate(-7 4) scale(.72)">${babyRomper}</g><g transform="translate(12 1) scale(.78)">${babyRomper}</g><g transform="translate(29 5) scale(.69)">${babyRomper}</g>${iconSparkle}<path d="M7 13c0-3 5-4 6-1 3-1 5 1 5 4H7c-3 0-3-3 0-3Z" fill="#fff"/></svg>`;
+  if (kind === 'model') return `<svg viewBox="0 0 64 64" aria-hidden="true"><circle class="skin" cx="32" cy="13" r="7"/><path class="hair" d="M25 13c0-7 14-9 15 0-4-4-10-5-15 0Z"/><path class="cloth-main" d="M22 23c5-3 15-3 20 0l5 16-8 2-2-11v24H27V30l-2 11-8-2 5-16Z"/><path class="cloth-accent" d="M27 30h10v24H27z"/><path class="skin" d="M17 39h8v5h-8zm22 0h8v5h-8z"/><path class="shoe" d="M25 54h8v5H20c0-3 2-5 5-5Zm14 0h-8v5h13c0-3-2-5-5-5Z"/></svg>`;
+  if (kind === 'scene') return `<svg viewBox="0 0 64 64" aria-hidden="true"><path class="scene-wall" d="M7 8h50v48H7z"/><circle class="scene-sun" cx="48" cy="17" r="6"/><path class="scene-cloud" d="M13 20c1-7 11-7 13-2 7-2 10 8 3 10H13c-7 0-6-8 0-8Z"/><path class="scene-floor" d="M7 43h50v13H7z"/><path class="scene-prop" d="M14 37h13v6H14zm2 6h2v8h-2zm7 0h2v8h-2z"/></svg>`;
+  if (kind === 'combo') return `<svg viewBox="0 0 64 64" aria-hidden="true"><path class="cloth-alt" d="M6 20 15 12h10l9 8-5 8-5-4v26H11V24l-5 4Z"/><path class="cloth-main" d="M30 21 39 13h10l9 8-5 8-5-4v25H35V25l-5 4Z"/><circle class="print" cx="19" cy="30" r="3"/><path class="print" d="m42 28 2 3 4 .5-3 2.5 1 4-4-2-4 2 1-4-3-2.5 4-.5Z"/></svg>`;
+  if (kind === 'pants') return `<svg viewBox="0 0 64 64" aria-hidden="true"><path class="cloth-main" d="M15 10h34l3 8-5 36H34l-2-24-2 24H17l-5-36 3-8Z"/><path class="cloth-shadow" d="M32 18v12l-2 24h-5l4-36z"/><path class="stitch" d="M15 17h34M19 49h10m6 0h10"/><path class="print" d="m40 28 2 3 4 .5-3 2.5 1 4-4-2-4 2 1-4-3-2.5 4-.5Z"/><circle class="print-alt" cx="23" cy="37" r="3"/></svg>`;
+  if (kind === 'set') return `<svg viewBox="0 0 64 64" aria-hidden="true"><path class="cloth-main" d="M7 14 15 8h12l8 6-5 9-5-4v18H17V19l-5 4Z"/><path class="cloth-alt" d="M35 31h22l2 6-4 19h-8l-1-13-1 13h-8l-4-19 2-6Z"/><circle class="print" cx="21" cy="24" r="3"/><path class="print-alt" d="m48 39 2 3 3 .5-2.5 2 1 3-3.5-2-3 2 1-3-3-2 4-.5Z"/></svg>`;
+  return `<svg viewBox="0 0 64 64" aria-hidden="true"><path class="cloth-main" d="M19 9h26l13 13-8 9-7-6-2 13 7 18H35l-3-13-3 13H16l7-18-2-13-7 6-8-9L19 9Z"/><path class="cloth-shadow" d="M32 11v32l-3 13h-5l4-24-4-22Z"/><path class="collar" d="M25 9c0 8 14 8 14 0"/><path class="stitch" d="M17 52h11m8 0h11"/><circle class="print" cx="38" cy="29" r="3"/><path class="print-alt" d="m26 34 2 3 4 .5-3 2.5 1 4-4-2-4 2 1-4-3-2.5 4-.5Z"/></svg>`;
+}
+
+function cwExampleNode(label, tone = '', kind = 'romper') {
+  return `<span class="cw-example-node ${escapeHtml(tone)}"><i class="cw-example-art ${escapeHtml(kind)}">${cwExampleArt(kind)}</i><b>${escapeHtml(label)}</b></span>`;
+}
+
+function cwTaskExampleMarkup(stage) {
+  if (stage === 'master') return `<article class="cw-task-example-card" aria-label="生成平铺图任务卡片示例"><header><span>示例</span><b>任务卡片从左到右</b><em>当前板块</em></header><div>${cwExampleNode('实拍产品图', 'product', 'real-product')}<strong>＋</strong>${cwExampleNode('成品参考图', 'reference', 'finished-reference')}<strong>→</strong>${cwExampleNode('平铺母版图', 'result', 'flat-result')}</div><p>实际提交给生图接口的图片编号，也按卡片从左到右排列；薄荷绿精致边框代表本阶段输出。</p></article>`;
+  if (stage === 'combination') return `<article class="cw-task-example-card" aria-label="组合多 SKU 图任务卡片示例"><header><span>示例</span><b>组合多 SKU 图</b><em>当前板块</em></header><div>${cwExampleNode('平铺图 A', 'product', 'flat-source')}<strong>＋</strong>${cwExampleNode('平铺图 B', 'product', 'flat-source')}<strong>＋</strong>${cwExampleNode('组合参考图', 'reference', 'combination-reference')}<strong>→</strong>${cwExampleNode('多 SKU 组合图', 'result', 'combination-result')}</div><p>选择几张 SKU 就提交几张，不会自动凑满四张；薄荷绿精致边框代表最终组合图。</p></article>`;
+  const operation = state.childrenwearModelOperationType === 'scene_only' ? 'scene_only' : 'dress';
+  const background = state.childrenwearModelBackgroundMode || (operation === 'scene_only' ? 'solid' : 'model_reference');
+  const backgroundLabel = cwModelBackgroundLabel(background, state.childrenwearModelSolidColor);
+  const backgroundNode = background === 'model_reference' ? '' : `<strong>＋</strong>${cwExampleNode(backgroundLabel, 'reference', background === 'solid' ? 'solid-background' : 'scene-reference')}`;
+  const input = operation === 'scene_only'
+    ? `${cwExampleNode('已有模特图', 'product', 'model-source')}${backgroundNode}`
+    : `${cwExampleNode('已生成平铺图', 'product', 'flat-source')}<strong>＋</strong>${cwExampleNode(background === 'model_reference' ? '参考模特图（含背景）' : '参考模特图', 'reference', background === 'model_reference' ? 'follow-background' : 'model-source')}${backgroundNode}`;
+  return `<article class="cw-task-example-card dynamic" aria-label="模特图任务卡片示例"><header><span>动态示例</span><b>${escapeHtml(cwModelOperationLabel(operation))}</b><em>${escapeHtml(backgroundLabel)}</em></header><div>${input}<strong>→</strong>${cwExampleNode(operation === 'scene_only' ? '换场景结果' : '模特上身图', 'result', 'model-result')}</div><p>切换左侧操作类型或背景来源，这张示例会同步变化；薄荷绿精致边框代表本阶段输出。</p></article>`;
+}
+
 function cwTaskCardMarkup(stage, draft, index, reviewIndex) {
   const meta = CW_STAGE_META[stage];
-  const running = draft.status === '生成中';
+  const activeOperation = cwDraftActiveOperation(draft);
+  const running = Boolean(activeOperation);
   const ready = cwDraftReady(draft);
   const reviewItem = cwReviewItemForDraft(stage, draft, reviewIndex);
+  const localEditJob = reviewItem ? state.childrenwearLocalEditJobs.get(reviewItem.id) : cwLocalEditJobForDraft(draft);
+  const localEditRunning = CW_ACTIVE_OPERATION_STATUSES.has(localEditJob?.status);
   const reviewStatus = reviewItem ? cwReviewStatus(reviewItem) : '';
   const title = draft.title || `${meta.label}任务 ${index + 1}`;
   const statusKey = cwDraftStatusKey(draft);
   const missing = cwDraftMissingLabels(draft);
   const task = cwTaskForDraft(draft);
   const flatLayValidation = stage === 'master' ? (draft.flatLayValidation || task?.flatLayValidation) : null;
+  const footerStatus = localEditJob?.status === 'failed' ? localEditJob.message : cwDraftStatusText(draft);
+  const modelTrace = stage === 'model' ? `<div class="cw-model-task-trace"><span>${escapeHtml(cwModelOperationLabel(draft.operationType))}</span><span>${escapeHtml(cwModelBackgroundLabel(draft.backgroundMode, draft.solidBackgroundColor))}</span>${draft.useFixedModel ? '<span>复用指定模特</span>' : ''}<span>路线：${escapeHtml(draft.promptRoute || cwModelPromptRoute(draft))}</span></div>` : '';
   return `<article class="cw-task-card ${statusKey}${draft.selected ? ' selected' : ''}${draft.id === state.childrenwearActiveDraft[stage] ? ' editing' : ''}${reviewStatus === 'approved' ? ' approved' : ''}${reviewStatus === 'needs_regeneration' ? ' needs-regeneration' : ''}" data-cw-draft="${escapeHtml(draft.id)}" data-stage="${stage}">
       <header><label><input type="checkbox" data-cw-select-draft="${escapeHtml(draft.id)}"${draft.selected ? ' checked' : ''}><span></span><span class="cw-task-title-line"><b title="${escapeHtml(title)}">${escapeHtml(title)}</b><em class="cw-task-state-badge ${statusKey}">${escapeHtml(cwDraftStatusLabel(draft))}</em></span></label><div><button class="secondary mini" type="button" data-cw-edit="${escapeHtml(draft.id)}">改名</button><button class="link-danger" type="button" data-cw-remove="${escapeHtml(draft.id)}"${running ? ' disabled' : ''}>删除</button></div></header>
       <div class="cw-task-flow">${cwDraftFlow(draft)}</div>
+      ${modelTrace}
       ${cwFlatLayValidationMarkup(flatLayValidation)}
       ${missing.length ? `<div class="cw-task-missing">还缺：${escapeHtml(missing.join('、'))}</div>` : ''}
-      <footer><span class="cw-task-status${statusKey === 'needs_regeneration' ? ' error' : ''}">${escapeHtml(draft.progress || cwDraftStatusText(draft))}</span><div class="cw-task-card-actions">${reviewItem ? `<button class="secondary" type="button" data-cw-inline-compare="${escapeHtml(reviewItem.id)}">${stage === 'master' ? '高清审核' : '高清查看'}</button>${stage === 'master' && !reviewItem.approved ? `<button class="secondary" type="button" data-cw-inline-approve="${escapeHtml(reviewItem.id)}">通过</button>` : ''}` : ''}<button class="secondary" type="button" data-cw-generate-one="${escapeHtml(draft.id)}"${!ready || running ? ' disabled' : ''}>${draft.result || draft.status === '失败' ? '重新生成' : `生成${escapeHtml(meta.label)}`}</button></div></footer>
+      <footer><span class="cw-task-status${statusKey === 'needs_regeneration' || localEditJob?.status === 'failed' ? ' error' : ''}">${escapeHtml(footerStatus)}</span><div class="cw-task-card-actions">${reviewItem ? `<button class="secondary" type="button" data-cw-inline-compare="${escapeHtml(reviewItem.id)}">${stage === 'master' ? '高清审核' : '高清查看'}</button><button class="secondary" type="button" data-cw-local-edit="${escapeHtml(reviewItem.id)}"${localEditRunning ? ' disabled' : ''}>${localEditRunning ? '微调中…' : '局部微调'}</button>${stage === 'master' && !reviewItem.approved ? `<button class="secondary" type="button" data-cw-inline-approve="${escapeHtml(reviewItem.id)}">通过</button>` : ''}` : ''}<button class="secondary" type="button" data-cw-generate-one="${escapeHtml(draft.id)}"${!ready || running || localEditRunning ? ' disabled' : ''}>${draft.result || draft.status === '失败' ? '重新生成' : `生成${escapeHtml(meta.label)}`}</button></div></footer>
     </article>`;
 }
 
@@ -7286,38 +7782,96 @@ function renderCwActivity(stage) {
     const key = cwDraftStatusKey(draft);
     const title = draft.title || `${meta.label}任务`;
     const missing = cwDraftMissingLabels(draft);
-    const detail = missing.length ? `缺少：${missing.join('、')}` : (draft.progress || cwDraftStatusText(draft));
+    const detail = missing.length ? `缺少：${missing.join('、')}` : cwDraftStatusText(draft);
     return `<button class="cw-activity-item ${key}" type="button" data-cw-activity-jump="${escapeHtml(draft.id)}" data-stage="${stage}"><span><b title="${escapeHtml(title)}">${escapeHtml(title)}</b><em>${escapeHtml(cwActivityClock(cwDraftActivityTime(draft)))}</em></span><small>${escapeHtml(cwDraftStatusLabel(draft))} · ${escapeHtml(detail)}</small></button>`;
   }).join('') : '<div class="cw-activity-empty">暂无任务动态</div>';
 }
 
-function cwLineageMasterOptions() {
-  return state.childrenwearTasks
-    .filter(task => task.masterPath && task.masterUrl)
-    .map(task => ({
-      path: task.masterPath,
-      folder: task.folder || '',
-      title: task.taskName || task.category || '平铺母版图',
-      meta: `${task.material || '未标材质'} · ${task.masterApproved ? '已通过' : '待审核'}`,
-      thumbnailUrl: task.masterThumbnailUrl || task.masterUrl,
-      updatedAt: task.updatedAt || task.createdAt || ''
-    }))
-    .sort((left, right) => String(right.updatedAt).localeCompare(String(left.updatedAt)));
+function cwLineageAssetKey(value) {
+  return String(value || '').trim().replaceAll('\\', '/').toLocaleLowerCase('en-US');
 }
 
-function cwDraftUsesLineageMaster(draft, master) {
-  if (!draft || !master) return false;
-  const samePath = value => value && (value === master.path || value.sourceMasterPath === master.path);
-  const sameFolder = value => value && cwFolderKey(value.taskFolder) === cwFolderKey(master.folder);
-  if (draft.stage === 'master') return samePath(draft.result?.path) || cwFolderKey(draft.taskFolder) === cwFolderKey(master.folder);
-  if (draft.stage === 'model') return samePath(draft.master) || samePath(draft.master?.path) || sameFolder(draft.master);
-  return (draft.masters || []).some(item => samePath(item) || samePath(item.path) || sameFolder(item));
+function cwDraftLineageFolders(draft) {
+  const values = [draft?.taskFolder];
+  if (draft?.stage === 'model') values.push(draft.master?.taskFolder, draft.existingModel?.taskFolder);
+  if (draft?.stage === 'combination') values.push(...(draft.masters || []).map(item => item?.taskFolder));
+  return new Set(values.map(cwFolderKey).filter(Boolean));
 }
 
-function cwLineageRelations(master) {
+function cwDraftLineageAssets(draft) {
+  if (!draft) return [];
+  if (draft.stage === 'master') return [
+    { asset: draft.real, role: '实拍产品图' },
+    { asset: draft.reference, role: '成品参考图' },
+    { asset: draft.result, role: '生成平铺图' }
+  ];
+  if (draft.stage === 'model') return [
+    { asset: draft.master, role: '已生成平铺图' },
+    { asset: draft.existingModel, role: '已有模特图' },
+    { asset: draft.reference, role: '参考模特图' },
+    { asset: draft.scene, role: '场景参考图' },
+    { asset: draft.result, role: '生成模特图' }
+  ];
+  return [
+    ...(draft.masters || []).map((asset, index) => ({ asset, role: `组合平铺图 ${index + 1}` })),
+    { asset: draft.reference, role: '组合参考图' },
+    { asset: draft.result, role: '生成多 SKU 组合图' }
+  ];
+}
+
+function cwLineageImageOptions() {
+  const options = new Map();
+  for (const stage of ['master', 'model', 'combination']) {
+    for (const draft of state.childrenwearDrafts[stage] || []) {
+      const folders = cwDraftLineageFolders(draft);
+      for (const { asset, role } of cwDraftLineageAssets(draft)) {
+        if (!asset || (!asset.path && !asset.url)) continue;
+        const key = cwLineageAssetKey(asset.path || asset.url);
+        if (!key) continue;
+        let option = options.get(key);
+        if (!option) {
+          option = {
+            key,
+            title: asset.name || draft.title || role,
+            thumbnailUrl: asset.thumbnailUrl || asset.previewUrl || asset.url,
+            updatedAt: cwDraftActivityTime(draft),
+            roles: new Set(),
+            assetKeys: new Set(),
+            folderKeys: new Set()
+          };
+          options.set(key, option);
+        }
+        option.roles.add(role);
+        option.assetKeys.add(cwLineageAssetKey(asset.path));
+        option.assetKeys.add(cwLineageAssetKey(asset.url));
+        option.assetKeys.add(cwLineageAssetKey(asset.sourceMasterPath));
+        folders.forEach(folder => option.folderKeys.add(folder));
+        if (String(cwDraftActivityTime(draft)).localeCompare(String(option.updatedAt)) > 0) option.updatedAt = cwDraftActivityTime(draft);
+      }
+    }
+  }
+  return [...options.values()].map(option => ({
+    ...option,
+    assetKeys: new Set([...option.assetKeys].filter(Boolean)),
+    roles: [...option.roles],
+    meta: [...option.roles].join(' · ')
+  })).sort((left, right) => String(right.updatedAt).localeCompare(String(left.updatedAt)));
+}
+
+function cwDraftUsesLineageImage(draft, image) {
+  if (!draft || !image) return false;
+  const directMatch = cwDraftLineageAssets(draft).some(({ asset }) => asset && [asset.path, asset.url, asset.sourceMasterPath]
+    .map(cwLineageAssetKey)
+    .filter(Boolean)
+    .some(key => image.assetKeys.has(key)));
+  if (directMatch) return true;
+  return [...cwDraftLineageFolders(draft)].some(folder => image.folderKeys.has(folder));
+}
+
+function cwLineageRelations(image) {
   const stages = ['master', 'model', 'combination'];
   return stages.flatMap(stage => (state.childrenwearDrafts[stage] || [])
-    .filter(draft => cwDraftUsesLineageMaster(draft, master))
+    .filter(draft => cwDraftUsesLineageImage(draft, image))
     .map(draft => ({ stage, draft, time: cwDraftActivityTime(draft) })))
     .sort((left, right) => String(right.time).localeCompare(String(left.time)));
 }
@@ -7327,15 +7881,15 @@ function renderCwLineageSearch() {
   const results = $('#cwLineageResults');
   if (!list || !results) return;
   const query = String(state.childrenwearLineageQuery || '').trim().toLocaleLowerCase('zh-CN');
-  const all = cwLineageMasterOptions();
-  const visible = query ? all.filter(item => `${item.title}\n${item.meta}\n${item.path}`.toLocaleLowerCase('zh-CN').includes(query)) : all;
-  if (!all.some(item => item.path === state.childrenwearLineageSelectedPath)) state.childrenwearLineageSelectedPath = visible[0]?.path || all[0]?.path || '';
-  list.innerHTML = visible.length ? visible.map(item => `<button class="cw-lineage-master${item.path === state.childrenwearLineageSelectedPath ? ' active' : ''}" type="button" data-cw-lineage-master="${escapeHtml(item.path)}"><img loading="lazy" decoding="async" src="${escapeHtml(item.thumbnailUrl)}" alt="${escapeHtml(item.title)}"><span><b>${escapeHtml(item.title)}</b><small>${escapeHtml(item.meta)}</small></span></button>`).join('') : '<div class="empty-inline">没有匹配的平铺图。</div>';
-  const selected = all.find(item => item.path === state.childrenwearLineageSelectedPath);
+  const all = cwLineageImageOptions();
+  const visible = query ? all.filter(item => `${item.title}\n${item.meta}\n${[...item.assetKeys].join('\n')}`.toLocaleLowerCase('zh-CN').includes(query)) : all;
+  if (!all.some(item => item.key === state.childrenwearLineageSelectedPath)) state.childrenwearLineageSelectedPath = visible[0]?.key || all[0]?.key || '';
+  list.innerHTML = visible.length ? visible.map(item => `<button class="cw-lineage-master${item.key === state.childrenwearLineageSelectedPath ? ' active' : ''}" type="button" data-cw-lineage-master="${escapeHtml(item.key)}"><img loading="lazy" decoding="async" src="${escapeHtml(item.thumbnailUrl)}" alt="${escapeHtml(item.title)}"><span><b>${escapeHtml(item.title)}</b><small>${escapeHtml(item.meta)}</small></span></button>`).join('') : '<div class="empty-inline">没有匹配的图片。</div>';
+  const selected = all.find(item => item.key === state.childrenwearLineageSelectedPath);
   const relations = selected ? cwLineageRelations(selected) : [];
-  $('#cwLineageSelectedTitle').textContent = selected?.title || '请选择一张平铺图';
+  $('#cwLineageSelectedTitle').textContent = selected?.title || '请选择一张图片';
   $('#cwLineageSelectedMeta').textContent = `${relations.length} 个关联任务`;
-  results.innerHTML = relations.length ? relations.map(({ stage, draft, time }) => `<button class="cw-lineage-result" type="button" data-cw-lineage-stage="${stage}" data-cw-lineage-draft="${escapeHtml(draft.id)}"><span class="stage">${stage === 'master' ? '02 平铺' : stage === 'model' ? '03 模特' : '04 组合'}</span><span><b>${escapeHtml(draft.title || CW_STAGE_META[stage].label)}</b><small>${escapeHtml(cwDraftStatusLabel(draft))} · ${escapeHtml(draft.progress || cwDraftStatusText(draft))}</small></span><time>${escapeHtml(cwActivityClock(time))}</time></button>`).join('') : '<div class="empty-inline">这张平铺图暂时没有关联任务。</div>';
+  results.innerHTML = relations.length ? relations.map(({ stage, draft, time }) => `<button class="cw-lineage-result" type="button" data-cw-lineage-stage="${stage}" data-cw-lineage-draft="${escapeHtml(draft.id)}"><span class="stage">${stage === 'master' ? '02 平铺' : stage === 'model' ? '03 模特' : '04 组合'}</span><span><b>${escapeHtml(draft.title || CW_STAGE_META[stage].label)}</b><small>${escapeHtml(cwDraftStatusLabel(draft))} · ${escapeHtml(draft.progress || cwDraftStatusText(draft))}</small></span><time>${escapeHtml(cwActivityClock(time))}</time></button>`).join('') : '<div class="empty-inline">这张图片暂时没有关联任务。</div>';
 }
 
 async function openCwLineageSearch() {
@@ -7358,7 +7912,7 @@ function jumpToCwLineageDraft(stage, id) {
   closeCwLineageSearch();
   state.childrenwearQueueFilters[stage] = 'all';
   state.childrenwearQueueDateFilters[stage] = 'all';
-  state.childrenwearQueueVisibleLimits[stage] = Math.max(36, index + 1);
+  state.childrenwearQueuePages[stage] = Math.floor(index / 12) + 1;
   state.childrenwearActiveDraft[stage] = id;
   openChildrenwearProduction(stage);
   requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -7379,15 +7933,16 @@ function renderCwQueue(stage) {
   const filter = state.childrenwearQueueFilters[stage] || 'all';
   const dateFilter = state.childrenwearQueueDateFilters[stage] || 'all';
   const visibleDrafts = cwFilteredDrafts(stage);
-  const visibleLimit = Math.max(12, Number(state.childrenwearQueueVisibleLimits[stage]) || 36);
-  const renderedDrafts = visibleDrafts.slice(0, visibleLimit);
-  const remainingDrafts = Math.max(0, visibleDrafts.length - renderedDrafts.length);
+  const pagination = cwPageWindow(visibleDrafts, state.childrenwearQueuePages[stage], 12);
+  state.childrenwearQueuePages[stage] = pagination.page;
+  const renderedDrafts = pagination.items;
   const reviewIndex = cwTaskReviewIndex();
   $(meta.count).textContent = filter !== 'all' || dateFilter !== 'all' ? `${visibleDrafts.length} / ${drafts.length} 项` : `${drafts.length} 项`;
   const cards = renderedDrafts.map((draft, index) => cwTaskCardMarkup(stage, draft, index, reviewIndex)).join('');
+  const example = cwTaskExampleMarkup(stage);
   panel.innerHTML = visibleDrafts.length
-    ? `${cards}${remainingDrafts ? `<button class="cw-review-load-more" type="button" data-cw-queue-more="${stage}">继续显示 ${Math.min(36, remainingDrafts)} 个任务（剩余 ${remainingDrafts} 个）</button>` : ''}`
-    : `<div class="cw-task-empty"><b>${drafts.length ? '当前筛选没有任务' : `还没有${escapeHtml(meta.label)}任务`}</b><span>${drafts.length ? '切换其他状态查看任务。' : '点击左侧素材，系统会自动创建并补齐任务卡片。'}</span></div>`;
+    ? `${example}${cards}${cwPaginationMarkup('queue', stage, pagination)}`
+    : `${example}<div class="cw-task-empty"><b>${drafts.length ? '当前筛选没有任务' : `还没有${escapeHtml(meta.label)}任务`}</b><span>${drafts.length ? '切换其他状态查看任务。' : '点击左侧素材，系统会自动创建并补齐任务卡片。'}</span></div>`;
   renderCwQueueFilters(stage);
   renderCwActivity(stage);
 }
@@ -7398,8 +7953,9 @@ function patchCwQueueTaskResults(stage, changedFolderKeys) {
   if (!panel || !(changedFolderKeys instanceof Set) || !changedFolderKeys.size) return renderCwQueue(stage);
   const drafts = state.childrenwearDrafts[stage];
   const visibleDrafts = cwFilteredDrafts(stage);
-  const visibleLimit = Math.max(12, Number(state.childrenwearQueueVisibleLimits[stage]) || 36);
-  const renderedDrafts = visibleDrafts.slice(0, visibleLimit);
+  const pagination = cwPageWindow(visibleDrafts, state.childrenwearQueuePages[stage], 12);
+  state.childrenwearQueuePages[stage] = pagination.page;
+  const renderedDrafts = pagination.items;
   const reviewIndex = cwTaskReviewIndex();
   const currentCards = new Map([...panel.querySelectorAll('[data-cw-draft]')].map(card => [card.dataset.cwDraft, card]));
   const renderedIds = new Set(renderedDrafts.map(draft => draft.id));
@@ -7418,7 +7974,7 @@ function patchCwQueueTaskResults(stage, changedFolderKeys) {
     if (!replacement) continue;
     if (!current) {
       const nextDraft = renderedDrafts.slice(index + 1).find(item => currentCards.has(item.id));
-      const nextCard = nextDraft ? currentCards.get(nextDraft.id) : panel.querySelector('[data-cw-queue-more]');
+      const nextCard = nextDraft ? currentCards.get(nextDraft.id) : panel.querySelector('.cw-pagination');
       panel.insertBefore(replacement, nextCard || null);
       currentCards.set(draft.id, replacement);
       continue;
@@ -7449,8 +8005,11 @@ function cwLibrarySource(stage) {
   if (tab === 'master-real') return { key: 'childrenwearRealAssetsPath', role: 'real', folders: '#cwMasterSourceFolders', grid: '#cwMasterSourceGrid' };
   if (tab === 'master-reference') return { key: 'childrenwearReferenceAssetsPath', role: 'reference', folders: '#cwMasterSourceFolders', grid: '#cwMasterSourceGrid' };
   if (tab === 'model-reference') return { key: 'childrenwearModelAssetsPath', role: 'reference', folders: '#cwModelSourceFolders', grid: '#cwModelSourceGrid' };
+  if (tab === 'model-existing') return { generatedModel: true, role: 'existingModel', folders: '#cwModelSourceFolders', grid: '#cwModelSourceGrid' };
   if (tab === 'model-scene') return { key: 'childrenwearSceneAssetsPath', role: 'scene', folders: '#cwModelSourceFolders', grid: '#cwModelSourceGrid' };
+  if (tab === 'model-external') return { key: 'childrenwearFlatAssetsPath', role: 'master', externalFlat: true, folders: '#cwModelSourceFolders', grid: '#cwModelSourceGrid' };
   if (tab === 'combination-reference') return { key: 'childrenwearCombinationAssetsPath', role: 'reference', folders: '#cwCombinationSourceFolders', grid: '#cwCombinationSourceGrid' };
+  if (tab === 'combination-external') return { key: 'childrenwearFlatAssetsPath', role: 'master', externalFlat: true, folders: '#cwCombinationSourceFolders', grid: '#cwCombinationSourceGrid' };
   if (tab === 'model-master') return { generated: true, role: 'master', folders: '#cwModelSourceFolders', grid: '#cwModelSourceGrid' };
   return { generated: true, role: 'master', folders: '#cwCombinationSourceFolders', grid: '#cwCombinationSourceGrid' };
 }
@@ -7463,6 +8022,36 @@ function cwHydratedFixedModelReference() {
   return hydrated || fixed;
 }
 
+function cwPageWindow(items, requestedPage, pageSize) {
+  const safeItems = Array.isArray(items) ? items : [];
+  const size = Math.max(1, Number(pageSize) || 12);
+  const totalPages = Math.max(1, Math.ceil(safeItems.length / size));
+  const page = Math.min(totalPages, Math.max(1, Number(requestedPage) || 1));
+  const start = (page - 1) * size;
+  return { items: safeItems.slice(start, start + size), page, pageSize: size, total: safeItems.length, totalPages };
+}
+
+function cwPaginationMarkup(kind, key, pagination) {
+  if (!pagination || pagination.totalPages <= 1) return '';
+  return `<nav class="cw-pagination" aria-label="分页">
+    <button type="button" data-cw-page-kind="${escapeHtml(kind)}" data-cw-page-key="${escapeHtml(key)}" data-cw-page="${pagination.page - 1}"${pagination.page <= 1 ? ' disabled' : ''}>上一页</button>
+    <span>第 ${pagination.page} / ${pagination.totalPages} 页 <small>共 ${pagination.total} 项</small></span>
+    <button type="button" data-cw-page-kind="${escapeHtml(kind)}" data-cw-page-key="${escapeHtml(key)}" data-cw-page="${pagination.page + 1}"${pagination.page >= pagination.totalPages ? ' disabled' : ''}>下一页</button>
+  </nav>`;
+}
+
+function cwSourcePageKey(stage) {
+  return state.childrenwearSourceTabs[stage] || `${stage}-default`;
+}
+
+function cwPagedSourceMarkup(stage, items, cardMarkup, emptyMarkup) {
+  const pageKey = cwSourcePageKey(stage);
+  const pagination = cwPageWindow(items, state.childrenwearSourcePages[pageKey], 12);
+  state.childrenwearSourcePages[pageKey] = pagination.page;
+  if (!pagination.total) return emptyMarkup;
+  return `${pagination.items.map(cardMarkup).join('')}${cwPaginationMarkup('source', stage, pagination)}`;
+}
+
 function renderFixedModelControl() {
   const checkbox = $('#cwFixedModelEnabled');
   const status = $('#cwFixedModelStatus');
@@ -7471,38 +8060,377 @@ function renderFixedModelControl() {
   const fixed = cwHydratedFixedModelReference();
   checkbox.checked = Boolean(state.childrenwearFixedModelEnabled);
   status.textContent = fixed?.path
-    ? `当前固定：${fixed.name || fixed.folder || '已选模特'}；新任务自动复用，仅更换场景`
-    : (state.childrenwearFixedModelEnabled ? '请从下方选择一张参考模特图作为固定模特' : '关闭后每张任务可选择不同模特');
+    ? `当前复用：${fixed.name || fixed.folder || '已选模特'}；后续上身任务自动使用`
+    : (state.childrenwearFixedModelEnabled ? '请从下方选择一张参考模特图作为复用模特' : '关闭后每张上身任务可选择不同模特');
   clear.hidden = !fixed?.path;
 }
 
+function renderCwModelControls() {
+  const operation = state.childrenwearModelOperationType === 'scene_only' ? 'scene_only' : 'dress';
+  if (operation === 'scene_only' && state.childrenwearModelBackgroundMode === 'model_reference') state.childrenwearModelBackgroundMode = 'solid';
+  const currentTab = state.childrenwearSourceTabs.model;
+  if (operation === 'scene_only' && !['model-existing', 'model-scene'].includes(currentTab)) state.childrenwearSourceTabs.model = 'model-existing';
+  if (operation === 'dress' && currentTab === 'model-existing') state.childrenwearSourceTabs.model = 'model-master';
+  $$('[data-cw-model-operation]').forEach(button => button.classList.toggle('active', button.dataset.cwModelOperation === operation));
+  $$('[data-cw-model-background]').forEach(button => {
+    const unavailable = operation === 'scene_only' && button.dataset.cwModelBackground === 'model_reference';
+    button.hidden = unavailable;
+    button.disabled = unavailable;
+    button.classList.toggle('active', !unavailable && button.dataset.cwModelBackground === state.childrenwearModelBackgroundMode);
+  });
+  const existingTab = $('[data-cw-source-tab="model-existing"]');
+  const masterTab = $('[data-cw-source-tab="model-master"]');
+  const externalTab = $('[data-cw-source-tab="model-external"]');
+  const referenceTab = $('[data-cw-source-tab="model-reference"]');
+  const fixedControl = $('.cw-fixed-model-control');
+  if (existingTab) existingTab.hidden = operation !== 'scene_only';
+  if (masterTab) masterTab.hidden = operation === 'scene_only';
+  if (externalTab) externalTab.hidden = operation === 'scene_only';
+  if (referenceTab) referenceTab.hidden = operation === 'scene_only';
+  if (fixedControl) fixedControl.hidden = operation === 'scene_only';
+  $$('[data-cw-source-tab^="model-"]').forEach(button => {
+    button.classList.toggle('active', button.dataset.cwSourceTab === state.childrenwearSourceTabs.model);
+  });
+  const color = cwNormalizeHexColor(state.childrenwearModelSolidColor);
+  state.childrenwearModelSolidColor = color;
+  if ($('#cwModelSolidColorPanel')) $('#cwModelSolidColorPanel').hidden = state.childrenwearModelBackgroundMode !== 'solid';
+  if ($('#cwModelSolidColor')) $('#cwModelSolidColor').value = color;
+  if ($('#cwModelSolidColorText')) $('#cwModelSolidColorText').value = color;
+}
+
+function cwSourceBuilderSelection(stage) {
+  const selections = state.childrenwearSourceBuilderSelections ||= {};
+  if (!(selections[stage] instanceof Map)) selections[stage] = new Map();
+  return selections[stage];
+}
+
+function cwSourceBuilderTargetCount(stage) {
+  const counts = state.childrenwearSourceBuilderTargetCounts ||= { master: 1, model: 1, combination: 1 };
+  counts[stage] = Math.max(1, Math.min(500, Number(counts[stage]) || 1));
+  return counts[stage];
+}
+
+function cwBuilderRoleLabel(role) {
+  return ({ real: '实拍图', reference: '参考图', master: '平铺图', existingModel: '已有模特图', scene: '场景图' })[role] || role;
+}
+
+async function setCwSourceBuilderTargetCount(stage, { activate = false } = {}) {
+  const current = cwSourceBuilderTargetCount(stage);
+  const value = await brandPrompt('批量新建任务卡片', String(current), {
+    message: '先填写计划新建的任务卡片数量。之后可跨标签选择不同类型素材：每类选 1 张会复用到全部任务，选 X 张则按点击顺序一一对应。',
+    inputLabel: '计划新建数量（1～500）',
+    inputType: 'number',
+    confirmText: activate ? '开始选择素材' : '保存数量'
+  });
+  if (value === null) return false;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 500) {
+    toast('任务数量必须是 1～500 的整数', true);
+    return false;
+  }
+  state.childrenwearSourceBuilderTargetCounts[stage] = parsed;
+  if (activate) {
+    cwSourceBuilderSelection(stage).clear();
+    state.childrenwearSourceBuilderModes[stage] = true;
+  }
+  renderCwSource(stage);
+  return true;
+}
+
+function openCwStagePrompt(stage) {
+  state.activePromptStage = stage;
+  if (stage === 'model') state.activePromptRoute = cwModelPromptRoute({
+    operationType: state.childrenwearModelOperationType,
+    backgroundMode: state.childrenwearModelBackgroundMode,
+    reference: cwDraft('model')?.reference,
+    useFixedModel: state.childrenwearFixedModelEnabled
+  });
+  state.activePromptId = promptForStage(stage)?.id || '';
+  setPage('prompts');
+  renderPromptSettingList();
+  renderPromptEditor();
+  const prompt = promptForStage(stage);
+  const preset = activePromptPreset(prompt);
+  if (!prompt || !preset || !String(preset.value || '').trim()) {
+    const routeLabel = stage === 'model' ? state.promptSettings?.promptRoutes?.find(item => item.id === state.activePromptRoute)?.label : '';
+    toast(`“${routeLabel || CW_STAGE_META[stage].label}”尚未配置可用提示词，请填写并保存`, true);
+  }
+}
+
+function ensureCwSourceBuilder(stage) {
+  const panel = $(`[data-childrenwear-production-panel="${stage}"]`);
+  const column = panel?.querySelector('.cw-source-column');
+  const header = column?.querySelector(':scope > header');
+  if (!column || !header) return null;
+  let toggle = header.querySelector(`[data-cw-builder-action="toggle"][data-stage="${stage}"]`);
+  if (!toggle) {
+    toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.className = 'secondary cw-source-builder-toggle';
+    toggle.dataset.cwBuilderAction = 'toggle';
+    toggle.dataset.stage = stage;
+    toggle.textContent = '批量建卡';
+    header.append(toggle);
+  }
+  let promptButton = header.querySelector(`[data-cw-view-prompt="${stage}"]`);
+  if (!promptButton) {
+    promptButton = document.createElement('button');
+    promptButton.type = 'button';
+    promptButton.className = 'secondary cw-view-prompt-button';
+    promptButton.dataset.cwViewPrompt = stage;
+    promptButton.textContent = '查看提示词';
+    promptButton.onclick = () => openCwStagePrompt(stage);
+    header.append(promptButton);
+  }
+  let bar = column.querySelector(`:scope > [data-cw-source-builder="${stage}"]`);
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.className = 'cw-source-builder';
+    bar.dataset.cwSourceBuilder = stage;
+    bar.innerHTML = `<span class="cw-source-builder-summary">计划 <b data-cw-builder-target>1</b> 张任务 · 已选 <b data-cw-builder-count>0</b> 张素材</span><span class="cw-source-builder-role-counts" data-cw-builder-role-counts>尚未选择素材</span>${stage === 'combination' ? '<label data-cw-builder-group><span>每项组合</span><select data-cw-builder-group-size aria-label="每项组合任务使用的平铺图数量"><option value="2">2 张 SKU</option><option value="3">3 张 SKU</option><option value="4">4 张 SKU</option></select></label>' : ''}<button type="button" data-cw-builder-action="edit-target">修改数量</button><button type="button" data-cw-builder-action="select-page">本页全选</button><button type="button" data-cw-builder-action="clear">取消选择</button><button class="primary" type="button" data-cw-builder-action="confirm">确认建卡</button><button type="button" data-cw-builder-action="cancel">退出</button>`;
+    header.insertAdjacentElement('afterend', bar);
+  }
+  return { column, header, toggle, bar };
+}
+
+function renderCwSourceBuilder(stage) {
+  const builder = ensureCwSourceBuilder(stage);
+  if (!builder) return;
+  const active = Boolean(state.childrenwearSourceBuilderModes?.[stage]);
+  const selection = cwSourceBuilderSelection(stage);
+  builder.bar.hidden = !active;
+  builder.toggle.classList.toggle('active', active);
+  builder.toggle.textContent = active ? '退出批量建卡' : '批量建卡';
+  const target = builder.bar.querySelector('[data-cw-builder-target]');
+  if (target) target.textContent = String(cwSourceBuilderTargetCount(stage));
+  const count = builder.bar.querySelector('[data-cw-builder-count]');
+  if (count) count.textContent = String(selection.size);
+  const roleCounts = new Map();
+  for (const item of selection.values()) roleCounts.set(item.role, (roleCounts.get(item.role) || 0) + 1);
+  const roleSummary = builder.bar.querySelector('[data-cw-builder-role-counts]');
+  if (roleSummary) roleSummary.innerHTML = roleCounts.size
+    ? [...roleCounts].map(([role, amount]) => `<em>${escapeHtml(cwBuilderRoleLabel(role))} <b>${amount}</b></em>`).join('')
+    : '尚未选择素材（可直接新建空卡片）';
+  const group = builder.bar.querySelector('[data-cw-builder-group]');
+  if (group) group.hidden = false;
+  const groupSize = builder.bar.querySelector('[data-cw-builder-group-size]');
+  if (groupSize) groupSize.value = String(state.childrenwearCombinationBuilderGroupSize || 2);
+}
+
+function decorateCwSourceBuilderSelection(stage, grid) {
+  renderCwSourceBuilder(stage);
+  const selection = cwSourceBuilderSelection(stage);
+  grid?.querySelectorAll('[data-cw-source-path]').forEach(item => {
+    const key = `${item.dataset.cwSourceRole}\u0000${item.dataset.cwSourcePath}`;
+    const selected = selection.has(key);
+    item.classList.toggle('builder-selected', selected);
+    item.setAttribute('aria-pressed', selected ? 'true' : 'false');
+  });
+}
+
+function toggleCwSourceBuilderAsset(stage, role, path) {
+  const selection = cwSourceBuilderSelection(stage);
+  const key = `${role}\u0000${path}`;
+  if (selection.has(key)) selection.delete(key);
+  else selection.set(key, { role, path });
+  renderCwSource(stage);
+}
+
+function cwBuilderEntries(stage, role) {
+  return [...cwSourceBuilderSelection(stage).values()].filter(entry => entry.role === role);
+}
+
+function cwBuilderRoleSources(stage, role) {
+  const entries = cwBuilderEntries(stage, role);
+  const sources = entries.map(entry => cwFindSource(stage, role, entry.path)).filter(Boolean);
+  if (sources.length !== entries.length) throw new Error(`${cwBuilderRoleLabel(role)}中有素材已失效，请刷新素材后重新选择`);
+  return sources;
+}
+
+function cwDistributeBuilderSources(stage, role, targetCount) {
+  const sources = cwBuilderRoleSources(stage, role);
+  if (!sources.length) return Array.from({ length: targetCount }, () => null);
+  if (sources.length === 1) return Array.from({ length: targetCount }, () => sources[0]);
+  if (sources.length === targetCount) return sources;
+  throw new Error(`${cwBuilderRoleLabel(role)}已选 ${sources.length} 张；计划 ${targetCount} 张任务时，请选 1 张供全部复用，或选 ${targetCount} 张按顺序对应`);
+}
+
+function cwDistributeCombinationMasters(targetCount) {
+  const groupSize = Math.max(2, Math.min(4, Number(state.childrenwearCombinationBuilderGroupSize) || 2));
+  const sources = cwBuilderRoleSources('combination', 'master');
+  if (!sources.length) return Array.from({ length: targetCount }, () => []);
+  if (sources.length === groupSize) return Array.from({ length: targetCount }, () => [...sources]);
+  if (sources.length === targetCount * groupSize) return Array.from({ length: targetCount }, (_, index) => sources.slice(index * groupSize, (index + 1) * groupSize));
+  throw new Error(`平铺图已选 ${sources.length} 张；${targetCount} 张组合任务、每项 ${groupSize} 张 SKU 时，请选 ${groupSize} 张供全部复用，或选 ${targetCount * groupSize} 张依次分组`);
+}
+
+function cwSetBuilderDraftSource(draft, role, source) {
+  if (!source) return;
+  draft[role] = source;
+  cwRememberSelection(draft, role, source);
+}
+
+function createCwDraftsFromBuilder(stage, targetCount) {
+  const created = [];
+  let distributed = {};
+  if (stage === 'master') distributed = {
+    real: cwDistributeBuilderSources(stage, 'real', targetCount),
+    reference: cwDistributeBuilderSources(stage, 'reference', targetCount)
+  };
+  if (stage === 'model') distributed = {
+    master: cwDistributeBuilderSources(stage, 'master', targetCount),
+    reference: cwDistributeBuilderSources(stage, 'reference', targetCount),
+    existingModel: cwDistributeBuilderSources(stage, 'existingModel', targetCount),
+    scene: cwDistributeBuilderSources(stage, 'scene', targetCount)
+  };
+  if (stage === 'combination') distributed = {
+    masters: cwDistributeCombinationMasters(targetCount),
+    reference: cwDistributeBuilderSources(stage, 'reference', targetCount)
+  };
+
+  for (let index = 0; index < targetCount; index += 1) {
+    const draft = cwNewDraft(stage);
+    created.push(draft);
+    if (stage === 'master') {
+      cwSetBuilderDraftSource(draft, 'real', distributed.real[index]);
+      cwSetBuilderDraftSource(draft, 'reference', distributed.reference[index]);
+      const source = distributed.real[index];
+      const style = source?.folder && source.folder !== '根目录' ? source.folder : '童装款式';
+      draft.styleName = style;
+      draft.taskCode = cwNextTaskCode();
+      draft.title = cwTaskDisplayName(style, draft.taskCode);
+    } else if (stage === 'model') {
+      const operation = state.childrenwearModelOperationType === 'scene_only' ? 'scene_only' : 'dress';
+      draft.operationType = operation;
+      draft.backgroundMode = state.childrenwearModelBackgroundMode || (operation === 'scene_only' ? 'solid' : 'model_reference');
+      draft.solidBackgroundColor = cwNormalizeHexColor(state.childrenwearModelSolidColor);
+      if (operation === 'scene_only') {
+        cwSetBuilderDraftSource(draft, 'existingModel', distributed.existingModel[index]);
+        draft.taskFolder = distributed.existingModel[index]?.taskFolder || '';
+        draft.title = distributed.existingModel[index]?.taskName || distributed.existingModel[index]?.name || '模特图换场景';
+      } else {
+        cwSetBuilderDraftSource(draft, 'master', distributed.master[index]);
+        cwSetBuilderDraftSource(draft, 'reference', distributed.reference[index]);
+        draft.taskFolder = distributed.master[index]?.taskFolder || '';
+        draft.title = distributed.master[index]?.taskName || distributed.master[index]?.name || '模特上身图任务';
+      }
+      cwSetBuilderDraftSource(draft, 'scene', distributed.scene[index]);
+      draft.promptRoute = cwModelPromptRoute(draft);
+    } else {
+      draft.masters = distributed.masters[index] || [];
+      draft.selectionHistory = draft.masters.map(source => ({ role: 'master-item', path: source.path }));
+      cwSetBuilderDraftSource(draft, 'reference', distributed.reference[index]);
+      const participants = draft.masters.map(item => item.taskName || item.name).filter(Boolean);
+      draft.title = participants.length ? `${participants[0]}｜多组合SKU：${participants.join(' + ')}` : '多 SKU 组合任务';
+    }
+    draft.status = cwDraftReady(draft) ? '待生成' : '待补齐素材';
+    draft.selected = true;
+    draft.updatedAt = new Date().toISOString();
+  }
+
+  const createdIds = new Set(created.map(draft => draft.id));
+  state.childrenwearDrafts[stage] = [...created, ...state.childrenwearDrafts[stage].filter(draft => !createdIds.has(draft.id))];
+  state.childrenwearActiveDraft[stage] = created[0]?.id || '';
+  return created.length;
+}
+
+async function confirmCwSourceBuilder(stage) {
+  const selection = cwSourceBuilderSelection(stage);
+  const targetCount = cwSourceBuilderTargetCount(stage);
+  if (!selection.size) {
+    const confirmed = await brandConfirm(`当前没有选择素材，将新建 ${targetCount} 张空任务卡片，稍后可逐张补充素材。是否继续？`, { title: '新建空任务卡片', confirmText: `新建 ${targetCount} 张` });
+    if (!confirmed) return;
+  }
+  let created = 0;
+  try { created = createCwDraftsFromBuilder(stage, targetCount); }
+  catch (error) { return toast(errorText(error), true); }
+  selection.clear();
+  state.childrenwearSourceBuilderModes[stage] = false;
+  state.childrenwearQueueFilters[stage] = 'all';
+  state.childrenwearQueueDateFilters[stage] = 'all';
+  state.childrenwearQueuePages[stage] = 1;
+  renderCwSource(stage);
+  renderCwQueue(stage);
+  toast(`已新建 ${created} 张独立任务卡片`);
+}
+
 function renderCwSource(stage) {
+  if (stage === 'model') renderCwModelControls();
+  renderCwSourceBuilder(stage);
   const source = cwLibrarySource(stage);
+  const externalActions = $(`[data-cw-external-flat-actions="${stage}"]`);
+  if (externalActions) externalActions.hidden = !source.externalFlat;
   const folders = $(source.folders);
   const grid = $(source.grid);
   if (!folders || !grid) return;
+  if (source.generatedModel) {
+    const items = state.childrenwearTasks.flatMap(task => (task.modelOutputs || []).map(output => ({
+      path: output.path,
+      url: output.url,
+      thumbnailUrl: output.thumbnailUrl,
+      previewUrl: output.previewUrl,
+      name: output.taskName || task.taskName || '已有模特图',
+      folder: task.styleName || task.category || '',
+      taskFolder: task.folder,
+      taskName: output.taskName || task.taskName || '',
+      outputId: output.id
+    }))).filter(item => item.path && item.url);
+    folders.innerHTML = `<span>全部已有模特图</span><b>${items.length} 张可用</b>`;
+    grid.innerHTML = cwPagedSourceMarkup(stage, items, item => `<button class="cw-source-item" type="button" data-cw-source-path="${escapeHtml(item.path)}" data-cw-source-role="existingModel"><img loading="lazy" decoding="async" src="${escapeHtml(item.thumbnailUrl || item.url)}" data-preview-src="${escapeHtml(item.previewUrl || item.url)}" alt="${escapeHtml(item.name)}"><span><b>${escapeHtml(item.name)}</b><small>${escapeHtml(item.folder)} · 可直接换场景</small></span></button>`, '<div class="cw-source-empty">还没有已生成模特图。请先完成一张模特上身图。</div>');
+    decorateCwSourceBuilderSelection(stage, grid);
+    return;
+  }
   if (source.generated) {
-    const items = state.childrenwearTasks.filter(task => task.masterPath && task.masterUrl).map(task => ({ path: task.masterPath, url: task.masterUrl, thumbnailUrl: task.masterThumbnailUrl, previewUrl: task.masterPreviewUrl, name: task.taskName || task.category || '已生成平铺图', folder: task.material || '', taskFolder: task.folder, taskName: task.taskName || task.category || '', reviewed: Boolean(task.masterApproved) }));
+    const items = state.childrenwearTasks.filter(task => task.type !== 'external_flat' && task.masterPath && task.masterUrl).map(task => ({ path: task.masterPath, url: task.masterUrl, thumbnailUrl: task.masterThumbnailUrl, previewUrl: task.masterPreviewUrl, name: task.taskName || task.category || '已生成平铺图', folder: task.material || '', taskFolder: task.folder, taskName: task.taskName || task.category || '', reviewed: Boolean(task.masterApproved) }));
     folders.innerHTML = `<span>全部已生成平铺图</span><b>${items.length} 张可用</b>`;
-    grid.innerHTML = items.length ? items.map(item => `<button class="cw-source-item" type="button" data-cw-source-path="${escapeHtml(item.path)}" data-cw-source-role="master"><img loading="lazy" decoding="async" src="${escapeHtml(item.thumbnailUrl || item.url)}" data-preview-src="${escapeHtml(item.previewUrl || item.url)}" alt="${escapeHtml(item.name)}"><span><b>${escapeHtml(item.name)}</b><small>${escapeHtml(item.folder)} · ${item.reviewed ? '平铺已通过' : '平铺待审核'}</small></span></button>`).join('') : '<div class="cw-source-empty">还没有已生成平铺图。请先在 02 生成，审核状态不会阻塞 03、04 使用。</div>';
+    grid.innerHTML = cwPagedSourceMarkup(stage, items, item => `<button class="cw-source-item" type="button" data-cw-source-path="${escapeHtml(item.path)}" data-cw-source-role="master"><img loading="lazy" decoding="async" src="${escapeHtml(item.thumbnailUrl || item.url)}" data-preview-src="${escapeHtml(item.previewUrl || item.url)}" alt="${escapeHtml(item.name)}"><span><b>${escapeHtml(item.name)}</b><small>${escapeHtml(item.folder)} · ${item.reviewed ? '平铺已通过' : '平铺待审核'}</small></span></button>`, '<div class="cw-source-empty">还没有已生成平铺图。请先在 02 生成，审核状态不会阻塞 03、04 使用。</div>');
+    decorateCwSourceBuilderSelection(stage, grid);
     return;
   }
   const active = state.childrenwearLibraryFolder[source.key] || 'root';
-  const libraryFolders = state.childrenwearProductionFolders[source.key] || [];
+  const directFlatLaySource = CHILDRENWEAR_DIRECT_FLAT_LAY_KEYS.has(source.key);
+  const libraryFolders = directFlatLaySource
+    ? (state.childrenwearLibraryFolders[source.key] || [])
+    : (state.childrenwearProductionFolders[source.key] || []);
   folders.innerHTML = libraryFolders.length ? libraryFolders.map(folder => `<button class="${folder.id === active ? 'active' : ''}" type="button" data-cw-source-folder="${escapeHtml(folder.id)}" data-cw-source-key="${source.key}">${escapeHtml(folder.name)}<small>${Number(folder.count) || 0}</small></button>`).join('') : '<span>暂无文件夹</span>';
-  const items = state.childrenwearProductionLibraries[source.key] || [];
+  const items = directFlatLaySource
+    ? (state.childrenwearLibraries[source.key] || [])
+    : (state.childrenwearProductionLibraries[source.key] || []);
   const fixedPath = stage === 'model' && source.role === 'reference' ? state.childrenwearFixedModelReference?.path : '';
-  grid.innerHTML = items.length ? items.map(item => `<button class="cw-source-item${fixedPath && item.path === fixedPath ? ' fixed-model' : ''}" type="button" data-cw-source-path="${escapeHtml(item.path)}" data-cw-source-role="${source.role}"><img loading="lazy" decoding="async" src="${escapeHtml(item.thumbnailUrl || item.url)}" data-preview-src="${escapeHtml(item.previewUrl || item.url)}" alt="${escapeHtml(item.name)}"><span><b>${escapeHtml(item.name)}</b><small>${escapeHtml(item.folder || '')}${fixedPath && item.path === fixedPath ? ' · 固定模特' : ''}</small></span></button>`).join('') : '<div class="cw-source-empty">当前文件夹没有已完成 AI 分析的素材，请先到 01 素材资产完成分析。</div>';
+  const directHint = source.externalFlat ? '外部导入 · 无需 02 审核' : '可直接生成';
+  grid.innerHTML = cwPagedSourceMarkup(stage, items, item => `<button class="cw-source-item${fixedPath && item.path === fixedPath ? ' fixed-model' : ''}" type="button" data-cw-source-path="${escapeHtml(item.path)}" data-cw-source-role="${source.role}"><img loading="lazy" decoding="async" src="${escapeHtml(item.thumbnailUrl || item.url)}" data-preview-src="${escapeHtml(item.previewUrl || item.url)}" alt="${escapeHtml(item.name)}"><span><b>${escapeHtml(item.name)}</b><small>${escapeHtml(item.folder || '')} · ${directHint}${fixedPath && item.path === fixedPath ? ' · 固定模特' : ''}</small></span></button>`, `<div class="cw-source-empty">${source.externalFlat ? '还没有外部平铺图，可在上方添加文件或批量导入文件夹。' : '当前文件夹没有素材，请先到 01 素材资产导入。'}</div>`);
+  decorateCwSourceBuilderSelection(stage, grid);
   if (stage === 'model') renderFixedModelControl();
 }
 
 function cwFindSource(stage, role, pathValue) {
+  if (role === 'existingModel') {
+    for (const task of state.childrenwearTasks) {
+      const output = (task.modelOutputs || []).find(item => item.path === pathValue);
+      if (output) return { path: output.path, url: output.url, thumbnailUrl: output.thumbnailUrl, previewUrl: output.previewUrl, name: output.taskName || task.taskName || '已有模特图', folder: task.styleName || task.category || '', taskFolder: task.folder, taskName: output.taskName || task.taskName || '', outputId: output.id };
+    }
+    return null;
+  }
   if (role === 'master') {
     const task = state.childrenwearTasks.find(item => item.masterPath === pathValue);
-    return task ? { path: task.masterPath, url: task.masterUrl, thumbnailUrl: task.masterThumbnailUrl, previewUrl: task.masterPreviewUrl, name: task.taskName || task.category || '已生成平铺图', folder: task.material || '', taskFolder: task.folder, taskName: task.taskName || task.category || '' } : null;
+    if (task) return { path: task.masterPath, url: task.masterUrl, thumbnailUrl: task.masterThumbnailUrl, previewUrl: task.masterPreviewUrl, name: task.taskName || task.category || '已生成平铺图', folder: task.material || '', taskFolder: task.folder, taskName: task.taskName || task.category || '', externalFlat: false };
+    const external = (state.childrenwearLibraries.childrenwearFlatAssetsPath || []).find(item => item.path === pathValue);
+    return external ? { ...external, taskFolder: '', taskName: external.name || '外部平铺图', externalFlat: true } : null;
   }
-  const source = cwLibrarySource(stage);
-  return (state.childrenwearProductionLibraries[source.key] || []).find(item => item.path === pathValue) || null;
+  const keyByStageRole = {
+    'master:real': 'childrenwearRealAssetsPath',
+    'master:reference': 'childrenwearReferenceAssetsPath',
+    'model:reference': 'childrenwearModelAssetsPath',
+    'model:scene': 'childrenwearSceneAssetsPath',
+    'model:master': 'childrenwearFlatAssetsPath',
+    'combination:master': 'childrenwearFlatAssetsPath',
+    'combination:reference': 'childrenwearCombinationAssetsPath'
+  };
+  const key = keyByStageRole[`${stage}:${role}`] || cwLibrarySource(stage).key;
+  const items = CHILDRENWEAR_DIRECT_FLAT_LAY_KEYS.has(key)
+    ? (state.childrenwearLibraries[key] || [])
+    : (state.childrenwearProductionLibraries[key] || []);
+  return items.find(item => item.path === pathValue) || null;
 }
 
 function cwRememberSelection(draft, role, source) {
@@ -7531,7 +8459,7 @@ function cwRemoveLastSelectedSource(stage, draft) {
     if (stage === 'combination' && draft.reference?.path) { draft.reference = null; removed = true; }
     else if (stage === 'combination' && draft.masters?.length) { draft.masters.pop(); removed = true; }
     else {
-      const fallback = stage === 'master' ? ['reference', 'real'] : ['scene', 'reference', 'master'];
+      const fallback = stage === 'master' ? ['reference', 'real'] : ['scene', 'existingModel', 'reference', 'master'];
       const role = fallback.find(key => draft[key]?.path);
       if (role) { draft[role] = null; removed = true; }
     }
@@ -7543,7 +8471,8 @@ function cwRemoveLastSelectedSource(stage, draft) {
   return true;
 }
 
-function addCwSource(stage, role, pathValue) {
+function addCwSource(stage, role, pathValue, options = {}) {
+  const shouldRender = options.render !== false;
   const source = cwFindSource(stage, role, pathValue);
   if (!source) return;
   let draft;
@@ -7553,13 +8482,26 @@ function addCwSource(stage, role, pathValue) {
     draft = cwOldestDraft(stage, item => !item[role]?.path) || cwNewDraft(stage);
     draft[role] = source;
   } else if (stage === 'model') {
-    if (role === 'scene') {
+    if (role === 'existingModel') {
+      state.childrenwearModelOperationType = 'scene_only';
+      if (state.childrenwearModelBackgroundMode === 'model_reference') state.childrenwearModelBackgroundMode = 'solid';
+      draft = cwOldestDraft(stage, item => item.operationType === 'scene_only' && !item.existingModel?.path) || cwNewDraft(stage);
+      draft.operationType = 'scene_only';
+      draft.backgroundMode = state.childrenwearModelBackgroundMode;
+      draft.solidBackgroundColor = state.childrenwearModelSolidColor;
+      draft.existingModel = source;
+      draft.taskFolder = source.taskFolder;
+      draft.title = source.taskName || source.name || '模特图换场景';
+    } else if (role === 'scene') {
       state.childrenwearModelBackgroundMode = 'scene_reference';
-      draft = cwOldestDraft(stage, item => item.backgroundMode === 'scene_reference' && !item.scene?.path) || cwDraft(stage);
+      draft = cwOldestDraft(stage, item => item.operationType === state.childrenwearModelOperationType && item.backgroundMode === 'scene_reference' && !item.scene?.path) || cwDraft(stage);
+      draft.operationType = state.childrenwearModelOperationType;
       draft.backgroundMode = 'scene_reference';
       draft.scene = source;
     } else {
-      draft = cwOldestDraft(stage, item => !item[role]?.path) || cwNewDraft(stage);
+      state.childrenwearModelOperationType = 'dress';
+      draft = cwOldestDraft(stage, item => item.operationType !== 'scene_only' && !item[role]?.path) || cwNewDraft(stage);
+      draft.operationType = 'dress';
       draft[role] = source;
       if (role === 'reference' && state.childrenwearFixedModelEnabled) {
         state.childrenwearFixedModelReference = source;
@@ -7574,12 +8516,17 @@ function addCwSource(stage, role, pathValue) {
         renderFixedModelControl();
       }
       draft.backgroundMode ||= state.childrenwearModelBackgroundMode || 'model_reference';
+      draft.solidBackgroundColor ||= state.childrenwearModelSolidColor;
     }
   } else if (role === 'reference') {
     draft = cwOldestDraft(stage, item => !item.reference?.path) || cwNewDraft(stage);
     draft.reference = source;
   } else {
     draft = cwDraft(stage);
+    // 组合任务在“至少两张 SKU + 组合参考图”齐全后即封单。
+    // 之后再点左侧平铺图，应像其他生产板块一样新建卡片，避免误改已配好的组合。
+    // 如需 3～4 张组合，应先连续选择全部 SKU，最后再选择组合参考图。
+    if (cwCombinationDraftIsSealed(draft)) draft = cwNewDraft(stage);
     const exists = draft.masters.some(item => item.path === source.path);
     if (exists) {
       draft.masters = draft.masters.filter(item => item.path !== source.path);
@@ -7611,10 +8558,14 @@ function addCwSource(stage, role, pathValue) {
   draft.status = cwDraftReady(draft) ? '待生成' : '待补齐素材';
   draft.selected = true;
   draft.updatedAt = new Date().toISOString();
-  renderCwQueue(stage);
+  if (stage === 'model') {
+    persistFixedModelReferencePreference();
+    if (shouldRender) renderCwModelControls();
+  }
+  if (shouldRender) renderCwQueue(stage);
 }
 
-function setChildrenwearProductionTab(tab) {
+function activateChildrenwearProductionTab(tab) {
   const next = CW_STAGE_META[tab] ? tab : 'master';
   state.childrenwearProductionTab = next;
   $$('[data-childrenwear-production-panel]').forEach(panel => { panel.hidden = panel.dataset.childrenwearProductionPanel !== next; });
@@ -7623,26 +8574,115 @@ function setChildrenwearProductionTab(tab) {
     button.classList.toggle('active', active);
     if (active) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current');
   });
+  return next;
+}
+
+function setChildrenwearProductionTab(tab) {
+  const next = activateChildrenwearProductionTab(tab);
+  if (!state.childrenwearGenerationPromptsLoaded) void loadChildrenwearGenerationPrompts();
   renderCwSource(next);
   renderCwQueue(next);
 }
 
-function cwDraftGenerationPayload(stage, draft) {
+const CW_STAGE_PROMPT_IDS = Object.freeze({
+  master: 'childrenwearMasterGeneration',
+  model: 'childrenwearModelGeneration',
+  combination: 'childrenwearCombinationGeneration'
+});
+
+function renderChildrenwearGenerationPrompts() {
+  // 02/03/04 只读取当前账号保存的提示词；编辑统一在 06 提示词设置完成。
+}
+
+async function loadChildrenwearGenerationPrompts(options = {}) {
+  try {
+    const settings = await window.caishen.getChildrenwearGenerationPromptSettings();
+    for (const [stage, id] of Object.entries(CW_STAGE_PROMPT_IDS)) {
+      state.childrenwearGenerationPrompts[stage] = String(settings.prompts?.find(prompt => prompt.id === id)?.value || '');
+    }
+    state.childrenwearGenerationPromptRoutes = Object.fromEntries((settings.routes || []).map(route => [route.id, String(route.value || '')]));
+    state.childrenwearGenerationPromptsLoaded = true;
+    renderChildrenwearGenerationPrompts();
+    return state.childrenwearGenerationPrompts;
+  } catch (error) {
+    if (!options.silent) toast(`提示词读取失败：${errorText(error)}`, true);
+    return state.childrenwearGenerationPrompts;
+  }
+}
+
+async function saveChildrenwearGenerationPrompt(stage) {
+  const id = CW_STAGE_PROMPT_IDS[stage];
+  const input = document.querySelector(`[data-cw-stage-prompt-input="${stage}"]`);
+  const value = String(input?.value || '').trim();
+  if (!id || !value) return toast('提示词不能为空；填写并保存后才能生成图片', true);
+  const button = document.querySelector(`[data-cw-stage-prompt-save="${stage}"]`);
+  if (button) button.disabled = true;
+  try {
+    await window.caishen.saveChildrenwearGenerationPromptSetting(id, value);
+    state.childrenwearGenerationPrompts[stage] = value;
+    state.childrenwearGenerationPromptsLoaded = true;
+    renderChildrenwearGenerationPrompts();
+    toast(`${CW_STAGE_META[stage].label}提示词已保存，新任务立即生效`);
+  } catch (error) {
+    toast(`提示词保存失败：${errorText(error)}`, true);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+async function promptForCwRegeneration(stage, routeId = '') {
+  if (!state.childrenwearGenerationPromptsLoaded) await loadChildrenwearGenerationPrompts();
+  const saved = String(stage === 'model' && routeId ? state.childrenwearGenerationPromptRoutes[routeId] : state.childrenwearGenerationPrompts[stage] || '').trim();
+  if (!saved) {
+    toast(`请先到“06 提示词设置”填写并保存${CW_STAGE_META[stage].label}提示词`, true);
+    return null;
+  }
+  const routeLabel = stage === 'model' ? state.promptSettings?.promptRoutes?.find(item => item.id === routeId)?.label : '';
+  const value = await brandPrompt(`重新生成${routeLabel || CW_STAGE_META[stage].label}`, saved, {
+    message: '下方是本板块已保存的提示词。可只为本次任务临时修改；提交后不会覆盖已保存版本。',
+    inputLabel: '本次实际发送的提示词',
+    multiline: true,
+    confirmText: '按此提示词重新生成'
+  });
+  const prompt = String(value ?? '').trim();
+  if (value === null) return null;
+  if (!prompt) {
+    toast('本次重新生成提示词不能为空', true);
+    return null;
+  }
+  return prompt;
+}
+
+function cwDraftGenerationPayload(stage, draft, promptOverride = '') {
   if (stage === 'master') return {
     folder: draft.taskFolder || '', realPhotoPath: draft.real.path, referencePath: draft.reference.path,
     taskName: draft.title, taskCode: draft.taskCode, category: draft.real.folder || '童装',
-    material: draft.real.folder || '以实拍图为准', craft: '', extraInstruction: ''
+    material: draft.real.folder || '以实拍图为准', craft: '', extraInstruction: '', promptOverride,
+    currentResultPath: draft.result?.path || ''
   };
-  if (stage === 'model') return {
-    folder: draft.master.taskFolder, taskName: draft.title,
-    modelReferencePath: draft.reference.path,
-    backgroundMode: draft.backgroundMode || 'model_reference',
-    sceneReferencePath: draft.backgroundMode === 'scene_reference' ? draft.scene?.path || '' : '',
-    extraInstruction: ''
-  };
+  const fixedModel = cwHydratedFixedModelReference();
+  if (stage === 'model') {
+    const operationType = draft.operationType === 'scene_only' ? 'scene_only' : 'dress';
+    return {
+      folder: operationType === 'scene_only' ? draft.existingModel.taskFolder : draft.master.taskFolder,
+      externalMasterPath: operationType === 'dress' && draft.master.externalFlat ? draft.master.path : '',
+      taskName: draft.title,
+      operationType,
+      sourceModelPath: operationType === 'scene_only' ? draft.existingModel.path : '',
+      sourceModelOutputId: operationType === 'scene_only' ? draft.existingModel.outputId || '' : '',
+      modelReferencePath: operationType === 'dress' ? draft.reference.path : '',
+      useFixedModel: operationType === 'dress' && Boolean(state.childrenwearFixedModelEnabled && fixedModel?.path && fixedModel.path === draft.reference.path),
+      backgroundMode: draft.backgroundMode || (operationType === 'scene_only' ? 'solid' : 'model_reference'),
+      solidBackgroundColor: cwNormalizeHexColor(draft.solidBackgroundColor || state.childrenwearModelSolidColor),
+      sceneReferencePath: draft.backgroundMode === 'scene_reference' ? draft.scene?.path || '' : '',
+      promptRoute: cwModelPromptRoute(draft),
+      extraInstruction: '', promptOverride, currentResultPath: draft.result?.path || ''
+    };
+  }
   return {
     folder: draft.taskFolder || draft.masters[0]?.taskFolder || '', taskName: draft.title,
-    masterPaths: draft.masters.map(item => item.path), combinationReferencePath: draft.reference.path
+    masterPaths: draft.masters.map(item => item.path), combinationReferencePath: draft.reference.path, promptOverride,
+    currentResultPath: draft.result?.path || ''
   };
 }
 
@@ -7657,12 +8697,20 @@ function applyCwDraftGenerationResult(stage, draft, result) {
   } else {
     const output = (stage === 'model' ? result.modelOutputs : result.combinationOutputs)?.at(-1);
     draft.outputId = output?.id;
+    if (stage === 'model' && output) {
+      draft.operationType = output.operationType === 'scene_only' ? 'scene_only' : 'dress';
+      draft.backgroundMode = output.backgroundMode || (draft.operationType === 'scene_only' ? 'solid' : 'model_reference');
+      draft.solidBackgroundColor = cwNormalizeHexColor(output.solidBackgroundColor || draft.solidBackgroundColor);
+      draft.promptRoute = output.promptRoute || cwModelPromptRoute(draft);
+      draft.useFixedModel = Boolean(output.useFixedModel);
+    }
     draft.result = output ? {
       path: output.path, url: output.url, thumbnailUrl: output.thumbnailUrl, previewUrl: output.previewUrl,
-      name: stage === 'model' ? '模特图候选' : '组合图候选'
+      name: stage === 'model' ? (output.operationType === 'scene_only' ? '换场景结果' : '模特图候选') : '组合图候选'
     } : null;
   }
   draft.status = stage === 'master' ? '等待成品审核' : '已完成';
+  draft.activeOperation = '';
   draft.progress = stage === 'master' ? '平铺图已生成，请在当前页面高清审核' : '图片已生成，可直接查看、下载或用于后续流程';
   draft.updatedAt = new Date().toISOString();
 }
@@ -7696,9 +8744,11 @@ function applyCwBatchTaskResult(stage, draft, result) {
 
 async function runCwDraft(stage, draft, options = {}) {
   if (!cwDraftReady(draft) || (draft.status === '生成中' && !options.prepared)) return;
+  const operation = options.operation || (options.promptOverride ? 'regeneration' : 'generation');
   if (!options.prepared) {
     draft.status = '生成中';
-    draft.progress = '正在提交生成任务…';
+    draft.activeOperation = operation;
+    draft.progress = operation === 'regeneration' ? '正在提交整张重新生成任务…' : '正在提交首次生成任务…';
     draft.updatedAt = new Date().toISOString();
   }
   if (!options.deferRender) renderCwQueue(stage);
@@ -7708,7 +8758,7 @@ async function runCwDraft(stage, draft, options = {}) {
       : stage === 'model'
         ? window.caishen.generateChildrenwearModel
         : window.caishen.generateChildrenwearCombination;
-    const result = await generator(cwDraftGenerationPayload(stage, draft), progress => {
+    const result = await generator(cwDraftGenerationPayload(stage, draft, options.promptOverride), progress => {
       draft.progress = progress.message || `正在生成${CW_STAGE_META[stage].label}`;
       updateCwQueueProgress(stage, draft);
     });
@@ -7720,6 +8770,7 @@ async function runCwDraft(stage, draft, options = {}) {
     return true;
   } catch (error) {
     draft.status = '失败';
+    draft.activeOperation = '';
     draft.progress = childrenwearFriendlyError(error);
     draft.updatedAt = new Date().toISOString();
     if (!options.silent) toast(childrenwearFriendlyError(error), true);
@@ -7739,6 +8790,15 @@ async function runCwBatch(stage, mode = 'generate') {
     return mode === 'regenerate' ? (hasResult || item.status === '失败' || cwDraftStatusKey(item) === 'needs_regeneration') : (!hasResult && cwDraftStatusKey(item) === 'ready');
   });
   if (!drafts.length) return toast(mode === 'regenerate' ? '选中任务中没有可重新生成的结果或失败任务' : '选中任务中没有尚未出图且素材齐全的任务', true);
+  const promptOverrides = new Map();
+  if (mode === 'regenerate') {
+    const routes = stage === 'model' ? [...new Set(drafts.map(draft => cwModelPromptRoute(draft)))] : [''];
+    for (const route of routes) {
+      const value = await promptForCwRegeneration(stage, route);
+      if (value === null) return;
+      promptOverrides.set(route, value);
+    }
+  }
   const skipped = selected.length - drafts.length;
   const confirmed = await brandConfirm(
     `${mode === 'regenerate' ? '重新生成' : '首次生成'} ${drafts.length} 个任务？${skipped > 0 ? `\n\n已自动跳过 ${skipped} 个不符合本次操作的选中任务。` : ''}`,
@@ -7747,7 +8807,8 @@ async function runCwBatch(stage, mode = 'generate') {
   if (!confirmed) return;
   for (const draft of drafts) {
     draft.status = '生成中';
-    draft.progress = '正在提交整批任务…';
+    draft.activeOperation = mode === 'regenerate' ? 'regeneration' : 'generation';
+    draft.progress = mode === 'regenerate' ? '正在提交批量重新生成任务…' : '正在提交批量首次生成任务…';
     draft.updatedAt = new Date().toISOString();
   }
   renderCwQueue(stage);
@@ -7767,6 +8828,7 @@ async function runCwBatch(stage, mode = 'generate') {
       if (!draft) return;
       if (progress.itemState === 'failed') {
         draft.status = '失败';
+        draft.activeOperation = '';
         draft.progress = childrenwearFriendlyError(progress.itemError || progress.message);
         draft.updatedAt = new Date().toISOString();
       } else if (progress.itemState !== 'completed') {
@@ -7776,7 +8838,7 @@ async function runCwBatch(stage, mode = 'generate') {
     };
     const batch = await window.caishen.generateChildrenwearBatch({
       stage,
-      items: drafts.map(draft => cwDraftGenerationPayload(stage, draft))
+      items: drafts.map(draft => cwDraftGenerationPayload(stage, draft, promptOverrides.get(stage === 'model' ? cwModelPromptRoute(draft) : '') || ''))
     }, progressHandler);
     for (const record of batch.results || []) {
       const draft = drafts[record.index];
@@ -7785,6 +8847,7 @@ async function runCwBatch(stage, mode = 'generate') {
         if (!processedCompletedIndexes.has(Number(record.index))) applyCwBatchTaskResult(stage, draft, record.value);
       } else {
         draft.status = '失败';
+        draft.activeOperation = '';
         draft.progress = childrenwearFriendlyError(record.error);
         draft.updatedAt = new Date().toISOString();
         updateCwQueueProgress(stage, draft);
@@ -7797,6 +8860,7 @@ async function runCwBatch(stage, mode = 'generate') {
   } catch (error) {
     for (const draft of drafts.filter(item => item.status === '生成中')) {
       draft.status = '失败';
+      draft.activeOperation = '';
       draft.progress = childrenwearFriendlyError(error);
       draft.updatedAt = new Date().toISOString();
       updateCwQueueProgress(stage, draft);
@@ -7855,8 +8919,8 @@ function cwReviewItems() {
   for (const task of state.childrenwearTasks) {
     const currentMasterHistory = (task.masterHistory || []).find(item => item.path === task.masterPath) || (task.masterHistory || []).at(-1) || {};
     const masterMetrics = Object.keys(task.masterGeneration || {}).length ? task.masterGeneration : currentMasterHistory;
-    if (task.masterPath && task.masterUrl) items.push({ id: `master:${task.folder}`, stage: 'master', stageLabel: '平铺母版图', folder: task.folder, outputId: '', path: task.masterPath, url: task.masterUrl, thumbnailUrl: task.masterThumbnailUrl, previewUrl: task.masterPreviewUrl, approved: Boolean(task.masterApproved), task, output: masterMetrics, createdAt: masterMetrics.completedAt || currentMasterHistory.createdAt || task.createdAt });
-    for (const output of task.modelOutputs || []) items.push({ id: `model:${task.folder}:${output.id}`, stage: 'model', stageLabel: '模特上身图', folder: task.folder, outputId: output.id, path: output.path, url: output.url, thumbnailUrl: output.thumbnailUrl, previewUrl: output.previewUrl, approved: false, reviewRequired: false, task, output, createdAt: output.createdAt });
+    if (task.type !== 'external_flat' && task.masterPath && task.masterUrl) items.push({ id: `master:${task.folder}`, stage: 'master', stageLabel: '平铺母版图', folder: task.folder, outputId: '', path: task.masterPath, url: task.masterUrl, thumbnailUrl: task.masterThumbnailUrl, previewUrl: task.masterPreviewUrl, approved: Boolean(task.masterApproved), task, output: masterMetrics, createdAt: masterMetrics.completedAt || currentMasterHistory.createdAt || task.createdAt });
+    for (const output of task.modelOutputs || []) items.push({ id: `model:${task.folder}:${output.id}`, stage: 'model', stageLabel: output.operationType === 'scene_only' ? '模特图换场景' : '模特上身图', folder: task.folder, outputId: output.id, path: output.path, url: output.url, thumbnailUrl: output.thumbnailUrl, previewUrl: output.previewUrl, approved: false, reviewRequired: false, task, output, createdAt: output.createdAt });
     for (const output of task.combinationOutputs || []) items.push({ id: `combination:${task.folder}:${output.id}`, stage: 'combination', stageLabel: '多 SKU 组合图', folder: task.folder, outputId: output.id, path: output.path, url: output.url, thumbnailUrl: output.thumbnailUrl, previewUrl: output.previewUrl, approved: false, reviewRequired: false, task, output, createdAt: output.createdAt });
   }
   return items.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
@@ -7913,6 +8977,7 @@ function cwVisibleReviewItems() {
   let items = cwReviewItems();
   const dateFilter = state.childrenwearReviewDateFilter || 'all';
   if (dateFilter !== 'all') items = items.filter(item => cwTaskDateKey(item.task || item, item.task) === dateFilter);
+  if (state.childrenwearReviewFilter === 'regenerating') return items.filter(item => cwReviewStatus(item) === 'regenerating');
   if (state.childrenwearReviewFilter === 'pending') return items.filter(item => cwReviewStatus(item) === 'pending');
   if (state.childrenwearReviewFilter === 'completed') return items.filter(item => cwReviewStatus(item) === 'completed');
   if (state.childrenwearReviewFilter === 'needs_regeneration') return items.filter(item => cwReviewStatus(item) === 'needs_regeneration');
@@ -7929,6 +8994,7 @@ function cwCompareQueue() {
   const filter = state.childrenwearQueueFilters.master || 'all';
   const dateFilter = state.childrenwearQueueDateFilters.master || 'all';
   if (dateFilter !== 'all') items = items.filter(item => cwTaskDateKey(item.task || item, item.task) === dateFilter);
+  if (filter === 'regenerating') items = items.filter(item => cwReviewStatus(item) === 'regenerating');
   if (filter === 'pending') items = items.filter(item => cwReviewStatus(item) === 'pending');
   if (filter === 'needs_regeneration') items = items.filter(item => cwReviewStatus(item) === 'needs_regeneration');
   if (filter === 'approved') items = items.filter(item => item.approved);
@@ -7947,11 +9013,14 @@ function cwCompareSources(item) {
     add('reference', '成品参考图', task.referenceUrl, 'source', false, task.referencePreviewUrl);
     (task.masterHistory || []).filter(history => history.url && history.path !== item.path).slice().reverse().forEach(history => add(`history-${history.version}`, `历史平铺图 v${history.version}`, history.url, 'history', false, history.previewUrl));
   } else if (item.stage === 'model') {
-    add('master', '已审核平铺母版', item.output?.masterUrl || task.masterUrl, 'source', true, item.output?.masterPreviewUrl || task.masterPreviewUrl);
+    const sceneOnly = item.output?.operationType === 'scene_only';
+    if (sceneOnly) add('source-model', '换场景前模特图', item.output?.sourceModelUrl, 'source', true, item.output?.sourceModelPreviewUrl);
+    else add('master', '已生成平铺母版', item.output?.masterUrl || task.masterUrl, 'source', true, item.output?.masterPreviewUrl || task.masterPreviewUrl);
     add('real', '实拍产品图', task.realPhotoUrl, 'source', false, task.realPhotoPreviewUrl);
     add('reference', '成品参考图', task.referenceUrl, 'source', false, task.referencePreviewUrl);
-    add('model-reference', '参考模特图', item.output?.modelReferenceUrl, 'source', false, item.output?.modelReferencePreviewUrl);
-    add('result', '生成模特上身图', item.url, 'result', false, item.previewUrl);
+    if (!sceneOnly) add('model-reference', '参考模特图', item.output?.modelReferenceUrl, 'source', false, item.output?.modelReferencePreviewUrl);
+    add('scene-reference', '独立场景图', item.output?.sceneReferenceUrl, 'source', false, item.output?.sceneReferencePreviewUrl);
+    add('result', sceneOnly ? '换场景结果' : '生成模特上身图', item.url, 'result', false, item.previewUrl);
   } else {
     const masterUrls = item.output?.masterUrls?.length ? item.output.masterUrls : (task.masterUrls || []);
     const masterPreviewUrls = item.output?.masterPreviewUrls?.length ? item.output.masterPreviewUrls : (task.masterPreviewUrls || []);
@@ -8042,6 +9111,98 @@ function resetCwCompareView() {
   applyCwCompareTransform();
 }
 
+function updateCwCompareColorPickerUi() {
+  const active = Boolean(state.childrenwearCompareColorPicking);
+  const button = $('#cwCompareColorPicker');
+  const result = $('#cwCompareColorResult');
+  const panes = $('#cwComparePanes');
+  if (button) {
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+    button.textContent = active ? '取色中…' : '取色';
+  }
+  if (panes) panes.classList.toggle('color-picking', active);
+  if (!result) return;
+  const color = state.childrenwearComparePickedColor;
+  result.hidden = !color;
+  if (!color) return;
+  const swatch = result.querySelector('i');
+  const label = result.querySelector('span');
+  if (swatch) swatch.style.backgroundColor = color.hex;
+  if (label) label.textContent = `${color.hex} · RGB(${color.r}, ${color.g}, ${color.b})`;
+  result.title = `点击复制 ${color.hex} / RGB(${color.r}, ${color.g}, ${color.b})`;
+}
+
+function toggleCwCompareColorPicker(force = null) {
+  state.childrenwearCompareColorPicking = force === null ? !state.childrenwearCompareColorPicking : Boolean(force);
+  updateCwCompareColorPickerUi();
+}
+
+function colorComponentHex(value) {
+  return Math.max(0, Math.min(255, Number(value) || 0)).toString(16).padStart(2, '0').toUpperCase();
+}
+
+async function sampleCwCompareColor(event) {
+  if (!state.childrenwearCompareColorPicking) return;
+  let image = event.target.closest('[data-cw-compare-image]');
+  if (!image) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const clientX = event.clientX;
+  const clientY = event.clientY;
+  image = await loadCwCompareOriginal(image).catch(() => null);
+  if (!image?.naturalWidth || !image?.naturalHeight) return toast('原始图片加载失败，暂时无法取色', true);
+  const rect = image.getBoundingClientRect();
+  const containScale = Math.min(rect.width / image.naturalWidth, rect.height / image.naturalHeight);
+  const contentWidth = image.naturalWidth * containScale;
+  const contentHeight = image.naturalHeight * containScale;
+  const contentLeft = rect.left + (rect.width - contentWidth) / 2;
+  const contentTop = rect.top + (rect.height - contentHeight) / 2;
+  if (clientX < contentLeft || clientX > contentLeft + contentWidth || clientY < contentTop || clientY > contentTop + contentHeight) {
+    return toast('请点击图片内容区域取色');
+  }
+  const sourceX = Math.max(0, Math.min(image.naturalWidth - 1, Math.floor((clientX - contentLeft) / contentWidth * image.naturalWidth)));
+  const sourceY = Math.max(0, Math.min(image.naturalHeight - 1, Math.floor((clientY - contentTop) / contentHeight * image.naturalHeight)));
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1;
+    canvas.height = 1;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    context.drawImage(image, sourceX, sourceY, 1, 1, 0, 0, 1, 1);
+    const [r, g, b, a] = context.getImageData(0, 0, 1, 1).data;
+    if (!a) return toast('这里是透明区域，请点击有颜色的位置');
+    const hex = `#${colorComponentHex(r)}${colorComponentHex(g)}${colorComponentHex(b)}`;
+    state.childrenwearComparePickedColor = { hex, r, g, b, sourceX, sourceY };
+    $$('#cwComparePanes .cw-color-sample-marker').forEach(marker => marker.remove());
+    const frame = image.closest('.cw-compare-frame');
+    if (frame) {
+      const frameRect = frame.getBoundingClientRect();
+      const marker = document.createElement('span');
+      marker.className = 'cw-color-sample-marker';
+      marker.style.left = `${(clientX - frameRect.left) / frameRect.width * 100}%`;
+      marker.style.top = `${(clientY - frameRect.top) / frameRect.height * 100}%`;
+      marker.style.setProperty('--sample-color', hex);
+      marker.title = `${hex} · RGB(${r}, ${g}, ${b})`;
+      frame.append(marker);
+    }
+    updateCwCompareColorPickerUi();
+  } catch (error) {
+    toast('该图片受浏览器安全限制，无法读取像素颜色', true);
+  }
+}
+
+async function copyCwComparePickedColor() {
+  const color = state.childrenwearComparePickedColor;
+  if (!color) return;
+  const value = `${color.hex}  RGB(${color.r}, ${color.g}, ${color.b})`;
+  try {
+    await navigator.clipboard.writeText(value);
+    toast(`已复制 ${value}`);
+  } catch (error) {
+    toast(value);
+  }
+}
+
 async function loadCwCompareOriginal(target) {
   const originalUrl = target?.dataset.originalSrc || '';
   if (!target || !originalUrl || target.dataset.originalLoaded === 'true') return target;
@@ -8102,13 +9263,15 @@ function renderCwCompare() {
   const taskName = item.task.taskName || item.task.category || '未命名款式';
   $('#cwCompareTitle').textContent = taskName;
   const reviewStatus = cwReviewStatus(item);
-  $('#cwCompareStage').textContent = `${item.stageLabel} · ${reviewStatus === 'approved' ? '已通过' : reviewStatus === 'completed' ? '已完成' : reviewStatus === 'needs_regeneration' ? '需重生成' : '待审核'}`;
+  const activeOperation = cwReviewActiveOperation(item);
+  $('#cwCompareStage').textContent = `${item.stageLabel} · ${activeOperation?.label || (reviewStatus === 'approved' ? '已通过' : reviewStatus === 'completed' ? '已完成' : reviewStatus === 'needs_regeneration' ? '需重生成' : '待审核')}`;
   $('#cwCompareCounter').textContent = queue.length ? `${index + 1} / ${queue.length}` : '1 / 1';
   $('#cwComparePrevious').disabled = state.childrenwearCompareBusy || index <= 0;
   $('#cwCompareNext').disabled = state.childrenwearCompareBusy || index < 0 || index >= queue.length - 1;
   $('#cwCompareApprove').hidden = item.stage !== 'master';
   $('#cwCompareApprove').disabled = state.childrenwearCompareBusy || item.approved;
   $('#cwCompareApprove').textContent = item.approved ? '审核已通过' : '审核通过并查看下一张';
+  $('#cwCompareLocalEdit').disabled = state.childrenwearCompareBusy;
   $('#cwCompareRegenerate').disabled = state.childrenwearCompareBusy;
   $('#cwCompareSourcePicker').innerHTML = `<strong>对比图片</strong><div>${allSources.map(source => `<label class="${visibleSet.has(source.key) ? 'selected' : ''}"><input type="checkbox" data-cw-compare-toggle="${escapeHtml(source.key)}" data-stage="${escapeHtml(item.stage)}" ${visibleSet.has(source.key) ? 'checked' : ''}><span>${escapeHtml(source.label)}</span></label>`).join('')}</div><small>勾选显示，拖动下方标题调整顺序</small>`;
   const panes = $('#cwComparePanes');
@@ -8119,6 +9282,7 @@ function renderCwCompare() {
     return `<figure class="cw-compare-pane ${source.kind === 'result' ? 'result' : ''}" data-cw-source-key="${escapeHtml(source.key)}"><figcaption draggable="true" title="按住拖动调整对比顺序"><i aria-hidden="true">⠿</i><span>${String(sourceIndex + 1).padStart(2, '0')}</span><b>${escapeHtml(source.label)}</b>${source.kind === 'result' ? '<em>生成结果</em>' : source.kind === 'history' ? '<em>历史版本</em>' : '<em>参考依据</em>'}</figcaption><div class="cw-compare-frame"><img draggable="false" decoding="async" src="${escapeHtml(previewUrl)}" data-original-src="${escapeHtml(source.url)}" data-original-loaded="${previewUrl === source.url ? 'true' : 'false'}" data-cw-compare-image alt="${escapeHtml(source.label)}高清预览图"></div></figure>`;
   }).join('');
   applyCwCompareTransform();
+  updateCwCompareColorPickerUi();
 }
 
 function openCwCompare(id, context = 'review') {
@@ -8129,6 +9293,8 @@ function openCwCompare(id, context = 'review') {
   state.childrenwearCompareBusy = false;
   state.childrenwearCompareZoom = 1;
   state.childrenwearComparePan = { x: 0, y: 0 };
+  state.childrenwearCompareColorPicking = false;
+  state.childrenwearComparePickedColor = null;
   $('#cwCompareModal').hidden = false;
   document.body.classList.add('cw-compare-open');
   renderCwCompare();
@@ -8140,6 +9306,8 @@ function closeCwCompare() {
   state.childrenwearCompareId = '';
   state.childrenwearCompareContext = 'review';
   state.childrenwearCompareBusy = false;
+  state.childrenwearCompareColorPicking = false;
+  state.childrenwearComparePickedColor = null;
   document.body.classList.remove('cw-compare-open');
 }
 
@@ -8182,10 +9350,12 @@ async function approveCurrentCwCompare() {
 async function regenerateCurrentCwCompare() {
   const item = cwReviewItems().find(candidate => candidate.id === state.childrenwearCompareId);
   if (!item || state.childrenwearCompareBusy) return;
+  const promptOverride = await promptForCwRegeneration(item.stage, item.stage === 'model' ? item.output?.promptRoute || '' : '');
+  if (promptOverride === null) return;
   state.childrenwearCompareBusy = true;
   renderCwCompare();
   try {
-    await regenerateCwReviewItem(item);
+    await regenerateCwReviewItem(item, promptOverride);
     await loadChildrenwearTasks();
     const newest = cwReviewItems().find(candidate => candidate.folder === item.folder && candidate.stage === item.stage);
     if (newest) state.childrenwearCompareId = newest.id;
@@ -8197,6 +9367,300 @@ async function regenerateCurrentCwCompare() {
     state.childrenwearCompareBusy = false;
     renderCwCompare();
     toast(childrenwearFriendlyError(error), true);
+  }
+}
+
+function currentCwLocalEditItem() {
+  const localEdit = state.childrenwearLocalEdit;
+  if (!localEdit) return null;
+  return cwReviewItems().find(item => item.id === localEdit.itemId) || null;
+}
+
+function cwLocalEditCanvasPoint(event) {
+  const canvas = $('#cwLocalEditCanvas');
+  const rect = canvas?.getBoundingClientRect();
+  if (!rect?.width || !rect?.height) return null;
+  return {
+    x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)),
+    y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height))
+  };
+}
+
+function drawCwLocalEditOverlay() {
+  const localEdit = state.childrenwearLocalEdit;
+  const canvas = $('#cwLocalEditCanvas');
+  if (!localEdit || !canvas) return;
+  const width = Math.max(1, Number(localEdit.displayWidth) || canvas.clientWidth || 1);
+  const height = Math.max(1, Number(localEdit.displayHeight) || canvas.clientHeight || 1);
+  const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+  const pixelWidth = Math.max(1, Math.round(width * dpr));
+  const pixelHeight = Math.max(1, Math.round(height * dpr));
+  if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+    canvas.width = pixelWidth;
+    canvas.height = pixelHeight;
+  }
+  const context = canvas.getContext('2d');
+  context.setTransform(dpr, 0, 0, dpr, 0, 0);
+  context.clearRect(0, 0, width, height);
+  context.lineCap = 'round';
+  context.lineJoin = 'round';
+  const drawBrushBoundary = (action, radius) => {
+    const points = (action.points || []).map(point => ({ x: point[0] * width, y: point[1] * height }));
+    if (!points.length) return;
+    context.beginPath();
+    if (points.length === 1) {
+      context.arc(points[0].x, points[0].y, radius, 0, Math.PI * 2);
+    } else {
+      const left = [];
+      const right = [];
+      for (let index = 0; index < points.length; index += 1) {
+        const previous = points[Math.max(0, index - 1)];
+        const next = points[Math.min(points.length - 1, index + 1)];
+        const dx = next.x - previous.x;
+        const dy = next.y - previous.y;
+        const length = Math.max(.001, Math.hypot(dx, dy));
+        const normalX = -dy / length;
+        const normalY = dx / length;
+        left.push({ x: points[index].x + normalX * radius, y: points[index].y + normalY * radius });
+        right.push({ x: points[index].x - normalX * radius, y: points[index].y - normalY * radius });
+      }
+      context.moveTo(left[0].x, left[0].y);
+      left.slice(1).forEach(point => context.lineTo(point.x, point.y));
+      [...right].reverse().forEach(point => context.lineTo(point.x, point.y));
+      context.closePath();
+    }
+    context.setLineDash([7, 5]);
+    context.strokeStyle = '#076e69';
+    context.lineWidth = 1.5;
+    context.stroke();
+    context.setLineDash([]);
+  };
+  const drawAction = action => {
+    context.save();
+    context.strokeStyle = '#0e8079';
+    context.fillStyle = 'rgba(42, 166, 155, .28)';
+    context.lineWidth = 2;
+    if (action.type === 'rectangle') {
+      const x = action.x * width;
+      const y = action.y * height;
+      const rectangleWidth = action.width * width;
+      const rectangleHeight = action.height * height;
+      context.fillRect(x, y, rectangleWidth, rectangleHeight);
+      context.setLineDash([7, 5]);
+      context.strokeRect(x + 1, y + 1, Math.max(0, rectangleWidth - 2), Math.max(0, rectangleHeight - 2));
+      context.setLineDash([]);
+    } else if (action.type === 'brush' && action.points?.length) {
+      const radius = Math.max(.002, Number(action.radius) || .02) * Math.min(width, height);
+      context.strokeStyle = 'rgba(42, 166, 155, .38)';
+      context.lineWidth = radius * 2;
+      context.beginPath();
+      action.points.forEach((point, index) => {
+        const x = point[0] * width;
+        const y = point[1] * height;
+        if (!index) context.moveTo(x, y); else context.lineTo(x, y);
+      });
+      if (action.points.length === 1) {
+        context.lineTo(action.points[0][0] * width + .01, action.points[0][1] * height + .01);
+      }
+      context.stroke();
+      context.strokeStyle = '#0e8079';
+      context.lineWidth = 2;
+      context.stroke();
+      drawBrushBoundary(action, radius);
+    }
+    context.restore();
+  };
+  localEdit.actions.forEach(drawAction);
+  if (localEdit.draft) drawAction(localEdit.draft);
+  if (localEdit.tool === 'brush' && localEdit.hoverPoint) {
+    const radius = Math.max(6, Math.max(12, Number($('#cwLocalEditBrushSize')?.value) || 42) / 2);
+    const x = localEdit.hoverPoint.x * width;
+    const y = localEdit.hoverPoint.y * height;
+    context.save();
+    context.beginPath();
+    context.arc(x, y, radius, 0, Math.PI * 2);
+    context.setLineDash([4, 3]);
+    context.strokeStyle = '#ffffff';
+    context.lineWidth = 3;
+    context.stroke();
+    context.strokeStyle = '#15333a';
+    context.lineWidth = 1;
+    context.stroke();
+    context.restore();
+  }
+}
+
+function layoutCwLocalEditCanvas() {
+  const localEdit = state.childrenwearLocalEdit;
+  const wrap = $('#cwLocalEditCanvasWrap');
+  const image = $('#cwLocalEditImage');
+  const canvas = $('#cwLocalEditCanvas');
+  if (!localEdit || !wrap || !image?.naturalWidth || !image?.naturalHeight || !canvas) return;
+  const availableWidth = Math.max(1, wrap.clientWidth);
+  const availableHeight = Math.max(1, wrap.clientHeight);
+  const scale = Math.min(availableWidth / image.naturalWidth, availableHeight / image.naturalHeight);
+  const width = Math.max(1, Math.round(image.naturalWidth * scale));
+  const height = Math.max(1, Math.round(image.naturalHeight * scale));
+  const left = Math.round((availableWidth - width) / 2);
+  const top = Math.round((availableHeight - height) / 2);
+  for (const element of [image, canvas]) {
+    element.style.width = `${width}px`;
+    element.style.height = `${height}px`;
+    element.style.left = `${left}px`;
+    element.style.top = `${top}px`;
+  }
+  localEdit.displayWidth = width;
+  localEdit.displayHeight = height;
+  drawCwLocalEditOverlay();
+}
+
+function updateCwLocalEditControls() {
+  const localEdit = state.childrenwearLocalEdit;
+  if (!localEdit) return;
+  const count = localEdit.actions.length;
+  $('#cwLocalEditSelectionCount').textContent = String(count);
+  $('#cwLocalEditHint').textContent = count ? '可继续框选多个位置，或填写修正要求后提交' : '先在左侧图片上框选问题位置';
+  $('#cwLocalEditUndo').disabled = localEdit.busy || !count;
+  $('#cwLocalEditClear').disabled = localEdit.busy || !count;
+  $('#cwLocalEditSubmit').disabled = localEdit.busy || !count || !$('#cwLocalEditInstruction').value.trim();
+  $('#cwLocalEditCancel').disabled = false;
+  $('#cwLocalEditClose').disabled = false;
+  $$('[data-cw-local-tool]').forEach(button => {
+    const active = button.dataset.cwLocalTool === localEdit.tool;
+    button.classList.toggle('primary', active);
+    button.classList.toggle('secondary', !active);
+    button.disabled = localEdit.busy;
+  });
+  $('#cwLocalEditCanvasWrap').classList.toggle('is-brush', localEdit.tool === 'brush');
+}
+
+function openCwLocalEdit(item) {
+  if (!item?.url || state.childrenwearCompareBusy) return;
+  state.childrenwearLocalEdit = {
+    itemId: item.id,
+    tool: 'rectangle',
+    actions: [],
+    draft: null,
+    drawing: false,
+    pointerId: null,
+    busy: false,
+    hoverPoint: null,
+    displayWidth: 0,
+    displayHeight: 0
+  };
+  const taskName = item.task?.taskName || item.task?.category || '未命名款式';
+  $('#cwLocalEditTitle').textContent = `${taskName} · 局部微调`;
+  $('#cwLocalEditStage').textContent = `${item.stageLabel}：只允许重绘青色选择区域，框外沿用当前结果原像素`;
+  $('#cwLocalEditInstruction').value = '';
+  $('#cwLocalEditStatus').textContent = '提交后先由 AI 识别选区中的具体对象，再局部生图并保存为新版本。';
+  const image = $('#cwLocalEditImage');
+  image.src = item.url;
+  $('#cwLocalEditModal').hidden = false;
+  updateCwLocalEditControls();
+  if (image.complete && image.naturalWidth) requestAnimationFrame(layoutCwLocalEditCanvas);
+}
+
+function closeCwLocalEdit(force = false) {
+  const modal = $('#cwLocalEditModal');
+  if (modal) modal.hidden = true;
+  const image = $('#cwLocalEditImage');
+  if (image) image.removeAttribute('src');
+  state.childrenwearLocalEdit = null;
+}
+
+function finishCwLocalEditDrawing(event) {
+  const localEdit = state.childrenwearLocalEdit;
+  if (!localEdit?.drawing) return;
+  const canvas = $('#cwLocalEditCanvas');
+  if (event?.pointerId != null && localEdit.pointerId !== event.pointerId) return;
+  if (localEdit.tool === 'rectangle' && localEdit.draft) {
+    const rectangle = localEdit.draft;
+    if (rectangle.width >= .006 && rectangle.height >= .006) localEdit.actions.push(rectangle);
+  }
+  localEdit.draft = null;
+  localEdit.drawing = false;
+  if (localEdit.pointerId != null && canvas?.hasPointerCapture?.(localEdit.pointerId)) canvas.releasePointerCapture(localEdit.pointerId);
+  localEdit.pointerId = null;
+  drawCwLocalEditOverlay();
+  updateCwLocalEditControls();
+}
+
+async function submitCwLocalEdit() {
+  const localEdit = state.childrenwearLocalEdit;
+  const item = currentCwLocalEditItem();
+  const instruction = $('#cwLocalEditInstruction').value.trim();
+  if (!localEdit || !item || localEdit.busy || !localEdit.actions.length || !instruction) return;
+  const regions = localEdit.actions.filter(action => action.type === 'rectangle').map(({ x, y, width, height }) => ({ x, y, width, height }));
+  const strokes = localEdit.actions.filter(action => action.type === 'brush').map(({ radius, points }) => ({ radius, points }));
+  localEdit.busy = true;
+  $('#cwLocalEditStatus').textContent = '正在提交局部微调任务…';
+  updateCwLocalEditControls();
+  const jobKey = item.id;
+  const job = {
+    status: 'submitting',
+    message: '正在提交局部微调任务…',
+    stage: item.stage,
+    itemId: item.id,
+    folder: item.folder,
+    outputId: item.outputId || '',
+    updatedAt: new Date().toISOString()
+  };
+  state.childrenwearLocalEditJobs.set(jobKey, job);
+  renderCwQueue(item.stage);
+  if (currentPage === 'childrenwear-review') renderCwReview();
+  syncCwGenerationPreviewState();
+  try {
+    await window.caishen.generateChildrenwearLocalEdit({
+      folder: item.folder,
+      stage: item.stage,
+      outputId: item.outputId,
+      instruction,
+      regions,
+      strokes
+    }, progress => {
+      const current = state.childrenwearLocalEditJobs.get(jobKey);
+      if (!current) return;
+      current.status = 'running';
+      current.message = String(progress?.message || progress?.status || '生图接口正在局部微调…');
+      current.updatedAt = new Date().toISOString();
+      const draft = (state.childrenwearDrafts[item.stage] || []).find(candidate => cwReviewItemForDraft(item.stage, candidate)?.id === item.id);
+      if (draft) updateCwQueueProgress(item.stage, draft);
+      if (state.childrenwearLocalEdit) $('#cwLocalEditStatus').textContent = current.message;
+    }, () => {
+      const current = state.childrenwearLocalEditJobs.get(jobKey);
+      if (current) {
+        current.status = 'queued';
+        current.message = '局部微调已进入后台队列';
+        current.updatedAt = new Date().toISOString();
+      }
+      closeCwLocalEdit(true);
+      renderCwQueue(item.stage);
+      if (currentPage === 'childrenwear-review') renderCwReview();
+      toast('局部微调已提交，您可以继续处理其他任务');
+    });
+    state.childrenwearLocalEditJobs.delete(jobKey);
+    await loadChildrenwearTasks();
+    const newest = cwReviewItems().find(candidate => candidate.folder === item.folder && candidate.stage === item.stage && (!item.outputId || candidate.outputId === item.outputId))
+      || cwReviewItems().find(candidate => candidate.folder === item.folder && candidate.stage === item.stage);
+    if (newest) state.childrenwearCompareId = newest.id;
+    resetCwCompareView();
+    renderCwCompare();
+    toast('局部微调已完成，框外区域保持原图并已保存新版本');
+  } catch (error) {
+    const message = `局部微调失败：${childrenwearFriendlyError(error)}`;
+    const current = state.childrenwearLocalEditJobs.get(jobKey) || job;
+    current.status = 'failed';
+    current.message = message;
+    current.updatedAt = new Date().toISOString();
+    state.childrenwearLocalEditJobs.set(jobKey, current);
+    if (state.childrenwearLocalEdit) {
+      localEdit.busy = false;
+      $('#cwLocalEditStatus').textContent = message;
+      updateCwLocalEditControls();
+    } else {
+      renderCwQueue(item.stage);
+      toast(message, true);
+    }
   }
 }
 
@@ -8216,6 +9680,7 @@ function renderCwReview() {
   );
   let items = allItems;
   if (state.childrenwearReviewDateFilter !== 'all') items = items.filter(item => cwTaskDateKey(item.task || item, item.task) === state.childrenwearReviewDateFilter);
+  if (state.childrenwearReviewFilter === 'regenerating') items = items.filter(item => cwReviewStatus(item) === 'regenerating');
   if (state.childrenwearReviewFilter === 'pending') items = items.filter(item => cwReviewStatus(item) === 'pending');
   if (state.childrenwearReviewFilter === 'completed') items = items.filter(item => cwReviewStatus(item) === 'completed');
   if (state.childrenwearReviewFilter === 'needs_regeneration') items = items.filter(item => cwReviewStatus(item) === 'needs_regeneration');
@@ -8236,7 +9701,8 @@ function renderCwReview() {
   $('#cwReviewDownloadSelected').disabled = !hasSelection;
   const card = item => {
     const status = cwReviewStatus(item);
-    return `<article class="cw-review-card${item.approved ? ' approved' : ''}${status === 'completed' ? ' completed' : ''}${status === 'needs_regeneration' ? ' needs-regeneration' : ''}${state.childrenwearReviewSelection.has(item.id) ? ' selected' : ''}" data-cw-review-id="${escapeHtml(item.id)}"><label><input type="checkbox" data-cw-review-select="${escapeHtml(item.id)}"${state.childrenwearReviewSelection.has(item.id) ? ' checked' : ''}><span></span><b>${escapeHtml(item.stageLabel)}</b><em>${status === 'approved' ? '已通过' : status === 'completed' ? '已完成' : status === 'needs_regeneration' ? '需重生成' : '待审核'}</em></label><button class="cw-review-image-button" type="button" data-cw-review-compare="${escapeHtml(item.id)}" title="点击进入高清对比查看"><img loading="lazy" decoding="async" src="${escapeHtml(item.thumbnailUrl || item.url)}" data-preview-src="${escapeHtml(item.previewUrl || item.url)}" alt="${escapeHtml(item.stageLabel)}"></button></article>`;
+    const activeOperation = cwReviewActiveOperation(item);
+    return `<article class="cw-review-card${item.approved ? ' approved' : ''}${status === 'completed' ? ' completed' : ''}${status === 'regenerating' ? ' regenerating' : ''}${status === 'needs_regeneration' ? ' needs-regeneration' : ''}${state.childrenwearReviewSelection.has(item.id) ? ' selected' : ''}" data-cw-review-id="${escapeHtml(item.id)}"><label><input type="checkbox" data-cw-review-select="${escapeHtml(item.id)}"${state.childrenwearReviewSelection.has(item.id) ? ' checked' : ''}><span></span><b>${escapeHtml(item.stageLabel)}</b><em>${escapeHtml(activeOperation?.label || (status === 'approved' ? '已通过' : status === 'completed' ? '已完成' : status === 'needs_regeneration' ? '需重生成' : '待审核'))}</em></label><button class="cw-review-image-button" type="button" data-cw-review-compare="${escapeHtml(item.id)}" title="点击进入高清对比查看"><img loading="lazy" decoding="async" src="${escapeHtml(item.thumbnailUrl || item.url)}" data-preview-src="${escapeHtml(item.previewUrl || item.url)}" alt="${escapeHtml(item.stageLabel)}"></button></article>`;
   };
   const allItemsByFolder = new Map();
   for (const item of allItems) {
@@ -8244,21 +9710,20 @@ function renderCwReview() {
     allItemsByFolder.get(item.folder).push(item);
   }
   const groupEntries = [...groups.entries()];
-  const visibleGroupLimit = Math.max(4, Number(state.childrenwearReviewVisibleGroupLimit) || 12);
-  const visibleGroupEntries = groupEntries.slice(0, visibleGroupLimit);
-  const remainingGroups = Math.max(0, groupEntries.length - visibleGroupEntries.length);
+  const groupPagination = cwPageWindow(groupEntries, state.childrenwearReviewPage, 6);
+  state.childrenwearReviewPage = groupPagination.page;
+  const visibleGroupEntries = groupPagination.items;
   const groupsMarkup = visibleGroupEntries.map(([folder, groupItems]) => {
     const task = groupItems[0].task;
     const taskItems = allItemsByFolder.get(folder) || groupItems;
     const groupName = task.taskName || task.category || String(folder).split(/[\\/]/).at(-1) || '未命名款式';
     const totals = ['master', 'model', 'combination'].map(stage => `${CW_STAGE_META[stage].label} ${taskItems.filter(item => item.stage === stage).length}`).join(' · ');
-    const limit = Math.max(24, Number(state.childrenwearReviewGroupLimits.get(folder)) || 48);
-    const visibleItems = groupItems.slice(0, limit);
-    const remaining = Math.max(0, groupItems.length - visibleItems.length);
-    return `<section class="cw-review-group" data-cw-review-folder="${escapeHtml(folder)}"><header class="cw-review-group-head"><div><span>款式任务</span><h3>${escapeHtml(groupName)}</h3><small>${escapeHtml(totals)}</small></div><div><button class="secondary mini" type="button" data-cw-review-rename-folder="${escapeHtml(folder)}">改名</button><button class="primary mini" type="button" data-cw-review-download-folder="${escapeHtml(folder)}">下载款式文件夹</button></div></header>${cwReviewTaskMetricsHtml(taskItems)}<div class="cw-review-group-items">${visibleItems.map(card).join('')}</div>${remaining ? `<button class="cw-review-load-more" type="button" data-cw-review-more="${escapeHtml(folder)}">继续显示 ${Math.min(48, remaining)} 张（剩余 ${remaining} 张）</button>` : ''}</section>`;
+    const itemPagination = cwPageWindow(groupItems, state.childrenwearReviewGroupPages.get(folder), 12);
+    state.childrenwearReviewGroupPages.set(folder, itemPagination.page);
+    return `<section class="cw-review-group" data-cw-review-folder="${escapeHtml(folder)}"><header class="cw-review-group-head"><div><span>款式任务</span><h3>${escapeHtml(groupName)}</h3><small>${escapeHtml(totals)}</small></div><div><button class="secondary mini" type="button" data-cw-review-rename-folder="${escapeHtml(folder)}">改名</button><button class="primary mini" type="button" data-cw-review-download-folder="${escapeHtml(folder)}">下载款式文件夹</button></div></header>${cwReviewTaskMetricsHtml(taskItems)}<div class="cw-review-group-items">${itemPagination.items.map(card).join('')}</div>${cwPaginationMarkup('review-items', folder, itemPagination)}</section>`;
   }).join('');
   grid.innerHTML = groups.size
-    ? `${groupsMarkup}${remainingGroups ? `<button class="cw-review-load-more" type="button" data-cw-review-more-groups>继续显示 ${Math.min(12, remainingGroups)} 个款式（剩余 ${remainingGroups} 个）</button>` : ''}`
+    ? `${groupsMarkup}${cwPaginationMarkup('review-groups', 'review', groupPagination)}`
     : '<div class="cw-task-empty"><b>当前没有生成结果</b><span>02、03、04 生成完成后会自动显示在这里。</span></div>';
 }
 
@@ -8267,10 +9732,62 @@ async function approveCwReviewItem(item) {
   await window.caishen.approveChildrenwearOutput({ folder: item.folder, stage: item.stage, outputId: item.outputId, approved: true });
 }
 
-async function regenerateCwReviewItem(item) {
-  if (item.stage === 'master') return window.caishen.generateChildrenwearMaster({ folder: item.folder, taskName: item.task.taskName, realPhotoPath: item.task.realPhotoPath, referencePath: item.task.referencePath, category: item.task.category, material: item.task.material, craft: item.task.craft, extraInstruction: '' });
-  if (item.stage === 'model') return window.caishen.generateChildrenwearModel({ folder: item.folder, taskName: item.task.taskName, modelReferencePath: item.output.modelReferencePath, backgroundMode: item.output.backgroundMode || 'model_reference', sceneReferencePath: item.output.sceneReferencePath || '', extraInstruction: '' });
-  return window.caishen.generateChildrenwearCombination({ folder: item.folder, taskName: item.task.taskName, masterPaths: item.task.masterPaths, combinationReferencePath: item.task.combinationReferencePath });
+async function regenerateCwReviewItem(item, promptOverride = '') {
+  const draft = cwDraftForReviewItem(item);
+  if (draft) {
+    draft.status = '生成中';
+    draft.activeOperation = 'regeneration';
+    draft.progress = '正在提交整张重新生成任务…';
+    draft.updatedAt = new Date().toISOString();
+    renderCwQueue(item.stage);
+    if (currentPage === 'childrenwear-review') renderCwReview();
+    renderCwCompare();
+  }
+  const onProgress = progress => {
+    if (!draft) return;
+    draft.progress = String(progress?.message || progress?.status || '生图接口正在重新生成整张图片…');
+    draft.updatedAt = new Date().toISOString();
+    updateCwQueueProgress(item.stage, draft);
+  };
+  try {
+    const result = item.stage === 'master'
+      ? await window.caishen.generateChildrenwearMaster({ folder: item.folder, taskName: item.task.taskName, realPhotoPath: item.task.realPhotoPath, referencePath: item.task.referencePath, category: item.task.category, material: item.task.material, craft: item.task.craft, extraInstruction: '', promptOverride, currentResultPath: item.path }, onProgress)
+      : item.stage === 'model'
+        ? await window.caishen.generateChildrenwearModel({
+          folder: item.folder,
+          taskName: item.task.taskName,
+          operationType: item.output.operationType === 'scene_only' ? 'scene_only' : 'dress',
+          sourceModelPath: item.output.sourceModelPath || '',
+          sourceModelOutputId: item.output.sourceModelOutputId || '',
+          modelReferencePath: item.output.modelReferencePath || '',
+          useFixedModel: Boolean(item.output.useFixedModel),
+          backgroundMode: item.output.backgroundMode || (item.output.operationType === 'scene_only' ? 'solid' : 'model_reference'),
+          solidBackgroundColor: item.output.solidBackgroundColor || '#FFFFFF',
+          sceneReferencePath: item.output.sceneReferencePath || '',
+          promptRoute: item.output.promptRoute || '',
+          extraInstruction: '',
+          promptOverride,
+          currentResultPath: item.path
+        }, onProgress)
+        : await window.caishen.generateChildrenwearCombination({ folder: item.folder, taskName: item.task.taskName, masterPaths: item.output?.sourceMasterPaths?.length ? item.output.sourceMasterPaths : item.task.masterPaths, combinationReferencePath: item.output?.combinationReferencePath || item.task.combinationReferencePath, promptOverride, currentResultPath: item.path }, onProgress);
+    if (draft) {
+      draft.activeOperation = '';
+      draft.progress = '整张重新生成完成，正在刷新最新结果…';
+      draft.updatedAt = new Date().toISOString();
+      updateCwQueueProgress(item.stage, draft);
+    }
+    return result;
+  } catch (error) {
+    if (draft) {
+      draft.status = '失败';
+      draft.activeOperation = '';
+      draft.progress = childrenwearFriendlyError(error);
+      draft.updatedAt = new Date().toISOString();
+      renderCwQueue(item.stage);
+      if (currentPage === 'childrenwear-review') renderCwReview();
+    }
+    throw error;
+  }
 }
 
 function renderChildrenwear() {
@@ -8371,7 +9888,8 @@ async function flushChildrenwearTaskRefresh() {
 
 function bindChildrenwearEvents() {
   let compareDrag = null;
-  $('#openCwLineageSearchButton').onclick = openCwLineageSearch;
+  $$('[data-cw-stage-prompt-save]').forEach(button => button.onclick = () => saveChildrenwearGenerationPrompt(button.dataset.cwStagePromptSave));
+  $$('[data-open-cw-lineage-search]').forEach(button => button.onclick = openCwLineageSearch);
   $('#closeCwLineageSearchButton').onclick = closeCwLineageSearch;
   $('#closeCwLineageSearchFooterButton').onclick = closeCwLineageSearch;
   $('#cwLineageQuery').oninput = event => {
@@ -8408,27 +9926,78 @@ function bindChildrenwearEvents() {
   $$('.cw-source-tabs [data-cw-source-tab]').forEach(button => button.onclick = async () => {
     const stage = button.dataset.cwSourceTab.split('-')[0];
     state.childrenwearSourceTabs[stage] = button.dataset.cwSourceTab;
+    state.childrenwearSourcePages[cwSourcePageKey(stage)] = 1;
     button.parentElement.querySelectorAll('button').forEach(item => item.classList.toggle('active', item === button));
     const source = cwLibrarySource(stage);
     if (source.key) await loadChildrenwearLibrary(source.key);
     renderCwSource(stage);
   });
+  $$('[data-cw-external-flat-upload]').forEach(button => button.onclick = () => {
+    importCwExternalFlat(button.dataset.cwExternalFlatUpload).catch(error => toast(errorText(error), true));
+  });
+  $$('[data-cw-model-operation]').forEach(button => button.onclick = () => {
+    const operation = button.dataset.cwModelOperation === 'scene_only' ? 'scene_only' : 'dress';
+    state.childrenwearModelOperationType = operation;
+    if (operation === 'scene_only' && state.childrenwearModelBackgroundMode === 'model_reference') state.childrenwearModelBackgroundMode = 'solid';
+    const draft = cwDraft('model');
+    draft.operationType = operation;
+    draft.backgroundMode = state.childrenwearModelBackgroundMode;
+    draft.solidBackgroundColor = state.childrenwearModelSolidColor;
+    draft.status = cwDraftReady(draft) ? '待生成' : '待补齐素材';
+    state.childrenwearSourceTabs.model = operation === 'scene_only' ? 'model-existing' : 'model-master';
+    persistFixedModelReferencePreference();
+    renderCwModelControls();
+    renderCwSource('model');
+    renderCwQueue('model');
+  });
   $$('[data-cw-model-background]').forEach(button => button.onclick = () => {
     const mode = button.dataset.cwModelBackground;
-    if (!['model_reference', 'white', 'scene_reference'].includes(mode)) return;
+    if (!['model_reference', 'solid', 'scene_reference'].includes(mode)) return;
+    if (state.childrenwearModelOperationType === 'scene_only' && mode === 'model_reference') return;
     state.childrenwearModelBackgroundMode = mode;
     const draft = cwDraft('model');
+    draft.operationType = state.childrenwearModelOperationType;
     draft.backgroundMode = mode;
+    draft.solidBackgroundColor = state.childrenwearModelSolidColor;
     draft.status = cwDraftReady(draft) ? '待生成' : '待补齐素材';
-    button.parentElement.querySelectorAll('[data-cw-model-background]').forEach(item => item.classList.toggle('active', item === button));
     if (mode === 'scene_reference') {
       state.childrenwearSourceTabs.model = 'model-scene';
       const tab = $('[data-cw-source-tab="model-scene"]');
       tab?.parentElement.querySelectorAll('[data-cw-source-tab]').forEach(item => item.classList.toggle('active', item === tab));
       void loadChildrenwearLibrary('childrenwearSceneAssetsPath').then(() => renderCwSource('model'));
     }
+    persistFixedModelReferencePreference();
+    renderCwModelControls();
     renderCwQueue('model');
   });
+  const applyModelSolidColor = value => {
+    const color = cwNormalizeHexColor(value, '');
+    if (!color) return false;
+    state.childrenwearModelSolidColor = color;
+    const draft = cwDraft('model');
+    draft.solidBackgroundColor = color;
+    draft.backgroundMode = 'solid';
+    state.childrenwearModelBackgroundMode = 'solid';
+    draft.status = cwDraftReady(draft) ? '待生成' : '待补齐素材';
+    persistFixedModelReferencePreference();
+    renderCwModelControls();
+    renderCwQueue('model');
+    return true;
+  };
+  $('#cwModelSolidColor').oninput = event => applyModelSolidColor(event.target.value);
+  $('#cwModelSolidColorText').onchange = event => {
+    if (!applyModelSolidColor(event.target.value)) {
+      event.target.value = state.childrenwearModelSolidColor;
+      toast('请输入 #RRGGBB 格式的颜色值', true);
+    }
+  };
+  $('#cwModelPickSolidColor').onclick = async () => {
+    if (!window.EyeDropper) return toast('当前浏览器不支持屏幕取色，请手动输入 HEX 色值', true);
+    try {
+      const result = await new window.EyeDropper().open();
+      applyModelSolidColor(result.sRGBHex);
+    } catch {}
+  };
   $('#cwFixedModelEnabled').onchange = event => {
     state.childrenwearFixedModelEnabled = Boolean(event.target.checked);
     if (state.childrenwearFixedModelEnabled) {
@@ -8466,14 +10035,65 @@ function bindChildrenwearEvents() {
     renderCwSource('model');
     toast('已取消固定模特；现有任务卡片的选择保持不变');
   };
-  $$('.cw-source-column').forEach(column => column.onclick = async event => {
+  $$('.cw-source-column').forEach(column => {
+    column.onchange = event => {
+      const groupSize = event.target.closest('[data-cw-builder-group-size]');
+      if (!groupSize) return;
+      state.childrenwearCombinationBuilderGroupSize = Math.max(2, Math.min(4, Number(groupSize.value) || 2));
+      renderCwSourceBuilder('combination');
+    };
+    column.onclick = async event => {
+    const builderAction = event.target.closest('[data-cw-builder-action]');
+    if (builderAction) {
+      const stage = builderAction.dataset.stage || builderAction.closest('[data-cw-source-builder]')?.dataset.cwSourceBuilder || state.childrenwearProductionTab;
+      const action = builderAction.dataset.cwBuilderAction;
+      const selection = cwSourceBuilderSelection(stage);
+      if (action === 'toggle') {
+        if (!state.childrenwearSourceBuilderModes[stage]) return setCwSourceBuilderTargetCount(stage, { activate: true });
+        selection.clear();
+        state.childrenwearSourceBuilderModes[stage] = false;
+        return renderCwSource(stage);
+      }
+      if (action === 'edit-target') {
+        return setCwSourceBuilderTargetCount(stage);
+      }
+      if (action === 'clear') {
+        selection.clear();
+        return renderCwSource(stage);
+      }
+      if (action === 'cancel') {
+        selection.clear();
+        state.childrenwearSourceBuilderModes[stage] = false;
+        return renderCwSource(stage);
+      }
+      if (action === 'select-page') {
+        const assets = [...column.querySelectorAll('.cw-source-grid [data-cw-source-path]')];
+        assets.forEach(asset => selection.set(`${asset.dataset.cwSourceRole}\u0000${asset.dataset.cwSourcePath}`, { role: asset.dataset.cwSourceRole, path: asset.dataset.cwSourcePath }));
+        return renderCwSource(stage);
+      }
+      if (action === 'confirm') return await confirmCwSourceBuilder(stage);
+    }
+    const pageButton = event.target.closest('[data-cw-page-kind="source"]');
+    if (pageButton) {
+      const stage = pageButton.dataset.cwPageKey;
+      state.childrenwearSourcePages[cwSourcePageKey(stage)] = Math.max(1, Number(pageButton.dataset.cwPage) || 1);
+      renderCwSource(stage);
+      column.querySelector('.cw-source-grid')?.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
     const folder = event.target.closest('[data-cw-source-folder]');
     if (folder) {
       await selectChildrenwearLibraryFolder(folder.dataset.cwSourceKey, folder.dataset.cwSourceFolder);
+      state.childrenwearSourcePages[cwSourcePageKey(state.childrenwearProductionTab)] = 1;
       return renderCwSource(state.childrenwearProductionTab);
     }
     const asset = event.target.closest('[data-cw-source-path]');
-    if (asset) addCwSource(state.childrenwearProductionTab, asset.dataset.cwSourceRole, asset.dataset.cwSourcePath);
+    if (asset) {
+      const stage = state.childrenwearProductionTab;
+      if (state.childrenwearSourceBuilderModes[stage]) toggleCwSourceBuilderAsset(stage, asset.dataset.cwSourceRole, asset.dataset.cwSourcePath);
+      else addCwSource(stage, asset.dataset.cwSourceRole, asset.dataset.cwSourcePath);
+    }
+  };
   });
   $$('.cw-task-column').forEach(column => {
     column.oncontextmenu = event => {
@@ -8495,11 +10115,13 @@ function bindChildrenwearEvents() {
       renderCwQueue(stage);
     };
     column.onclick = async event => {
-      const more = event.target.closest('[data-cw-queue-more]');
-      if (more) {
-        const stage = more.dataset.cwQueueMore;
-        state.childrenwearQueueVisibleLimits[stage] = (Number(state.childrenwearQueueVisibleLimits[stage]) || 36) + 36;
-        return renderCwQueue(stage);
+      const pageButton = event.target.closest('[data-cw-page-kind="queue"]');
+      if (pageButton) {
+        const stage = pageButton.dataset.cwPageKey;
+        state.childrenwearQueuePages[stage] = Math.max(1, Number(pageButton.dataset.cwPage) || 1);
+        renderCwQueue(stage);
+        $(CW_STAGE_META[stage].queue)?.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
       }
       const card = event.target.closest('[data-cw-draft]');
       const stage = card?.dataset.stage;
@@ -8518,6 +10140,12 @@ function bindChildrenwearEvents() {
       }
       const inlineCompare = event.target.closest('[data-cw-inline-compare]');
       if (inlineCompare) return openCwCompare(inlineCompare.dataset.cwInlineCompare, stage === 'master' ? 'master' : 'review');
+      const localEdit = event.target.closest('[data-cw-local-edit]');
+      if (localEdit) {
+        const item = cwReviewItems().find(candidate => candidate.id === localEdit.dataset.cwLocalEdit);
+        if (!item) return toast('当前生成图尚未同步，请刷新任务后重试', true);
+        return openCwLocalEdit(item);
+      }
       const inlineApprove = event.target.closest('[data-cw-inline-approve]');
       if (inlineApprove) {
         const reviewId = inlineApprove.dataset.cwInlineApprove;
@@ -8554,13 +10182,21 @@ function bindChildrenwearEvents() {
         const draft = state.childrenwearDrafts[stage].find(item => item.id === id);
         return deleteCwDraftCards(stage, [draft]);
       }
-      if (event.target.closest('[data-cw-generate-one]')) return runCwDraft(stage, state.childrenwearDrafts[stage].find(item => item.id === id));
+      if (event.target.closest('[data-cw-generate-one]')) {
+        const draft = state.childrenwearDrafts[stage].find(item => item.id === id);
+        const isRegeneration = Boolean(draft?.result?.path) || draft?.status === '失败' || cwDraftStatusKey(draft) === 'needs_regeneration';
+        const promptOverride = isRegeneration ? await promptForCwRegeneration(stage, stage === 'model' ? cwModelPromptRoute(draft) : '') : '';
+        if (isRegeneration && promptOverride === null) return;
+        return runCwDraft(stage, draft, { promptOverride, operation: isRegeneration ? 'regeneration' : 'generation' });
+      }
       if (!event.target.closest('button,input,label')) {
         state.childrenwearActiveDraft[stage] = id;
         if (stage === 'model') {
           const draft = state.childrenwearDrafts.model.find(item => item.id === id);
+          state.childrenwearModelOperationType = draft?.operationType === 'scene_only' ? 'scene_only' : 'dress';
           state.childrenwearModelBackgroundMode = draft?.backgroundMode || 'model_reference';
-          $$('[data-cw-model-background]').forEach(item => item.classList.toggle('active', item.dataset.cwModelBackground === state.childrenwearModelBackgroundMode));
+          state.childrenwearModelSolidColor = cwNormalizeHexColor(draft?.solidBackgroundColor || state.childrenwearModelSolidColor);
+          renderCwModelControls();
         }
         renderCwQueue(stage);
       }
@@ -8597,14 +10233,14 @@ function bindChildrenwearEvents() {
     const stage = button.closest('[data-childrenwear-production-panel]')?.dataset.childrenwearProductionPanel;
     if (!stage) return;
     state.childrenwearQueueFilters[stage] = button.dataset.cwQueueFilter;
-    state.childrenwearQueueVisibleLimits[stage] = 36;
+    state.childrenwearQueuePages[stage] = 1;
     renderCwQueue(stage);
   });
   $$('[data-cw-queue-date-filter]').forEach(select => select.onchange = () => {
     const stage = select.closest('[data-childrenwear-production-panel]')?.dataset.childrenwearProductionPanel;
     if (!stage) return;
     state.childrenwearQueueDateFilters[stage] = select.value || 'all';
-    state.childrenwearQueueVisibleLimits[stage] = 36;
+    state.childrenwearQueuePages[stage] = 1;
     renderCwQueue(stage);
   });
   $$('[data-cw-activity-toggle]').forEach(button => button.onclick = () => {
@@ -8622,7 +10258,7 @@ function bindChildrenwearEvents() {
     state.childrenwearQueueFilters[stage] = 'all';
     state.childrenwearQueueDateFilters[stage] = 'all';
     const draftIndex = Math.max(0, state.childrenwearDrafts[stage]?.findIndex(item => item.id === id) ?? 0);
-    state.childrenwearQueueVisibleLimits[stage] = Math.max(36, draftIndex + 1);
+    state.childrenwearQueuePages[stage] = Math.floor(draftIndex / 12) + 1;
     state.childrenwearActiveDraft[stage] = id;
     renderCwQueue(stage);
     requestAnimationFrame(() => {
@@ -8640,15 +10276,13 @@ function bindChildrenwearEvents() {
     renderCwReview();
   };
   $('#cwReviewGrid').onclick = async event => {
-    const moreGroups = event.target.closest('[data-cw-review-more-groups]');
-    if (moreGroups) {
-      state.childrenwearReviewVisibleGroupLimit = (Number(state.childrenwearReviewVisibleGroupLimit) || 12) + 12;
+    const pageButton = event.target.closest('[data-cw-page-kind]');
+    if (pageButton?.dataset.cwPageKind === 'review-groups') {
+      state.childrenwearReviewPage = Math.max(1, Number(pageButton.dataset.cwPage) || 1);
       return renderCwReview();
     }
-    const more = event.target.closest('[data-cw-review-more]');
-    if (more) {
-      const folder = more.dataset.cwReviewMore;
-      state.childrenwearReviewGroupLimits.set(folder, (Number(state.childrenwearReviewGroupLimits.get(folder)) || 48) + 48);
+    if (pageButton?.dataset.cwPageKind === 'review-items') {
+      state.childrenwearReviewGroupPages.set(pageButton.dataset.cwPageKey, Math.max(1, Number(pageButton.dataset.cwPage) || 1));
       return renderCwReview();
     }
     const compare = event.target.closest('[data-cw-review-compare]');
@@ -8674,15 +10308,15 @@ function bindChildrenwearEvents() {
   };
   $$('.cw-review-filters [data-cw-review-filter]').forEach(button => button.onclick = () => {
     state.childrenwearReviewFilter = button.dataset.cwReviewFilter;
-    state.childrenwearReviewGroupLimits.clear();
-    state.childrenwearReviewVisibleGroupLimit = 12;
+    state.childrenwearReviewGroupPages.clear();
+    state.childrenwearReviewPage = 1;
     button.parentElement.querySelectorAll('button').forEach(item => item.classList.toggle('active', item === button));
     renderCwReview();
   });
   $('#cwReviewDateFilter').onchange = event => {
     state.childrenwearReviewDateFilter = event.target.value || 'all';
-    state.childrenwearReviewGroupLimits.clear();
-    state.childrenwearReviewVisibleGroupLimit = 12;
+    state.childrenwearReviewGroupPages.clear();
+    state.childrenwearReviewPage = 1;
     renderCwReview();
   };
   $('#cwReviewSelectAll').onclick = () => { cwVisibleReviewItems().forEach(item => state.childrenwearReviewSelection.add(item.id)); renderCwReview(); };
@@ -8700,9 +10334,18 @@ function bindChildrenwearEvents() {
   };
   $('#cwReviewRegenerateSelected').onclick = async () => {
     const items = cwReviewItems().filter(item => state.childrenwearReviewSelection.has(item.id));
+    if (!items.length) return toast('请先选择需要重新生成的图片', true);
+    const prompts = new Map();
+    for (const key of [...new Set(items.map(item => `${item.stage}\u0000${item.stage === 'model' ? item.output?.promptRoute || '' : ''}`))]) {
+      const [stage, route] = key.split('\u0000');
+      const value = await promptForCwRegeneration(stage, route);
+      if (value === null) return;
+      prompts.set(key, value);
+    }
     const concurrency = await apiBatchConcurrencyLimit(items.length);
     await runClientConcurrency(items, concurrency, async item => {
-      await regenerateCwReviewItem(item);
+      const key = `${item.stage}\u0000${item.stage === 'model' ? item.output?.promptRoute || '' : ''}`;
+      await regenerateCwReviewItem(item, prompts.get(key));
       void scheduleChildrenwearTaskRefresh();
     });
     state.childrenwearReviewSelection.clear();
@@ -8722,9 +10365,12 @@ function bindChildrenwearEvents() {
   $('#cwCompareNext').onclick = () => navigateCwCompare(1);
   $('#cwCompareFit').onclick = resetCwCompareView;
   $('#cwCompareActual').onclick = () => setCwCompareActual();
+  $('#cwCompareColorPicker').onclick = () => toggleCwCompareColorPicker();
+  $('#cwCompareColorResult').onclick = copyCwComparePickedColor;
   $('#cwCompareZoomOut').onclick = () => setCwCompareZoom(state.childrenwearCompareZoom - .25);
   $('#cwCompareZoomIn').onclick = () => setCwCompareZoom(state.childrenwearCompareZoom + .25);
   $('#cwCompareApprove').onclick = approveCurrentCwCompare;
+  $('#cwCompareLocalEdit').onclick = () => openCwLocalEdit(cwReviewItems().find(candidate => candidate.id === state.childrenwearCompareId));
   $('#cwCompareRegenerate').onclick = regenerateCurrentCwCompare;
   $('#cwCompareSourcePicker').onchange = event => {
     const input = event.target.closest('[data-cw-compare-toggle]');
@@ -8741,6 +10387,7 @@ function bindChildrenwearEvents() {
     setCwCompareZoom(state.childrenwearCompareZoom + (event.deltaY < 0 ? .2 : -.2), anchor);
   }, { passive: false });
   $('#cwComparePanes').ondblclick = event => {
+    if (state.childrenwearCompareColorPicking) return;
     const image = event.target.closest('[data-cw-compare-image]');
     if (!image) return;
     if (state.childrenwearCompareZoom > 1.05) resetCwCompareView(); else setCwCompareActual(image);
@@ -8770,6 +10417,7 @@ function bindChildrenwearEvents() {
   };
   $('#cwComparePanes').ondragend = () => $$('#cwComparePanes .cw-compare-pane').forEach(pane => pane.classList.remove('reordering', 'drop-target'));
   $('#cwComparePanes').onpointerdown = event => {
+    if (state.childrenwearCompareColorPicking) return;
     if (!event.target.closest('.cw-compare-frame') || event.button !== 0) return;
     compareDrag = { startX: event.clientX, startY: event.clientY, panX: state.childrenwearComparePan.x, panY: state.childrenwearComparePan.y };
     $('#cwComparePanes').classList.add('dragging');
@@ -8784,9 +10432,101 @@ function bindChildrenwearEvents() {
   const stopCompareDrag = () => { compareDrag = null; $('#cwComparePanes').classList.remove('dragging'); };
   $('#cwCompareModal').onpointerup = stopCompareDrag;
   $('#cwCompareModal').onpointercancel = stopCompareDrag;
+  $('#cwComparePanes').onclick = sampleCwCompareColor;
+  $('#cwLocalEditImage').onload = () => requestAnimationFrame(layoutCwLocalEditCanvas);
+  $('#cwLocalEditClose').onclick = () => closeCwLocalEdit();
+  $('#cwLocalEditCancel').onclick = () => closeCwLocalEdit();
+  $('#cwLocalEditSubmit').onclick = submitCwLocalEdit;
+  $('#cwLocalEditInstruction').oninput = updateCwLocalEditControls;
+  $('#cwLocalEditModal').onclick = event => { if (event.target === $('#cwLocalEditModal')) closeCwLocalEdit(); };
+  $$('[data-cw-local-tool]').forEach(button => {
+    button.onclick = () => {
+      const localEdit = state.childrenwearLocalEdit;
+      if (!localEdit || localEdit.busy) return;
+      localEdit.tool = button.dataset.cwLocalTool;
+      updateCwLocalEditControls();
+    };
+  });
+  $$('[data-cw-new-task="combination"]').forEach(button => {
+    button.onclick = () => createCwCombinationDraft({ notify: true });
+  });
+  $('#cwLocalEditUndo').onclick = () => {
+    const localEdit = state.childrenwearLocalEdit;
+    if (!localEdit || localEdit.busy) return;
+    localEdit.actions.pop();
+    drawCwLocalEditOverlay();
+    updateCwLocalEditControls();
+  };
+  $('#cwLocalEditClear').onclick = () => {
+    const localEdit = state.childrenwearLocalEdit;
+    if (!localEdit || localEdit.busy) return;
+    localEdit.actions = [];
+    localEdit.draft = null;
+    drawCwLocalEditOverlay();
+    updateCwLocalEditControls();
+  };
+  $('#cwLocalEditCanvas').onpointerdown = event => {
+    const localEdit = state.childrenwearLocalEdit;
+    const point = cwLocalEditCanvasPoint(event);
+    if (!localEdit || localEdit.busy || !point || event.button !== 0) return;
+    localEdit.drawing = true;
+    localEdit.pointerId = event.pointerId;
+    localEdit.startPoint = point;
+    $('#cwLocalEditCanvas').setPointerCapture?.(event.pointerId);
+    if (localEdit.tool === 'brush') {
+      const radiusPixels = Math.max(12, Number($('#cwLocalEditBrushSize').value) || 42) / 2;
+      const radius = radiusPixels / Math.max(1, Math.min(localEdit.displayWidth, localEdit.displayHeight));
+      localEdit.actions.push({ type: 'brush', radius, points: [[point.x, point.y]] });
+    } else {
+      localEdit.draft = { type: 'rectangle', x: point.x, y: point.y, width: 0, height: 0 };
+    }
+    drawCwLocalEditOverlay();
+    event.preventDefault();
+  };
+  $('#cwLocalEditCanvas').onpointermove = event => {
+    const localEdit = state.childrenwearLocalEdit;
+    const point = cwLocalEditCanvasPoint(event);
+    if (!localEdit || !point) return;
+    localEdit.hoverPoint = point;
+    if (!localEdit.drawing || localEdit.pointerId !== event.pointerId) {
+      drawCwLocalEditOverlay();
+      return;
+    }
+    if (localEdit.tool === 'brush') {
+      const stroke = localEdit.actions.at(-1);
+      const previous = stroke?.points?.at(-1);
+      if (stroke && (!previous || Math.hypot(point.x - previous[0], point.y - previous[1]) >= .0015)) stroke.points.push([point.x, point.y]);
+    } else if (localEdit.startPoint) {
+      localEdit.draft = {
+        type: 'rectangle',
+        x: Math.min(localEdit.startPoint.x, point.x),
+        y: Math.min(localEdit.startPoint.y, point.y),
+        width: Math.abs(point.x - localEdit.startPoint.x),
+        height: Math.abs(point.y - localEdit.startPoint.y)
+      };
+    }
+    drawCwLocalEditOverlay();
+    event.preventDefault();
+  };
+  $('#cwLocalEditCanvas').onpointerleave = () => {
+    const localEdit = state.childrenwearLocalEdit;
+    if (!localEdit || localEdit.drawing) return;
+    localEdit.hoverPoint = null;
+    drawCwLocalEditOverlay();
+  };
+  $('#cwLocalEditCanvas').onpointerup = finishCwLocalEditDrawing;
+  $('#cwLocalEditCanvas').onpointercancel = finishCwLocalEditDrawing;
+  window.addEventListener('resize', () => {
+    if (!$('#cwLocalEditModal').hidden) requestAnimationFrame(layoutCwLocalEditCanvas);
+  });
   document.addEventListener('keydown', event => {
+    if (!$('#cwLocalEditModal').hidden) {
+      if (event.key === 'Escape' && !event.target.closest('input,textarea,select')) closeCwLocalEdit();
+      return;
+    }
     if ($('#cwCompareModal').hidden || event.target.closest('input,textarea,select')) return;
-    if (event.key === 'Escape') closeCwCompare();
+    if (event.key === 'Escape' && state.childrenwearCompareColorPicking) toggleCwCompareColorPicker(false);
+    else if (event.key === 'Escape') closeCwCompare();
     else if (event.key === 'ArrowLeft') navigateCwCompare(-1);
     else if (event.key === 'ArrowRight') navigateCwCompare(1);
     else if (event.key === '+' || event.key === '=') setCwCompareZoom(state.childrenwearCompareZoom + .25);
@@ -9140,17 +10880,34 @@ function bindEvents() {
     input.type = visible ? 'password' : 'text';
     button.textContent = visible ? '显示' : '隐藏';
   });
-  $('#promptSettingList').onclick = event => {
-    const button = event.target.closest('[data-prompt-id]');
-    if (button) selectPromptSetting(button.dataset.promptId);
+  $('#promptStageTabs').onclick = event => {
+    const button = event.target.closest('[data-prompt-stage]');
+    if (button) selectPromptStage(button.dataset.promptStage);
+  };
+  $('#promptRouteSelect').onchange = event => {
+    state.activePromptRoute = event.target.value;
+    state.activePromptId = promptForStage('model')?.id || '';
+    renderPromptSettingList();
+    renderPromptEditor();
   };
   $('#promptEditor').oninput = event => {
     if (!canManagePrompts()) return;
-    const prompt = activePrompt();
-    if (prompt) schedulePromptSave(prompt, event.target.value);
+    $('#promptCharacterCount').textContent = `${event.target.value.length} 字`;
+    $('#promptSaveStatus').className = 'saving';
+    $('#promptSaveStatus').textContent = '有未保存修改';
   };
-  $('#resetCurrentPromptButton').onclick = resetCurrentPrompt;
-  $('#resetAllPromptsButton').onclick = resetAllPrompts;
+  $('#promptPresetName').oninput = () => {
+    $('#promptSaveStatus').className = 'saving';
+    $('#promptSaveStatus').textContent = '有未保存修改';
+  };
+  $('#promptPresetSelect').onchange = event => selectPromptPresetInEditor(event.target.value);
+  $('#promptAddPresetButton').onclick = createPromptPreset;
+  $('#promptSavePresetButton').onclick = saveCurrentPromptPreset;
+  $('#promptActivatePresetButton').onclick = activateCurrentPromptPreset;
+  $('#promptDeletePresetButton').onclick = deleteCurrentPromptPreset;
+  $('#promptSyncSource').onchange = event => loadPromptSyncGroups(event.target.value);
+  $('#promptSyncGroup').onchange = event => { $('#syncPromptGroupButton').disabled = !$('#promptSyncSource').value || !event.target.value; };
+  $('#syncPromptGroupButton').onclick = syncPromptGroupFromAccount;
   $('#revealFreeResultButton').onclick = () => { if (state.freeResult) window.caishen.revealFile(state.freeResult.outputPath); };
   $$('.audit-button').forEach(button => button.onclick = async () => {
     const previous = state.config.auditMode;
@@ -9339,7 +11096,7 @@ async function start() {
   renderSettingsTabs();
   await loadTemplateFolders();
   const adminLoads = [
-    ...(canViewPrompts() ? [loadPromptSettings()] : []),
+    ...(canViewPrompts() ? [loadPromptSettings(), loadPromptSyncAccounts()] : []),
     ...(isTeamAdmin() ? [loadRelayChoices()] : []),
     ...(isSuperAdmin() ? [loadApiSettings()] : [])
   ];

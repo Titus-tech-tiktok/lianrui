@@ -34,16 +34,16 @@ test('文件令牌经过签名，篡改或旧式裸路径令牌会被拒绝', ()
   assert.equal(runtime.fileFromToken(`${token.slice(0, -1)}x`), '');
 });
 
-test('role access separates prompt management from API management', () => {
+test('every account manages its own prompts while API management stays superadmin-only', () => {
   const member = { role: 'member' };
   const admin = { role: 'admin' };
   const superadmin = { role: 'superadmin' };
   for (const method of ['savePromptSetting', 'resetPromptSetting']) {
-    assert.equal(canAccessRpc(member, method), false);
-    assert.equal(canAccessRpc(admin, method), false);
+    assert.equal(canAccessRpc(member, method), true);
+    assert.equal(canAccessRpc(admin, method), true);
     assert.equal(canAccessRpc(superadmin, method), true);
   }
-  assert.equal(canAccessRpc(member, 'getPromptSettings'), false);
+  assert.equal(canAccessRpc(member, 'getPromptSettings'), true);
   assert.equal(canAccessRpc(admin, 'getPromptSettings'), true);
   assert.equal(canAccessRpc(superadmin, 'getPromptSettings'), true);
   for (const method of ['getApiSettings', 'saveApiSettings', 'testApiSettings', 'testRelayHealth']) {

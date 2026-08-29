@@ -60,60 +60,10 @@ const UNIVERSAL_REFERENCE_RULES = Object.freeze([
   'Do not retain the casual photographed pose, table, room, camera distortion or unrelated objects from the real-photo evidence.'
 ]);
 
-function buildChildrenwearMasterPrompt(input = {}) {
-  const extra = cleanText(input.extraInstruction);
-  const productTruth = input.productTruth || input.productManifest?.product_truth || input.productManifest || {};
-  const targetGeometry = input.targetGeometry || input.referenceSpec?.target_geometry || {};
-  const backgroundProfile = input.backgroundProfile || input.referenceSpec?.background_profile || {};
-  const transformPlan = input.transformPlan || buildChildrenwearFlatLayTransformPlan(
-    input.productManifest || productTruth,
-    input.referenceSpec || { target_geometry: targetGeometry, background_profile: backgroundProfile }
-  );
-  const detailCount = Math.max(0, Math.min(8, Number(input.detailImageCount) || 0));
-  return [
-    'CHILDRENSWEAR_STRUCTURED_FLAT_LAY_EXECUTION_V2',
-    'TASK: create one finished ecommerce flat-lay image by putting the real merchandise from image 1 into the exact commercial presentation template measured from image 2.',
-    '',
-    'INPUT ROLES — never swap them:',
-    '- image 1 is the original real product photo and the sole source of truth for merchandise identity and authenticity.',
-    '- image 2 is the target finished flat-lay reference and controls only pose, displayed outline, geometry, composition, background and lighting.',
-    detailCount ? `- images 3 to ${detailCount + 2} are close-up photographs of the same real SKU. They may clarify product facts only and never override image 2 presentation geometry.` : '',
-    '第一张图是商品身份和真实性的唯一依据。第二张图是平铺姿态、轮廓、比例、构图、背景和光影的目标模板。将第一张图中的真实商品套入第二张图的商业展示模板。不得复制第二张图的印花、商品颜色、文字或装饰；不得修改第一张图中的真实商品细节。',
-    '- WHY image 1 was selected: it identifies the exact product being sold and its visible selling points—component count, silhouette, construction, colour, artwork, craft and material signature.',
-    '- WHY image 2 was selected: it demonstrates the desired ecommerce display action—how the garment is placed, spread, bent or folded; where natural wrinkles form; and how composition, occupancy, background, light and shadow should look.',
-    '',
-    structuredAnalysisBlock('product_truth — immutable facts from image 1:', productTruth),
-    '',
-    structuredAnalysisBlock('target_geometry — measurable presentation geometry from image 2:', targetGeometry),
-    '',
-    structuredAnalysisBlock('background_profile — measured from safe blank regions of the original image-2 file:', backgroundProfile),
-    '',
-    structuredAnalysisBlock('transform_plan — explicit source/reference comparison for this exact pair:', transformPlan),
-    '',
-    'NON-NEGOTIABLE TWO-SOURCE LOCK — do not blend, average or trade attributes between the two images:',
-    'A. REFERENCE PRESENTATION LOCK (image 2): reproduce the reference presentation with maximum visual fidelity. Lock the canvas and aspect ratio; crop; product occupancy; center and scale; rotation; the displayed outer envelope created by its laying pose; sleeve/leg/body direction; bending, spreading, folding and overlap; every major fold and wrinkle zone; contact-shadow footprint, direction, softness and opacity; lighting; and the complete background colour, gradient and texture. Background pixels must come from image 2, never from image 1.',
-    'B. PRODUCT IDENTITY LOCK (image 1): reproduce the actual merchandise with maximum visual fidelity. Lock the real garment category and component count; pattern-cut and construction; proportions between panels and components; fabric and material; base colour and colour blocking; print/embroidery/applique/label artwork; pockets, seams, bindings, trims, closures and all visible product details. None of these facts may come from image 2.',
-    'C. “Reference silhouette” means only the visible ecommerce display outline caused by placement, gravity and folds. It never means copying the reference garment pattern, panel construction or style. “Real product style” means the actual cut and construction of image 1. Preserve both by posing the real product into the reference display outline without redesigning it.',
-    'D. Fold geometry comes from image 2: match fold locations, directions, gathering points, compression zones and relaxed asymmetry. Fold appearance comes from image 1: render those folds with the real fabric thickness, softness, drape, surface texture and wrinkle scale. Never copy the reference fabric.',
-    'E. If an exact reference pose is physically impossible for the real component count or construction, change only the impossible local part. Keep every other reference-controlled pixel relationship unchanged. Never solve a conflict by changing product colour, fabric, artwork, material, construction or component count.',
-    '',
-    'EXECUTION CONTRACT:',
-    '1. product_truth and image 1 control component count, garment type, visible side, real pattern-cut and panel topology, colour, material, print, embroidery, applique, label, pocket, seam, binding, trim, closure and every other product-specific fact.',
-    '2. target_geometry, background_profile and image 2 control canvas, crop, displayed garment bounding box, occupied area, centre, torso ratio, shoulder width, sleeve/crotch/leg/cuff geometry, placement, rotation, flatness, symmetry, fold direction, background, camera, lighting and shadow.',
-    '3. Never copy product identity from image 2. Never preserve the casual pose, table, room, distortion or unrelated objects from image 1.',
-    '4. The target is not a new composition inspired by image 2. It is the image-2 presentation with only its placeholder garment identity replaced by the exact image-1 SKU. When a local pose is physically incompatible, preserve all compatible reference geometry and make the smallest local adaptation only.',
-    '5. Preserve exact motif/label count, colour, scale and relative coordinates. Preserve material micro-texture and construction-dependent wrinkles. Do not invent hidden structure or unreadable text.',
-    '6. Transfer the reference action and fold flow, not the reference garment identity. Reproduce its natural relaxed placement and wrinkle zones as closely as the real SKU permits, while deriving wrinkle scale, depth, softness, drape, thickness and surface texture only from image 1 and PRODUCT_MANIFEST.',
-    '7. Render the background to background_profile.target_rgb/target_hex in sRGB. Keep measured uniformity/gradient/vignette properties and stay within color_tolerance_delta_e. Protect all non-product pixels from image 2 except where replacing its garment physically requires a clean boundary or contact shadow. Do not sample background from image 1.',
-    '8. Quantitatively target the supplied garment_bbox, garment_canvas_coverage and center_position. Coverage error should be no more than 0.03 and each centre-axis error no more than 0.02 of the canvas. Match all applicable neckline, shoulder, armpit, sleeve-cuff, crotch, leg and ankle-cuff keypoints; ignore null fields rather than inventing anatomy.',
-    '9. Before output, perform a silent two-column audit. Reference column: canvas, background, display outline, pose, fold map, shadow map and detail-placement action match image 2. Product column: garment style, construction, fabric, colour, material, artwork and visible details match image 1. If any attribute came from the wrong column, correct it before output.',
-    '',
-    'OUTPUT:',
-    'Return exactly one finished ecommerce image with the same presentation and aspect ratio as image 2.',
-    'No model, hanger, packaging, text overlay, watermark, border, collage or extra product.',
-    'Output only the final image and no explanation.',
-    extra ? `Operator note: ${extra}` : ''
-  ].filter(Boolean).join('\n');
+const CHILDRENWEAR_SIMPLE_FLAT_LAY_PROMPT = '图1保持版型背景不变，衣服款式图案严格精密还原替换成图2衣服，轻微自然布料褶皱，局部点缀浅淡衣纹，整体版型平整，低对比度柔和褶皱，符合重力轻微垂坠纹路，真实不夸张，版型工整美观，真实纯棉面料材质棉毛纹理质感，8K，电商超清摄影。';
+
+function buildChildrenwearMasterPrompt() {
+  return CHILDRENWEAR_SIMPLE_FLAT_LAY_PROMPT;
 }
 
 function buildChildrenwearModelPrompt(input = {}) {

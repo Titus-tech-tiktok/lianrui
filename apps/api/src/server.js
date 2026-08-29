@@ -37,10 +37,11 @@ const LONG_JOB_METHODS = new Set([
   'prepareTemplates', 'generateFree', 'generateTask', 'generateTemplateMaster',
   'generateTemplates', 'regenerateTemplate',
   'analyzeChildrenwearAssets', 'scanPendingChildrenwearAnalysis',
-  'generateChildrenwearMaster', 'generateChildrenwearModel', 'generateChildrenwearCombination', 'generateChildrenwearBatch'
+  'generateChildrenwearMaster', 'generateChildrenwearModel', 'generateChildrenwearCombination', 'generateChildrenwearBatch',
+  'generateChildrenwearLocalEdit'
 ]);
 const SUPERADMIN_RPC_METHODS = new Set([
-  'getApiSettings', 'saveApiSettings', 'testApiSettings', 'testRelayHealth', 'savePromptSetting', 'resetPromptSetting'
+  'getApiSettings', 'saveApiSettings', 'testApiSettings', 'testRelayHealth'
 ]);
 const childrenwearAutoAnalysisLastRuns = new Map();
 let childrenwearAutoAnalysisSweepRunning = false;
@@ -81,7 +82,6 @@ async function runChildrenwearAutoAnalysisSweep() {
 function canAccessRpc(user, method) {
   const name = String(method || '');
   if (SUPERADMIN_RPC_METHODS.has(name)) return user?.role === 'superadmin';
-  if (name === 'getPromptSettings') return isTeamAdmin(user);
   return true;
 }
 
@@ -578,6 +578,7 @@ function safeConfig(config = {}) {
     childrenwearReferenceAssetsPath: configAssetPath(config.childrenwearReferenceAssetsPath),
     childrenwearModelAssetsPath: configAssetPath(config.childrenwearModelAssetsPath),
     childrenwearSceneAssetsPath: configAssetPath(config.childrenwearSceneAssetsPath),
+    childrenwearFlatAssetsPath: configAssetPath(config.childrenwearFlatAssetsPath),
     childrenwearCombinationAssetsPath: configAssetPath(config.childrenwearCombinationAssetsPath),
     outputPath
   };
@@ -593,6 +594,7 @@ function publicConfig(config) {
     childrenwearReferenceAssetsPath: configAssetPath(config.childrenwearReferenceAssetsPath),
     childrenwearModelAssetsPath: configAssetPath(config.childrenwearModelAssetsPath),
     childrenwearSceneAssetsPath: configAssetPath(config.childrenwearSceneAssetsPath),
+    childrenwearFlatAssetsPath: configAssetPath(config.childrenwearFlatAssetsPath),
     childrenwearCombinationAssetsPath: configAssetPath(config.childrenwearCombinationAssetsPath),
     workspaceRoot: runtime.WORKSPACE_ROOT,
     defaultOutputPath: runtime.OUTPUT_ROOT
@@ -617,24 +619,37 @@ async function readJob(id) {
   try { return cacheJob(JSON.parse(await fsp.readFile(jobFile(normalizedId), 'utf8'))); } catch { return null; }
 }
 
+const jobWriteChains = new Map();
+
 async function writeJob(job) {
   cacheJob(job);
-  await fsp.mkdir(jobRoot(), { recursive: true });
-  const file = jobFile(job.id);
-  const temporary = `${file}.${process.pid}.tmp`;
-  await fsp.writeFile(temporary, JSON.stringify(job, null, 2));
-  let lastError;
-  for (let attempt = 0; attempt < 6; attempt += 1) {
-    try {
-      await fsp.rename(temporary, file);
-      return job;
-    } catch (error) {
-      lastError = error;
-      if (!['EPERM', 'EBUSY'].includes(error?.code) || attempt === 5) break;
-      await wait(80 * (attempt + 1));
+  const id = String(job?.id || '');
+  const serialized = JSON.stringify(job, null, 2);
+  const previous = jobWriteChains.get(id) || Promise.resolve();
+  const operation = previous.catch(() => {}).then(async () => {
+    await fsp.mkdir(jobRoot(), { recursive: true });
+    const file = jobFile(id);
+    const temporary = `${file}.${process.pid}.${Date.now()}.${crypto.randomBytes(4).toString('hex')}.tmp`;
+    await fsp.writeFile(temporary, serialized);
+    let lastError;
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      try {
+        await fsp.rename(temporary, file);
+        return job;
+      } catch (error) {
+        lastError = error;
+        if (!['EPERM', 'EBUSY'].includes(error?.code) || attempt === 5) break;
+        await wait(80 * (attempt + 1));
+      }
     }
-  }
-  throw lastError;
+    await fsp.rm(temporary, { force: true }).catch(() => {});
+    throw lastError;
+  });
+  jobWriteChains.set(id, operation);
+  operation.finally(() => {
+    if (jobWriteChains.get(id) === operation) jobWriteChains.delete(id);
+  }).catch(() => {});
+  return operation;
 }
 
 function publicJob(job) {
@@ -860,6 +875,7 @@ const ASSET_KIND_MAP = Object.freeze({
   'childrenwear-reference': 'childrenwear-reference',
   'childrenwear-model': 'childrenwear-model',
   'childrenwear-scene': 'childrenwear-scene',
+  'childrenwear-flat': 'childrenwear-flat',
   'childrenwear-combination': 'childrenwear-combination'
 });
 const SUPPORTED_IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif', '.tif', '.tiff']);
@@ -1157,12 +1173,40 @@ const rpc = {
   testRelayHealth: ([payload]) => runtime.testRelayHealth(payload || {}),
   saveConfig: async ([config]) => publicConfig(await runtime.saveConfig(safeConfig(config || {}))),
   resetConfig: async () => publicConfig(await runtime.resetConfig()),
-  getPromptSettings: async (args, context) => {
-    if (context?.user?.role === 'superadmin') return runtime.loadPromptSettings();
-    if (context?.user?.role === 'admin' && await runtime.canAdminViewPromptSettings()) return runtime.loadPromptSettings();
-    throw new Error('没有查看网站提示词的权限');
+  getPromptSettings: () => runtime.loadPromptSettings(),
+  getPromptSyncAccounts: async (args, context) => (await auth.listUsers())
+    .filter(user => user.active !== false && user.role !== 'superadmin' && user.id !== context?.user?.id)
+    .map(user => ({ id: user.id, displayName: user.displayName || user.username })),
+  getPromptSyncGroups: async ([sourceUserId], context) => {
+    const source = (await auth.listUsers()).find(user => user.id === String(sourceUserId || '') && user.active !== false && user.role !== 'superadmin');
+    if (!source?.workspaceId) throw new Error('来源账号不存在、已停用或不可作为同步来源');
+    if (source.id === context?.user?.id) throw new Error('无需从当前账号同步');
+    const settings = await runtime.runWithWorkspace(source.workspaceId, () => runtime.loadPromptSettings());
+    return settings.prompts.map(item => ({ id: item.id, title: item.title, stageId: item.stageId, stageLabel: item.stageLabel, presetCount: item.presets?.length || 0 }));
   },
+  syncPromptSettings: async ([sourceUserId], context) => {
+    const source = (await auth.listUsers()).find(user => user.id === String(sourceUserId || '') && user.active !== false && user.role !== 'superadmin');
+    if (!source?.workspaceId) throw new Error('来源账号不存在或已停用');
+    if (source.id === context?.user?.id) throw new Error('无需从当前账号同步');
+    return runtime.syncPromptSettingsFromWorkspace(source.workspaceId);
+  },
+  syncPromptPresetGroup: async ([sourceUserId, promptId], context) => {
+    const source = (await auth.listUsers()).find(user => user.id === String(sourceUserId || '') && user.active !== false && user.role !== 'superadmin');
+    if (!source?.workspaceId) throw new Error('来源账号不存在、已停用或不可作为同步来源');
+    if (source.id === context?.user?.id) throw new Error('无需从当前账号同步');
+    return runtime.syncPromptPresetGroupFromWorkspace(source.workspaceId, promptId);
+  },
+  getChildrenwearGenerationPromptSettings: () => runtime.loadChildrenwearGenerationPromptSettings(),
+  saveChildrenwearGenerationPromptSetting: ([id, value]) => runtime.saveChildrenwearGenerationPromptSetting(id, value),
   savePromptSetting: ([id, value]) => runtime.savePromptSetting(id, value),
+  createPromptGroup: ([payload]) => runtime.createPromptGroup(payload || {}),
+  updatePromptGroup: ([id, payload]) => runtime.updatePromptGroup(id, payload || {}),
+  selectStagePromptGroup: ([stageId, id]) => runtime.selectStagePromptGroup(stageId, id),
+  selectPromptRouteGroup: ([routeId, id]) => runtime.selectPromptRouteGroup(routeId, id),
+  deletePromptGroup: ([id]) => runtime.deletePromptGroup(id),
+  savePromptPreset: ([id, payload]) => runtime.savePromptPreset(id, payload || {}),
+  selectPromptPreset: ([id, presetId]) => runtime.selectPromptPreset(id, presetId),
+  deletePromptPreset: ([id, presetId]) => runtime.deletePromptPreset(id, presetId),
   resetPromptSetting: ([id]) => runtime.resetPromptSetting(id),
   listImages: ([root, query]) => runtime.scanImages(workspacePath(root, { allowEmpty: true }), String(query || '')),
   listImageLibrary: ([root, options]) => runtime.scanImageLibraryPage(workspacePath(root, { allowEmpty: true }), options || {}),
@@ -1184,18 +1228,23 @@ const rpc = {
     ...(payload || {}),
     folder: payload?.folder ? managedPath(payload.folder) : '',
     realPhotoPath: managedPath(payload?.realPhotoPath, { message: '实拍图不属于当前工作区或任务目录' }),
-    referencePath: managedPath(payload?.referencePath, { message: '参考成品图不属于当前工作区或任务目录' })
+    referencePath: managedPath(payload?.referencePath, { message: '参考成品图不属于当前工作区或任务目录' }),
+    currentResultPath: managedPath(payload?.currentResultPath, { allowEmpty: true, message: '当前生成结果不属于当前输出目录' })
   }, context || {}),
   generateChildrenwearModel: ([payload], context) => runtime.generateChildrenwearModel({
     ...(payload || {}),
-    folder: managedPath(payload?.folder, { message: '童装任务不属于当前输出目录' }),
-    modelReferencePath: managedPath(payload?.modelReferencePath, { message: '模特参考图不属于当前工作区或任务目录' })
+    folder: managedPath(payload?.folder, { allowEmpty: true, message: '童装任务不属于当前输出目录' }),
+    externalMasterPath: managedPath(payload?.externalMasterPath, { allowEmpty: true, message: '外部平铺图不属于当前工作区' }),
+    modelReferencePath: managedPath(payload?.modelReferencePath, { message: '模特参考图不属于当前工作区或任务目录' }),
+    currentResultPath: managedPath(payload?.currentResultPath, { allowEmpty: true, message: '当前生成结果不属于当前输出目录' }),
+    useFixedModel: payload?.useFixedModel === true
   }, context || {}),
   generateChildrenwearCombination: ([payload], context) => runtime.generateChildrenwearCombination({
     ...(payload || {}),
     folder: payload?.folder ? managedPath(payload.folder, { message: '组合图任务不属于当前输出目录' }) : '',
     combinationReferencePath: managedPath(payload?.combinationReferencePath, { message: '组合参考图不属于当前工作区或任务目录' }),
-    masterPaths: [...new Set((payload?.masterPaths || []).map(value => managedPath(value, { message: '母版图不属于当前输出目录' })))]
+    masterPaths: [...new Set((payload?.masterPaths || []).map(value => managedPath(value, { message: '母版图不属于当前输出目录' })))],
+    currentResultPath: managedPath(payload?.currentResultPath, { allowEmpty: true, message: '当前生成结果不属于当前输出目录' })
   }, context || {}),
   generateChildrenwearBatch: ([payload], context) => {
     const stage = String(payload?.stage || '');
@@ -1204,23 +1253,37 @@ const rpc = {
         ...(item || {}),
         folder: item?.folder ? managedPath(item.folder) : '',
         realPhotoPath: managedPath(item?.realPhotoPath, { message: '实拍图不属于当前工作区或任务目录' }),
-        referencePath: managedPath(item?.referencePath, { message: '参考成品图不属于当前工作区或任务目录' })
+        referencePath: managedPath(item?.referencePath, { message: '参考成品图不属于当前工作区或任务目录' }),
+        currentResultPath: managedPath(item?.currentResultPath, { allowEmpty: true, message: '当前生成结果不属于当前输出目录' })
       };
       if (stage === 'model') return {
         ...(item || {}),
-        folder: managedPath(item?.folder, { message: '童装任务不属于当前输出目录' }),
-        modelReferencePath: managedPath(item?.modelReferencePath, { message: '模特参考图不属于当前工作区或任务目录' })
+        folder: managedPath(item?.folder, { allowEmpty: true, message: '童装任务不属于当前输出目录' }),
+        externalMasterPath: managedPath(item?.externalMasterPath, { allowEmpty: true, message: '外部平铺图不属于当前工作区' }),
+        modelReferencePath: managedPath(item?.modelReferencePath, { message: '模特参考图不属于当前工作区或任务目录' }),
+        currentResultPath: managedPath(item?.currentResultPath, { allowEmpty: true, message: '当前生成结果不属于当前输出目录' }),
+        useFixedModel: item?.useFixedModel === true
       };
       if (stage === 'combination') return {
         ...(item || {}),
         folder: item?.folder ? managedPath(item.folder, { message: '组合图任务不属于当前输出目录' }) : '',
         combinationReferencePath: managedPath(item?.combinationReferencePath, { message: '组合参考图不属于当前工作区或任务目录' }),
-        masterPaths: [...new Set((item?.masterPaths || []).map(value => managedPath(value, { message: '母版图不属于当前输出目录' })))]
+        masterPaths: [...new Set((item?.masterPaths || []).map(value => managedPath(value, { message: '母版图不属于当前输出目录' })))],
+        currentResultPath: managedPath(item?.currentResultPath, { allowEmpty: true, message: '当前生成结果不属于当前输出目录' })
       };
       return item || {};
     });
     return runtime.generateChildrenwearBatch({ stage, items }, context || {});
   },
+  generateChildrenwearLocalEdit: ([payload], context) => runtime.generateChildrenwearLocalEdit({
+    ...(payload || {}),
+    folder: managedPath(payload?.folder, { message: '童装任务不属于当前输出目录' }),
+    stage: String(payload?.stage || ''),
+    outputId: String(payload?.outputId || ''),
+    instruction: String(payload?.instruction || ''),
+    regions: Array.isArray(payload?.regions) ? payload.regions : [],
+    strokes: Array.isArray(payload?.strokes) ? payload.strokes : []
+  }, context || {}),
   listChildrenwearTasks: () => runtime.listChildrenwearTasks(),
   getChildrenwearTask: ([folder]) => runtime.getChildrenwearTask(
     managedPath(folder, { message: '童装任务不属于当前输出目录' })
@@ -2055,9 +2118,6 @@ async function startServer() {
         .catch(error => console.warn(`[thumbnail-cache] ${error?.message || error}`));
     }
   });
-  const analysisSweepTimer = setInterval(() => { void runChildrenwearAutoAnalysisSweep(); }, 30_000);
-  analysisSweepTimer.unref?.();
-  server.once('close', () => clearInterval(analysisSweepTimer));
   return server;
 }
 

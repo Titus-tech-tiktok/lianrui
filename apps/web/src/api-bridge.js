@@ -153,7 +153,7 @@ async function pollActiveJobs() {
       for (const jobId of ids) {
         const watcher = activeJobPolls.get(jobId);
         if (!watcher) continue;
-        notifyJobProgress(watcher, { id: jobId, status: 'running', progress: { phase: 'reconnecting', message: '本机服务短暂断开，正在重连…' } });
+        notifyJobProgress(watcher, { id: jobId, status: 'running', progress: { phase: 'reconnecting', message: '后台状态连接恢复中，任务仍在服务器继续执行…' } });
       }
     }
   } finally {
@@ -172,7 +172,7 @@ function waitForJob(job, onProgress) {
   });
 }
 
-async function runJob(method, args = [], clientKey = '', onProgress = () => {}) {
+async function runJob(method, args = [], clientKey = '', onProgress = () => {}, onAccepted = () => {}) {
   const effectiveClientKey = clientKey || createClientId();
   const response = await fetchWithRecovery('/api/jobs', {
     method: 'POST',
@@ -183,6 +183,7 @@ async function runJob(method, args = [], clientKey = '', onProgress = () => {}) 
   if (!response.ok) throw new Error(body.error || `任务提交失败：HTTP ${response.status}`);
   const jobId = body.data?.id;
   if (!jobId) throw new Error('服务端没有返回任务编号');
+  try { onAccepted(body.data); } catch {}
   return waitForJob(body.data, onProgress);
 }
 
@@ -326,6 +327,7 @@ function assetKindFromKey(key) {
     childrenwearReferenceAssetsPath: 'childrenwear-reference',
     childrenwearModelAssetsPath: 'childrenwear-model',
     childrenwearSceneAssetsPath: 'childrenwear-scene',
+    childrenwearFlatAssetsPath: 'childrenwear-flat',
     childrenwearCombinationAssetsPath: 'childrenwear-combination'
   })[key] || 'template';
 }
@@ -603,7 +605,21 @@ window.caishen = {
   saveConfig: config => rpc('saveConfig', config),
   resetConfig: () => rpc('resetConfig'),
   getPromptSettings: () => rpc('getPromptSettings'),
+  getPromptSyncAccounts: () => rpc('getPromptSyncAccounts'),
+  getPromptSyncGroups: sourceUserId => rpc('getPromptSyncGroups', sourceUserId),
+  syncPromptSettings: sourceUserId => rpc('syncPromptSettings', sourceUserId),
+  syncPromptPresetGroup: (sourceUserId, promptId) => rpc('syncPromptPresetGroup', sourceUserId, promptId),
+  getChildrenwearGenerationPromptSettings: () => rpc('getChildrenwearGenerationPromptSettings'),
+  saveChildrenwearGenerationPromptSetting: (id, value) => rpc('saveChildrenwearGenerationPromptSetting', id, value),
   savePromptSetting: (id, value) => rpc('savePromptSetting', id, value),
+  createPromptGroup: payload => rpc('createPromptGroup', payload),
+  updatePromptGroup: (id, payload) => rpc('updatePromptGroup', id, payload),
+  selectStagePromptGroup: (stageId, id) => rpc('selectStagePromptGroup', stageId, id),
+  selectPromptRouteGroup: (routeId, id) => rpc('selectPromptRouteGroup', routeId, id),
+  deletePromptGroup: id => rpc('deletePromptGroup', id),
+  savePromptPreset: (id, payload) => rpc('savePromptPreset', id, payload),
+  selectPromptPreset: (id, presetId) => rpc('selectPromptPreset', id, presetId),
+  deletePromptPreset: (id, presetId) => rpc('deletePromptPreset', id, presetId),
   resetPromptSetting: id => rpc('resetPromptSetting', id),
   stageAssetFolder,
   syncAssetFolder,
@@ -667,6 +683,13 @@ window.caishen = {
     [payload],
     `childrenwear-batch:${payload?.stage || 'unknown'}:${Date.now()}:${createClientId()}`,
     onProgress
+  ),
+  generateChildrenwearLocalEdit: (payload, onProgress, onAccepted) => runJob(
+    'generateChildrenwearLocalEdit',
+    [payload],
+    `childrenwear-local-edit:${payload?.stage || 'unknown'}:${payload?.folder || createClientId()}:${Date.now()}`,
+    onProgress,
+    onAccepted
   ),
   listChildrenwearTasks: () => rpc('listChildrenwearTasks'),
   getChildrenwearTask: folder => rpc('getChildrenwearTask', folder),

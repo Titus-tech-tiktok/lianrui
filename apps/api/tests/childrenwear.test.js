@@ -33,29 +33,8 @@ test('childrenwear prompts keep real product and reference roles separate', () =
   const productManifest = { category_guess: '纯棉梭织裤', piece_count: 1, pieces: [{ material: { family: '纯棉梭织' }, decorations: [{ type: '刺绣贴布' }] }] };
   const referenceSpec = { target_geometry: { canvas_aspect_ratio: '1:1', garment_canvas_coverage: 0.52, center_position: { x: 0.5, y: 0.5 } }, background_profile: { target_hex: '#EEBEC1', target_rgb: { r: 238, g: 190, b: 193 } } };
   const master = buildChildrenwearMasterPrompt({ productManifest, referenceSpec });
-  assert.match(master, /image 1 is the original real product photo/i);
-  assert.match(master, /image 2 is the target finished flat-lay reference/i);
-  assert.match(master, /product_truth/);
-  assert.match(master, /target_geometry/);
-  assert.match(master, /background_profile/);
-  assert.match(master, /transform_plan/);
-  assert.match(master, /第一张图是商品身份和真实性的唯一依据/);
-  assert.match(master, /纯棉梭织裤/);
-  assert.match(master, /刺绣贴布/);
-  assert.match(master, /Never copy product identity from image 2/i);
-  assert.match(master, /WHY image 1 was selected/i);
-  assert.match(master, /WHY image 2 was selected/i);
-  assert.match(master, /Transfer the reference action and fold flow/i);
-  assert.match(master, /REFERENCE PRESENTATION LOCK/i);
-  assert.match(master, /PRODUCT IDENTITY LOCK/i);
-  assert.match(master, /complete background colour, gradient and texture/i);
-  assert.match(master, /“Reference silhouette” means only the visible ecommerce display outline/i);
-  assert.match(master, /Fold geometry comes from image 2/i);
-  assert.match(master, /garment style, construction, fabric, colour, material, artwork/i);
-  assert.match(master, /do not blend, average or trade attributes/i);
-  assert.match(master, /garment_canvas_coverage_tolerance/);
-  assert.match(master, /background_color_tolerance_delta_e/);
-  assert.doesNotMatch(master, /automatic detail crops/i);
+  assert.equal(master, '图1保持版型背景不变，衣服款式图案严格精密还原替换成图2衣服，轻微自然布料褶皱，局部点缀浅淡衣纹，整体版型平整，低对比度柔和褶皱，符合重力轻微垂坠纹路，真实不夸张，版型工整美观，真实纯棉面料材质棉毛纹理质感，8K，电商超清摄影。');
+  assert.doesNotMatch(master, /product_truth|target_geometry|background_profile|transform_plan/i);
 
   const model = buildChildrenwearModelPrompt({ productManifest, referenceSpec: { model: { pose: '站立' } } });
   assert.match(model, /image 1 is the selected generated flat-lay/i);
@@ -182,15 +161,13 @@ test('combination prompts use the real reference index for two to four masters',
   }
 });
 
-test('unknown categories and materials remain open catalogue evidence hints', () => {
+test('direct flat-lay prompt stays category-agnostic while piece count remains open-ended', () => {
   const prompt = buildChildrenwearMasterPrompt({
     productManifest: { category_guess: '未来新品类-X9', piece_count: 1, pieces: [{ material: { family: '实验复合面料-Z7' } }] },
     referenceSpec: { presentation: { display_pose: 'reference-defined' } }
   });
-  assert.match(prompt, /未来新品类-X9/);
-  assert.match(prompt, /实验复合面料-Z7/);
-  assert.match(prompt, /product-specific fact/i);
-  assert.doesNotMatch(prompt, /two-piece set|romper silhouette/i);
+  assert.match(prompt, /图1保持版型背景不变/);
+  assert.doesNotMatch(prompt, /未来新品类-X9|实验复合面料-Z7|two-piece set|romper silhouette/i);
   assert.equal(childrenwearPieceCount({ category: '纯棉套装' }), null);
   assert.equal(childrenwearPieceCount({ category: '完全未知新品类', pieceCount: 4 }), 4);
   assert.equal(childrenwearPieceCount({ productManifest: { piece_count: 3 } }), 3);
@@ -309,12 +286,14 @@ test('runtime completes master approval, model generation and combination with t
     imageSize: '1024x1024',
     imageQuality: 'high'
   });
-  await runtime.savePromptSetting('childrenwearMasterGeneration', 'CUSTOM_BRAND_GUIDANCE: keep a soft premium babywear presentation.');
-  await runtime.savePromptSetting('childrenwearProductAnalysis', 'CUSTOM_PRODUCT_ANALYSIS\nPRODUCT_MANIFEST');
-  await runtime.analyzeChildrenwearAssets({ role: 'product', paths: [real] });
-  await runtime.analyzeChildrenwearAssets({ role: 'flat_reference', paths: [reference] });
+  const emptyGenerationPrompts = await runtime.loadChildrenwearGenerationPromptSettings();
+  assert.equal(emptyGenerationPrompts.prompts.length, 3);
+  assert.equal(emptyGenerationPrompts.prompts.every(item => item.value === ''), true, '生成板块不得内置预设提示词');
+  await runtime.saveChildrenwearGenerationPromptSetting('childrenwearMasterGeneration', 'CUSTOM_MASTER_PROMPT');
+  await runtime.saveChildrenwearGenerationPromptSetting('childrenwearModelGeneration', 'CUSTOM_MODEL_PROMPT');
+  await runtime.saveChildrenwearGenerationPromptSetting('childrenwearCombinationGeneration', 'CUSTOM_COMBINATION_PROMPT');
   await runtime.analyzeChildrenwearAssets({ role: 'model_reference', paths: [modelReference] });
-  assert.match(analysisSystemPrompts[0], /CUSTOM_PRODUCT_ANALYSIS/);
+  const analysisRequestsBeforeMaster = analysisRequests;
 
   const first = await runtime.generateChildrenwearMaster({
     realPhotoPath: real,
@@ -324,19 +303,16 @@ test('runtime completes master approval, model generation and combination with t
     craft: '刺绣贴布'
   });
   assert.equal(first.masterApproved, false);
-  assert.match(requestBodies[0], /CUSTOM_BRAND_GUIDANCE/);
-  assert.match(requestBodies[0], /SYSTEM_DYNAMIC_EXECUTION_CONTRACT/);
-  assert.match(requestBodies[0], /product_truth/);
-  assert.match(requestBodies[0], /"category": "测试新品类"/);
-  assert.match(requestBodies[0], /target_geometry/);
-  assert.match(requestBodies[0], /background_profile/);
-  assert.match(requestBodies[0], /transform_plan/);
+  assert.equal(analysisRequests, analysisRequestsBeforeMaster, 'flat-lay generation must not call the text-analysis API');
+  assert.match(requestBodies[0], /CUSTOM_MASTER_PROMPT/);
+  assert.doesNotMatch(requestBodies[0], /图1保持版型背景不变|SYSTEM_DYNAMIC_EXECUTION_CONTRACT|product_truth|target_geometry|transform_plan/);
+  assert.ok(requestBodies[0].indexOf('filename="real.png"') < requestBodies[0].indexOf('filename="reference.png"'), 'API image order must follow the task card from left to right');
   assert.match(requestBodies[0], /1024x1536/);
   assert.equal(first.backgroundProfile.target_hex, '#F6F6F3');
-  assert.equal(first.productAnalysisSchemaVersion, '2.0');
-  assert.equal(first.flatReferenceAnalysisSchemaVersion, '2.0');
-  assert.ok(first.productAnalysisIdentityHash);
-  assert.ok(first.flatReferenceAnalysisIdentityHash);
+  assert.equal(first.analysisSchemaVersion, 'direct-two-image-v1');
+  assert.equal(first.productAnalysisSchemaVersion, '');
+  assert.equal(first.flatReferenceAnalysisSchemaVersion, '');
+  assert.equal(first.productManifest.source, 'direct_two_image_flat_lay');
   assert.equal(first.flatLayValidation.advisory_only, true);
   assert.equal(first.flatLayImageSize.size, '1024x1536');
   assert.equal(typeof first.flatLayValidation.geometry.contour_similarity_iou, 'number');
@@ -372,6 +348,9 @@ test('runtime completes master approval, model generation and combination with t
     realDetailPaths: [outsideDetail]
   }), /实拍细节图不属于当前工作区/);
   const withModel = await runtime.generateChildrenwearModel({ folder: first.folder, modelReferencePath: modelReference });
+  assert.match(requestBodies[1], /CUSTOM_MODEL_PROMPT/);
+  assert.match(requestBodies[1], /本次任务模式：生成模特上身图/);
+  assert.doesNotMatch(requestBodies[1], /SYSTEM_DYNAMIC_EXECUTION_CONTRACT/);
   assert.equal(withModel.masterApproved, false, '平铺图仍待审核，但不再阻塞模特图生成');
   const flaggedFirst = await runtime.approveChildrenwearOutput({ folder: first.folder, stage: 'master', approved: false, reviewStatus: 'needs_regeneration' });
   assert.equal(flaggedFirst.masterApproved, false);
@@ -381,6 +360,9 @@ test('runtime completes master approval, model generation and combination with t
   assert.equal(approvedFirst.masterReviewStatus, 'approved');
 
   assert.equal(withModel.modelOutputs.length, 1);
+  assert.equal(withModel.modelOutputs[0].operationType, 'dress');
+  assert.equal(withModel.modelOutputs[0].backgroundMode, 'model_reference');
+  assert.equal(withModel.modelOutputs[0].promptRoute, 'dress_follow');
   assert.equal(withModel.modelOutputs[0].reviewRequired, false);
   assert.equal(withModel.modelOutputs[0].reviewStatus, 'completed');
   assert.ok(withModel.modelOutputs[0].elapsedMs >= 0);
@@ -430,8 +412,11 @@ test('runtime completes master approval, model generation and combination with t
     realPhotoPath: real,
     referencePath: reference,
     category: '纯棉套装',
-    material: '纯棉针织'
+    material: '纯棉针织',
+    promptOverride: 'ONE_TIME_MASTER_REGENERATION_PROMPT'
   });
+  assert.match(requestBodies[5], /ONE_TIME_MASTER_REGENERATION_PROMPT/);
+  assert.doesNotMatch(requestBodies[5], /CUSTOM_MASTER_PROMPT/);
   await runtime.analyzeChildrenwearAssets({ role: 'combination_reference', paths: [reference] });
   const combo = await runtime.generateChildrenwearCombination({
     folder: approvedFirst.folder,
@@ -441,9 +426,8 @@ test('runtime completes master approval, model generation and combination with t
   });
   assert.equal(combo.combinationOutputs.length, 1);
   assert.equal(second.masterApproved, false, '未审核平铺图应允许直接进入组合图阶段');
-  assert.match(requestBodies[6], /Images 1 to 2 are selected generated flat-lays/);
-  assert.match(requestBodies[6], /Image 3 is the target composition action blueprint/);
-  assert.match(requestBodies[6], /SKU 2[\s\S]*"piece_count": 1/);
+  assert.match(requestBodies[6], /CUSTOM_COMBINATION_PROMPT/);
+  assert.doesNotMatch(requestBodies[6], /Images 1 to 2 are selected generated flat-lays|SYSTEM_DYNAMIC_EXECUTION_CONTRACT/);
   assert.equal(combo.combinationOutputs[0].reviewRequired, false);
   assert.equal(combo.combinationOutputs[0].reviewStatus, 'completed');
   assert.ok(combo.combinationOutputs[0].elapsedMs >= 0);
@@ -455,7 +439,7 @@ test('runtime completes master approval, model generation and combination with t
   assert.equal(combo.combinationOutputs[0].masterPaths.length, 2);
   assert.equal(combo.combinationReferenceSpec.slot_count, 2, '运营选择数量必须覆盖参考图识别出的槽位数');
   assert.equal(combo.combinationReferenceSpec.selected_sku_count, 2);
-  assert.equal(combo.combinationReferenceSpec.detected_slot_count, 4);
+  assert.equal(combo.combinationReferenceSpec.detected_slot_count, null, '关闭 AI 分析后不得伪造参考图槽位数');
   assert.equal(combo.sourceMasterPaths.length, 2);
   assert.equal(combo.sourceTaskFolders.length, 2);
   assert.equal(combo.combinationOutputs[0].sourceMasterPaths.length, 2);
@@ -503,9 +487,11 @@ test('runtime completes master approval, model generation and combination with t
     category: '纯棉梭织裤',
     material: '纯棉梭织'
   });
+  assert.match(requestBodies[7], /CUSTOM_MASTER_PROMPT/);
+  assert.doesNotMatch(requestBodies[7], /ONE_TIME_MASTER_REGENERATION_PROMPT/);
   assert.equal(regenerated.masterVersion, 2);
   assert.equal(requests, 8);
-  assert.equal(analysisRequests, 4);
+  assert.equal(analysisRequests, 2, 'only the model and combination reference workflows should use AI analysis');
   const deletion = await runtime.deleteChildrenwearTasks([first.folder]);
   assert.equal(deletion.deleted, 1);
   assert.deepEqual(deletion.folders, [first.folder]);

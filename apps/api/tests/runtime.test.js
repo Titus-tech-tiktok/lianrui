@@ -32,23 +32,14 @@ test('本地工作区配置可以保存并重新读取', async () => {
   await fs.writeFile(externalImage, Buffer.from('preview'));
   assert.equal(runtime.fileFromToken(runtime.fileToken(externalImage)), externalImage);
   const defaults = await runtime.loadPromptSettings();
-  assert.deepEqual(defaults.prompts.map(item => item.id), [
-    'childrenwearProductAnalysis',
-    'childrenwearFlatReferenceAnalysis',
-    'childrenwearModelReferenceAnalysis',
-    'childrenwearSceneReferenceAnalysis',
-    'childrenwearCombinationReferenceAnalysis',
-    'childrenwearMasterGeneration',
-    'childrenwearModelGeneration',
-    'childrenwearCombinationGeneration'
-  ]);
+  assert.deepEqual(defaults.prompts, []);
   await runtime.savePromptSetting('childrenwearMasterGeneration', '保持童装商品结构不变');
   let prompts = await runtime.loadPromptSettings();
   assert.equal(prompts.prompts.find(item => item.id === 'childrenwearMasterGeneration').value, '保持童装商品结构不变');
   assert.equal(prompts.prompts.find(item => item.id === 'childrenwearMasterGeneration').customized, true);
   await runtime.resetPromptSetting('childrenwearMasterGeneration');
   prompts = await runtime.loadPromptSettings();
-  assert.match(prompts.prompts.find(item => item.id === 'childrenwearMasterGeneration').value, /CHILDRENSWEAR_STRUCTURED_FLAT_LAY_EXECUTION/);
-  assert.equal(prompts.prompts.find(item => item.id === 'childrenwearMasterGeneration').customized, false);
+  assert.equal(prompts.prompts.some(item => item.id === 'childrenwearMasterGeneration'), false);
+  assert.equal(prompts.stageBindings.master, '');
   await fs.rm(temp, { recursive: true, force: true });
 });
