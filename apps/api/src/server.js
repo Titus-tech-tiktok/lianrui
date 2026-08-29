@@ -2094,7 +2094,7 @@ async function startServer() {
       const href = entry.isDirectory() ? `/api/browse?path=${token}` : `${fileUrl(target)}?download=1`;
       return `<li><a href="${href}">${entry.isDirectory() ? '文件夹' : '文件'} · ${escape(entry.name)}</a></li>`;
     }).join('');
-    res.type('html').send(`<!doctype html><meta charset="utf-8"><title>多嘻噜卡科技</title><style>body{font:16px system-ui;max-width:900px;margin:48px auto;padding:0 24px}li{margin:12px 0}a{color:#174b3a}</style><p>多嘻噜卡科技</p><h1>${escape(path.basename(folder))}</h1><ul>${items}</ul>`);
+    res.type('html').send(`<!doctype html><meta charset="utf-8"><title>多嘻噜卡童装</title><style>body{font:16px system-ui;max-width:900px;margin:48px auto;padding:0 24px}li{margin:12px 0}a{color:#174b3a}</style><p>多嘻噜卡童装</p><h1>${escape(path.basename(folder))}</h1><ul>${items}</ul>`);
   });
 
   const webDist = path.resolve(__dirname, '../../web/dist');
@@ -2112,7 +2112,7 @@ async function startServer() {
   });
 
   const server = app.listen(PORT, HOST, () => {
-    console.log(`多嘻噜卡科技 Web 已启动：http://${HOST}:${PORT}`);
+    console.log(`多嘻噜卡童装 Web 已启动：http://${HOST}:${PORT}`);
     for (const user of existingUsers) {
       void runtime.runWithWorkspace(user.workspaceId, () => pruneThumbnailCache())
         .catch(error => console.warn(`[thumbnail-cache] ${error?.message || error}`));

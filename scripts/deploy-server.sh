@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [[ ! -d .git || ! -f Dockerfile || ! -f docker-compose.yml ]]; then
-  echo "Refusing to deploy outside the 多嘻噜卡科技 repository root." >&2
+  echo "Refusing to deploy outside the 多嘻噜卡童装 repository root." >&2
   exit 1
 fi
 

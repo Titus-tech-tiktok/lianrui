@@ -14,7 +14,7 @@ test('多嘻噜卡使用永沙式资产管理、左右任务台和五段生产�
     fs.readFile(path.join(root, 'apps/api/src/server.js'), 'utf8'),
     fs.stat(path.join(root, 'apps/web/public/duoxiluka-logo.png'))
   ]);
-  assert.match(index, /<title>多嘻噜卡科技<\/title>/);
+  assert.match(index, /<title>多嘻噜卡童装<\/title>/);
   assert.match(index, /src="\/duoxiluka-logo\.png"/);
   assert.equal((index.match(/data-open-cw-lineage-search/g) || []).length, 4);
   assert.match(index, /id="cwLineageSearchModal"/);
@@ -312,7 +312,7 @@ test('多嘻噜卡使用永沙式资产管理、左右任务台和五段生产�
   assert.match(index, /id="imageHoverPreviewViewport"/);
   assert.match(index, /id="imageHoverLens"/);
   assert.match(index, /id="brandDialogModal"/);
-  assert.match(index, /<b>多嘻噜卡科技<\/b>/);
+  assert.match(index, /<b>多嘻噜卡童装<\/b>/);
   assert.match(renderer, /const updateMagnifiedPreview/);
   assert.match(renderer, /const zoomFactor = 1\.7/);
   assert.match(renderer, /const sizeMagnifierPane/);

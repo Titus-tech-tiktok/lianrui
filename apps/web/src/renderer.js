@@ -486,7 +486,7 @@ function applySidebarCollapsed(collapsed) {
     button.textContent = collapsed ? '›' : '‹';
   }
   const logo = $('.brand img');
-  if (logo) logo.title = '多嘻噜卡科技';
+  if (logo) logo.title = '多嘻噜卡童装';
   try { localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, collapsed ? '1' : '0'); } catch {}
 }
 
@@ -1023,7 +1023,7 @@ function openMobileFinanceDialog(entry = null) {
   const element = document.createElement('div');
   element.className = 'mobile-finance-modal-backdrop';
   element.innerHTML = `<section class="mobile-finance-modal" role="dialog" aria-modal="true" aria-labelledby="mobileFinanceDialogTitle">
-    <header><div><span>多嘻噜卡科技</span><h2 id="mobileFinanceDialogTitle">${editing ? '编辑记录' : '新增记录'}</h2></div><button type="button" data-finance-close aria-label="关闭">×</button></header>
+    <header><div><span>多嘻噜卡童装</span><h2 id="mobileFinanceDialogTitle">${editing ? '编辑记录' : '新增记录'}</h2></div><button type="button" data-finance-close aria-label="关闭">×</button></header>
     <div class="mobile-finance-form">
       <label><span>日期</span><input data-finance-date type="date" value="${escapeHtml(entry?.date || currentChinaDate())}"></label>
       <label><span>分类</span><select data-finance-category>
@@ -3112,7 +3112,7 @@ function openReviewRegenerationDialog(item, job) {
   element.className = 'review-regenerate-modal-backdrop';
   element.innerHTML = `<section class="review-regenerate-modal" role="dialog" aria-modal="true" aria-labelledby="reviewRegenerateTitle">
     <header>
-      <div><span>多嘻噜卡科技</span><h2 id="reviewRegenerateTitle">重新生成图片</h2><p>当前图片：${escapeHtml(job.relativePath)}</p></div>
+      <div><span>多嘻噜卡童装</span><h2 id="reviewRegenerateTitle">重新生成图片</h2><p>当前图片：${escapeHtml(job.relativePath)}</p></div>
       <button class="icon-button" type="button" data-review-regenerate-close aria-label="关闭">×</button>
     </header>
     <div class="review-regenerate-body">

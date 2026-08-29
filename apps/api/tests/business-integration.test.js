@@ -11,9 +11,9 @@ test('业务数据响应使用共享密钥加密并校验完整性', () => {
   const previous = process.env.CAISHEN_BUSINESS_LINK_SECRET;
   process.env.CAISHEN_BUSINESS_LINK_SECRET = 'test-secret-at-least-32-characters-long';
   try {
-    const sealed = sealBusinessData({ amount: 123, name: '多嘻噜卡科技' });
+    const sealed = sealBusinessData({ amount: 123, name: '多嘻噜卡童装' });
     assert.equal(sealed.encrypted, true);
-    assert.deepEqual(openBusinessData(sealed), { amount: 123, name: '多嘻噜卡科技' });
+    assert.deepEqual(openBusinessData(sealed), { amount: 123, name: '多嘻噜卡童装' });
     assert.throws(() => openBusinessData({ ...sealed, ciphertext: sealed.ciphertext.slice(0, -2) + 'AA' }), /无法验证/);
   } finally {
     if (previous === undefined) delete process.env.CAISHEN_BUSINESS_LINK_SECRET;
