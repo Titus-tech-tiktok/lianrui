@@ -36,7 +36,7 @@ const thumbnailRoot = () => path.join(runtime.WORKSPACE_ROOT, '.cache', 'thumbna
 const LONG_JOB_METHODS = new Set([
   'prepareTemplates', 'generateFree', 'generateTask', 'generateTemplateMaster',
   'generateTemplates', 'regenerateTemplate',
-  'analyzeChildrenwearAssets', 'scanPendingChildrenwearAnalysis',
+  'analyzePoseReference', 'analyzeMaterial', 'analyzeChildrenwearAssets', 'scanPendingChildrenwearAnalysis',
   'generateChildrenwearMaster', 'generateChildrenwearModel', 'generateChildrenwearCombination', 'generateChildrenwearBatch',
   'generateChildrenwearLocalEdit'
 ]);
@@ -578,6 +578,7 @@ function safeConfig(config = {}) {
     childrenwearReferenceAssetsPath: configAssetPath(config.childrenwearReferenceAssetsPath),
     childrenwearModelAssetsPath: configAssetPath(config.childrenwearModelAssetsPath),
     childrenwearSceneAssetsPath: configAssetPath(config.childrenwearSceneAssetsPath),
+    childrenwearMaterialAssetsPath: configAssetPath(config.childrenwearMaterialAssetsPath),
     childrenwearFlatAssetsPath: configAssetPath(config.childrenwearFlatAssetsPath),
     childrenwearCombinationAssetsPath: configAssetPath(config.childrenwearCombinationAssetsPath),
     outputPath
@@ -594,6 +595,7 @@ function publicConfig(config) {
     childrenwearReferenceAssetsPath: configAssetPath(config.childrenwearReferenceAssetsPath),
     childrenwearModelAssetsPath: configAssetPath(config.childrenwearModelAssetsPath),
     childrenwearSceneAssetsPath: configAssetPath(config.childrenwearSceneAssetsPath),
+    childrenwearMaterialAssetsPath: configAssetPath(config.childrenwearMaterialAssetsPath),
     childrenwearFlatAssetsPath: configAssetPath(config.childrenwearFlatAssetsPath),
     childrenwearCombinationAssetsPath: configAssetPath(config.childrenwearCombinationAssetsPath),
     workspaceRoot: runtime.WORKSPACE_ROOT,
@@ -875,6 +877,7 @@ const ASSET_KIND_MAP = Object.freeze({
   'childrenwear-reference': 'childrenwear-reference',
   'childrenwear-model': 'childrenwear-model',
   'childrenwear-scene': 'childrenwear-scene',
+  'childrenwear-material': 'childrenwear-material',
   'childrenwear-flat': 'childrenwear-flat',
   'childrenwear-combination': 'childrenwear-combination'
 });
@@ -1165,6 +1168,10 @@ async function renameAssetFolder(kindValue, requestedRoot, folderId, nextNameVal
 }
 
 const rpc = {
+  analyzePoseReference: ([payload], context) => runtime.analyzePoseReference({ ...(payload || {}), imagePath: managedPath(payload?.imagePath) }, context || {}),
+  listMaterials: () => runtime.listMaterials(),
+  saveMaterial: ([payload]) => runtime.saveMaterial({ ...(payload || {}), imagePath: workspacePath(payload?.imagePath, { allowEmpty: true }) }),
+  analyzeMaterial: ([payload], context) => runtime.analyzeMaterial({ ...(payload || {}), imagePath: workspacePath(payload?.imagePath, { allowEmpty: true }) }, context || {}),
   getConfig: async () => publicConfig(await runtime.loadConfig()),
   getApiConcurrencySettings: () => runtime.publicApiConcurrencySettings(),
   getApiSettings: () => runtime.loadApiSettings(),
@@ -1235,7 +1242,10 @@ const rpc = {
     ...(payload || {}),
     folder: managedPath(payload?.folder, { allowEmpty: true, message: '童装任务不属于当前输出目录' }),
     externalMasterPath: managedPath(payload?.externalMasterPath, { allowEmpty: true, message: '外部平铺图不属于当前工作区' }),
-    modelReferencePath: managedPath(payload?.modelReferencePath, { message: '模特参考图不属于当前工作区或任务目录' }),
+    topReferencePath: managedPath(payload?.topReferencePath, { allowEmpty: true }),
+    bottomReferencePath: managedPath(payload?.bottomReferencePath, { allowEmpty: true }),
+    poseReferencePath: managedPath(payload?.poseReferencePath, { allowEmpty: true }),
+    modelReferencePath: managedPath(payload?.modelReferencePath, { allowEmpty: true, message: '模特参考图不属于当前工作区或任务目录' }),
     currentResultPath: managedPath(payload?.currentResultPath, { allowEmpty: true, message: '当前生成结果不属于当前输出目录' }),
     useFixedModel: payload?.useFixedModel === true
   }, context || {}),
@@ -1260,7 +1270,10 @@ const rpc = {
         ...(item || {}),
         folder: managedPath(item?.folder, { allowEmpty: true, message: '童装任务不属于当前输出目录' }),
         externalMasterPath: managedPath(item?.externalMasterPath, { allowEmpty: true, message: '外部平铺图不属于当前工作区' }),
-        modelReferencePath: managedPath(item?.modelReferencePath, { message: '模特参考图不属于当前工作区或任务目录' }),
+        topReferencePath: managedPath(item?.topReferencePath, { allowEmpty: true }),
+        bottomReferencePath: managedPath(item?.bottomReferencePath, { allowEmpty: true }),
+        poseReferencePath: managedPath(item?.poseReferencePath, { allowEmpty: true }),
+        modelReferencePath: managedPath(item?.modelReferencePath, { allowEmpty: true, message: '模特参考图不属于当前工作区或任务目录' }),
         currentResultPath: managedPath(item?.currentResultPath, { allowEmpty: true, message: '当前生成结果不属于当前输出目录' }),
         useFixedModel: item?.useFixedModel === true
       };

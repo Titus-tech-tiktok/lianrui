@@ -36,6 +36,30 @@ API 与提示词是服务器全局设置，由管理员统一维护，普通成�
 
 ## 本地启动
 
+### 材质资产与动作参考
+
+- 材质从上传图片开始：AI 识图后保存名称和纹理描述，对应图片卡片会自动更新；再次打开系统仍可读取。批量分析跳过已保存图片。
+- 名称识别有误时，可在该图片的编辑窗口中修改名称，再点击“按修改后的名称生成纹理”。这一入口以用户名称为准，不重新识图。
+- 模特任务支持分别上传上衣、裤子、人物模特和人物动作。材质按商品选择：上衣、裤子分别指定，模特和动作没有材质选项。
+- 上传动作图后自动分析并保存姿态描述。生成时合并商品款式、模特身份、动作提示词、对应商品纹理和当前预设提示词；同一动作图片重复使用会读取已保存描述。
+- 材质记录保存在账号工作区的 `materials.json`，动作分析记录保存在该工作区的 `pose-analysis/`。请随服务器 `data/` 一起备份。
+- **分析模型需要单独配置**：在“系统设置”的当前中转线路中选择实际支持图片理解的分析模型。生图接口可用不等于分析模型可用；本地线路配置和 API 密钥不会随代码推送到服务器。
+
+### 更新服务器到材质与动作参考版本
+
+等待正在生成的任务结束，在服务器项目目录（包含 `docker-compose.yml` 的目录）执行：
+
+```bash
+git status --short
+tar -czf "../lianrui-backup-$(date +%Y%m%d-%H%M%S).tar.gz" .env data
+git fetch origin
+git switch codex/material-assets-pose-reference
+git pull --ff-only origin codex/material-assets-pose-reference
+bash scripts/deploy-server.sh
+```
+
+如果第一步显示服务器存在代码修改，先保留并处理这些修改再切换分支。不要删除 `.env` 或 `data/`。脚本会重建容器并检查服务器报告的提交号；此分支推送不会触发仅监听 `main` 的自动部署。
+
 ```bash
 cp .env.example .env
 # 在 .env 填写 CAISHEN_IMAGE_API_KEY

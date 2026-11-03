@@ -327,6 +327,7 @@ function assetKindFromKey(key) {
     childrenwearReferenceAssetsPath: 'childrenwear-reference',
     childrenwearModelAssetsPath: 'childrenwear-model',
     childrenwearSceneAssetsPath: 'childrenwear-scene',
+    childrenwearMaterialAssetsPath: 'childrenwear-material',
     childrenwearFlatAssetsPath: 'childrenwear-flat',
     childrenwearCombinationAssetsPath: 'childrenwear-combination'
   })[key] || 'template';
@@ -636,6 +637,10 @@ window.caishen = {
     return uploadFolder(kind);
   },
   chooseImage: async () => uploadSingle('/api/upload/image', 'image/*'),
+  analyzePoseReference: payload => runJob('analyzePoseReference', [payload], `pose-analysis:${createClientId()}`),
+  listMaterials: () => rpc('listMaterials'),
+  saveMaterial: payload => rpc('saveMaterial', payload),
+  analyzeMaterial: payload => runJob('analyzeMaterial', [payload], `material-analysis:${createClientId()}`),
   listImages: (root, query) => rpc('listImages', root, query),
   listImageLibrary: (root, options) => rpc('listImageLibrary', root, options || {}),
   analyzeChildrenwearAssets: (payload, onProgress) => runJob(

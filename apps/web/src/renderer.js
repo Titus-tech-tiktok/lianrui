@@ -349,6 +349,7 @@ const state = {
     childrenwearCombinationAssetsPath: { total: 0, totalPages: 0, pageSize: 48 }
   },
   childrenwearLibraryDeleteSelection: {
+    childrenwearMaterialAssetsPath: new Set(),
     childrenwearRealAssetsPath: new Set(),
     childrenwearReferenceAssetsPath: new Set(),
     childrenwearModelAssetsPath: new Set(),
@@ -1964,7 +1965,7 @@ function isClientSubPath(root, candidate) {
 async function sanitizeConfigWorkspacePaths() {
   if (!state.config?.workspaceRoot) return;
   let changed = false;
-  for (const key of ['categoriesPath', 'printsPath', 'detailSetsPath', 'childrenwearRealAssetsPath', 'childrenwearReferenceAssetsPath', 'childrenwearModelAssetsPath', 'childrenwearSceneAssetsPath', 'childrenwearFlatAssetsPath', 'childrenwearCombinationAssetsPath']) {
+  for (const key of ['categoriesPath', 'printsPath', 'detailSetsPath', 'childrenwearRealAssetsPath', 'childrenwearReferenceAssetsPath', 'childrenwearModelAssetsPath', 'childrenwearSceneAssetsPath', 'childrenwearMaterialAssetsPath', 'childrenwearFlatAssetsPath', 'childrenwearCombinationAssetsPath']) {
     if (state.config[key] && !isClientSubPath(state.config.workspaceRoot, state.config[key])) {
       state.config[key] = '';
       changed = true;
@@ -5886,7 +5887,168 @@ async function resetSettings() {
   toast('基础设置已重置，API 和素材保持不变');
 }
 
+
+let cwMaterials = [];
+let cwEditingMaterial = {};
+function cwMaterialPathKey(value) { return String(value || '').replaceAll('\\', '/').toLowerCase(); }
+async function refreshCwMaterials() {
+  cwMaterials = await window.caishen.listMaterials();
+  renderChildrenwearLibrary('childrenwearMaterialAssetsPath');
+}
+function cwMaterialImageCaption(image) {
+  const material = cwMaterials.find(item => cwMaterialPathKey(item.imagePath) === cwMaterialPathKey(image.path));
+  return `<div class="cw-material-image-description"><b>${escapeHtml(material?.name || '未命名材质')}</b><p>${escapeHtml(material?.description || material?.texturePrompt || '尚未保存描述，点击下方为这张图片填写或分析材质。')}</p><small>${material?.texturePrompt ? '已保存 · ' + (material.updatedAt ? escapeHtml(formatLocalDateTime(material.updatedAt)) : '纹理提示词') : '待填写纹理提示词'}</small></div><button class="secondary" type="button" data-material-image="${escapeHtml(image.path)}">${material ? '查看 / 编辑描述' : '填写 / AI 分析材质'}</button>`;
+}
+function openCwMaterialEditor(item = {}) {
+  cwEditingMaterial = { ...item };
+  $('#cwMaterialName').value = item.name || '';
+  $('#cwMaterialTexture').value = item.texturePrompt || '';
+  $('#cwMaterialStatus').textContent = item.texturePrompt ? `已保存${item.updatedAt ? ' · ' + formatLocalDateTime(item.updatedAt) : ''}，下次打开系统会自动读取。` : '点击 AI 识图分析这张材质图片，成功后自动保存到本地。';
+  $('#cwMaterialAnalyze').textContent = item.texturePrompt ? '重新识图并更新记录' : 'AI 识图并保存';
+  const preview = $('#cwMaterialPreview');
+  preview.hidden = !item.url;
+  preview.src = item.url || '';
+  $('#cwMaterialDialog').showModal();
+}
+function cwMaterialReferences(draft) {
+  let refs;
+  if (draft.stage === 'master') refs = [['实拍产品图', draft.real], ['成品参考图', draft.reference]];
+  else if (draft.stage === 'combination') refs = [...(draft.masters || []).map((item, i) => [`SKU ${String.fromCharCode(65 + i)}`, item]), ['组合参考图', draft.reference]];
+  else if (draft.operationType === 'scene_only') refs = [['已有模特图', draft.existingModel], ['场景参考图', draft.scene]];
+  else refs = [['已生成平铺图', draft.master], ['上衣参考', draft.top], ['裤子参考', draft.bottom], ['人物模特', draft.reference], ['人物动作', draft.pose], ['场景参考图', draft.backgroundMode === 'scene_reference' ? draft.scene : null]];
+  return refs.filter(([, item]) => item?.path).map(([name, item], index) => ({ target: `图${index + 1}（${name}）中的服装/物体`, item }));
+}
+function cwGarmentMaterialSlots(draft) {
+  if (draft.stage === 'master') return draft.real?.path ? [{ slot: 'garment', label: '商品材质' }] : [];
+  if (draft.stage === 'combination') return (draft.masters || []).map((item, i) => ({ slot: `sku-${i}`, label: `SKU ${String.fromCharCode(65 + i)} 材质` }));
+  if (draft.operationType === 'scene_only') return [];
+  const slots = [];
+  if (draft.top?.path) slots.push({ slot: 'top', label: '上衣材质' });
+  if (draft.bottom?.path) slots.push({ slot: 'bottom', label: '裤子材质' });
+  if (!slots.length && draft.master?.path) slots.push({ slot: 'garment', label: '商品材质' });
+  return slots;
+}
+function cwMaterialSelections(draft) {
+  const valid = new Set(cwGarmentMaterialSlots(draft).map(item => item.slot));
+  return (draft.materialSelections || []).filter(item => item.materialId && valid.has(item.slot));
+}
+function cwMaterialControls(draft, disabled) {
+  disabled = disabled || Boolean(draft.poseAnalyzing);
+  const slots = cwGarmentMaterialSlots(draft);
+  const materialControls = slots.map(({ slot, label }) => {
+    const selected = (draft.materialSelections || []).find(item => item.slot === slot)?.materialId || '';
+    return `<label>${escapeHtml(label)}<select data-cw-material-target="${escapeHtml(slot)}"${disabled ? ' disabled' : ''}><option value="">不额外指定材质</option>${cwMaterials.map(item => `<option value="${escapeHtml(item.id)}"${selected === item.id ? ' selected' : ''}>${escapeHtml(item.name)}${item.texturePrompt ? '' : '（待填写纹理）'}</option>`).join('')}${selected && !cwMaterials.some(item => item.id === selected) ? `<option selected value="${escapeHtml(selected)}">已删除的材质，请重选</option>` : ''}</select></label>`;
+  }).join('');
+  const uploadsBase = draft.stage === 'model' && draft.operationType !== 'scene_only' ? `<div class="cw-optional-references">${[['top','上衣'],['bottom','裤子'],['reference','人物模特'],['pose','人物动作']].map(([role, name]) => `<span><button class="secondary" type="button" data-cw-upload-reference="${role}"${disabled ? ' disabled' : ''}>${draft[role]?.path ? '替换' : '上传'}${name}（可选）</button>${draft[role]?.path ? `<button class="text-button" type="button" data-cw-clear-reference="${role}"${disabled ? ' disabled' : ''}>移除</button>` : ''}</span>`).join('')}</div>` : '';
+  const poseDetails = draft.stage === 'model' && draft.operationType !== 'scene_only' && draft.pose?.path ? `<details class="cw-material-controls"><summary>动作提示词（自动分析并保存）</summary><p>${escapeHtml(draft.poseAnalysis?.posePrompt || (draft.poseAnalyzing ? '正在分析动作参考…' : draft.poseAnalysisError || '生成时自动分析这张图的动作，并合并到生图提示词。'))}</p><button class="secondary" type="button" data-cw-analyze-pose${disabled || draft.poseAnalyzing ? ' disabled' : ''}>${draft.poseAnalysis ? '重新分析动作' : '分析动作'}</button></details>` : '';
+  const uploads = uploadsBase + poseDetails;
+  if (!slots.length) return uploads;
+  return `${uploads}<details class="cw-material-controls"><summary>材质参考（可选）${cwMaterialSelections(draft).length ? ` · 已配置 ${cwMaterialSelections(draft).length} 项` : ''}</summary><p>只为对应商品指定材质。生成时将所选纹理加入该商品的提示词；不选择则保留商品原材质。</p><div>${materialControls}</div><button class="text-button" type="button" data-material-manage>管理材质资产</button></details>`;
+}
+
+async function analyzeCwDraftPose(draft, force = false) {
+  draft.poseAnalyzing = true;
+  draft.poseAnalysisError = '';
+  renderCwQueue('model');
+  const imagePath = draft.pose?.path;
+  try {
+    const result = await window.caishen.analyzePoseReference({ imagePath, force });
+    if (draft.pose?.path === imagePath) draft.poseAnalysis = result;
+  } catch (error) {
+    if (draft.pose?.path === imagePath) draft.poseAnalysisError = errorText(error);
+    toast(errorText(error), true);
+  } finally { draft.poseAnalyzing = false; renderCwQueue('model'); }
+}
+
+document.addEventListener('change', event => {
+  const select = event.target.closest('[data-cw-material-target]');
+  if (!select) return;
+  const card = select.closest('[data-cw-draft]');
+  const draft = state.childrenwearDrafts[card.dataset.stage].find(item => item.id === card.dataset.cwDraft);
+  if (!draft) return;
+  draft.materialSelections = [...(draft.materialSelections || []).filter(item => item.slot !== select.dataset.cwMaterialTarget), ...(select.value ? [{ slot: select.dataset.cwMaterialTarget, materialId: select.value }] : [])];
+});
+document.addEventListener('click', async event => {
+  const button = event.target.closest('[data-material-edit],[data-material-image],[data-material-analyze-page],[data-material-manage],[data-cw-upload-reference],[data-cw-clear-reference],[data-cw-analyze-pose],[data-cw-new-model],#cwMaterialAnalyze,#cwMaterialInferName,#cwMaterialSave');
+  if (!button) return;
+  try {
+    if (button.hasAttribute('data-material-manage')) return openChildrenwearLibrary('childrenwearMaterialAssetsPath');
+    if (button.hasAttribute('data-cw-new-model')) {
+      const draft = cwNewDraft('model');
+      draft.operationType = 'dress';
+      draft.backgroundMode = 'solid';
+      state.childrenwearModelBackgroundMode = 'solid';
+      renderCwModelControls();
+      state.childrenwearQueueFilters.model = 'all';
+      state.childrenwearQueueDateFilters.model = 'all';
+      state.childrenwearQueuePages.model = 1;
+      return renderCwQueue('model');
+    }
+    if (button.hasAttribute('data-cw-analyze-pose')) {
+      const card = button.closest('[data-cw-draft]');
+      const draft = state.childrenwearDrafts.model.find(item => item.id === card.dataset.cwDraft);
+      if (draft?.pose?.path) return analyzeCwDraftPose(draft, Boolean(draft.poseAnalysis));
+    }
+    if (button.hasAttribute('data-cw-upload-reference') || button.hasAttribute('data-cw-clear-reference')) {
+      const card = button.closest('[data-cw-draft]');
+      const draft = state.childrenwearDrafts[card.dataset.stage].find(item => item.id === card.dataset.cwDraft);
+      const role = button.dataset.cwUploadReference || button.dataset.cwClearReference;
+      if (button.hasAttribute('data-cw-clear-reference')) draft[role] = null;
+      else { const image = await window.caishen.chooseImage(); if (!image) return; draft[role] = { ...image, name: image.name || ({top:'上衣',bottom:'裤子',reference:'人物模特',pose:'人物动作'})[role] }; }
+      // Material bindings follow garment roles, never image positions or people.
+      if (role === 'top' || role === 'bottom') draft.materialSelections = (draft.materialSelections || []).filter(item => item.slot !== role);
+      if (role === 'pose') {
+        draft.poseAnalysis = null;
+        draft.poseAnalysisError = '';
+        if (draft.pose?.path) return analyzeCwDraftPose(draft);
+      }
+      return renderCwQueue('model');
+    }
+    if (button.hasAttribute('data-material-edit')) return openCwMaterialEditor(cwMaterials.find(item => item.id === button.dataset.materialEdit));
+    if (button.hasAttribute('data-material-image')) {
+      const imagePath = button.dataset.materialImage;
+      const item = (state.childrenwearLibraries.childrenwearMaterialAssetsPath || []).find(item => item.path === imagePath);
+      return openCwMaterialEditor(cwMaterials.find(item => cwMaterialPathKey(item.imagePath) === cwMaterialPathKey(imagePath)) || { imagePath, url: item?.url, name: '' });
+    }
+    if (button.hasAttribute('data-material-analyze-page')) {
+      button.disabled = true;
+      const images = state.childrenwearLibraries.childrenwearMaterialAssetsPath || [];
+      await refreshCwMaterials();
+      let done = 0; let skipped = 0; const failures = [];
+      for (const image of images) {
+        if (cwMaterials.some(item => cwMaterialPathKey(item.imagePath) === cwMaterialPathKey(image.path) && item.texturePrompt)) { skipped += 1; continue; }
+        button.textContent = `正在分析 ${++done}/${images.length}`;
+        try { await window.caishen.analyzeMaterial({ imagePath: image.path }); await refreshCwMaterials(); } catch (error) { failures.push(errorText(error)); }
+      }
+      await refreshCwMaterials();
+      button.textContent = '分析未完成并保存';
+      return toast(failures.length ? `分析失败 ${failures.length} 张：${failures[0]}` : `已保存 ${done} 张，跳过已保存 ${skipped} 张（未重复调用 API）`, failures.length > 0);
+    }
+    if (button.id === 'cwMaterialInferName' && !$('#cwMaterialName').value.trim()) return toast('请先填写准确的材质名称', true);
+    for (const selector of ['#cwMaterialAnalyze', '#cwMaterialInferName', '#cwMaterialSave', '#cwMaterialName', '#cwMaterialTexture']) $(selector).disabled = true;
+    const payload = { ...cwEditingMaterial, mode: button.id === 'cwMaterialInferName' ? 'name' : 'image', force: button.id === 'cwMaterialAnalyze' && Boolean(cwEditingMaterial.texturePrompt), name: $('#cwMaterialName').value, texturePrompt: $('#cwMaterialTexture').value };
+    $('#cwMaterialStatus').textContent = button.id === 'cwMaterialInferName' ? '正在按你填写的名称推理纹理，完成后保存到这张材质图片…' : button.id === 'cwMaterialAnalyze' ? '正在识图分析，完成后自动保存…' : '正在保存…';
+    const saved = ['cwMaterialAnalyze', 'cwMaterialInferName'].includes(button.id) ? await window.caishen.analyzeMaterial(payload) : await window.caishen.saveMaterial(payload);
+    await refreshCwMaterials();
+    cwEditingMaterial = saved;
+    $('#cwMaterialName').value = saved.name;
+    $('#cwMaterialTexture').value = saved.texturePrompt;
+    $('#cwMaterialStatus').textContent = '已保存到本地记录，下次进入系统会自动读取。';
+    $('#cwMaterialAnalyze').textContent = '重新识图并更新记录';
+    for (const stage of ['master', 'model', 'combination']) renderCwQueue(stage);
+  } catch (error) {
+    $('#cwMaterialStatus').textContent = errorText(error);
+    toast(errorText(error), true);
+  } finally {
+    button.disabled = false;
+    if (['cwMaterialAnalyze', 'cwMaterialInferName', 'cwMaterialSave'].includes(button.id)) {
+      for (const selector of ['#cwMaterialAnalyze', '#cwMaterialInferName', '#cwMaterialSave', '#cwMaterialName', '#cwMaterialTexture']) $(selector).disabled = false;
+    }
+  }
+});
+
 const CHILDRENWEAR_LIBRARY_META = Object.freeze({
+  childrenwearMaterialAssetsPath: { grid: "#childrenwearMaterialAssetsGrid", summary: "#childrenwearMaterialAssetsSummary", empty: "尚未上传材质图片", selected: "材质图片", analysisRole: "" },
   childrenwearRealAssetsPath: {
     grid: '#childrenwearRealAssetsGrid',
     summary: '#childrenwearRealAssetsSummary',
@@ -5978,7 +6140,7 @@ function renderChildrenwearLibrary(key) {
     const checked = deleteSelection.has(item.path);
     return `<article class="childrenwear-library-item${checked ? ' selected' : ''}" title="${escapeHtml(item.name)}">
       <button class="childrenwear-library-select" type="button" data-childrenwear-delete-key="${key}" data-childrenwear-delete-path="${escapeHtml(item.path)}" aria-pressed="${checked}"><span class="childrenwear-select-mark">${checked ? '✓' : ''}</span><img loading="lazy" decoding="async" src="${escapeHtml(item.thumbnailUrl || item.url)}" data-preview-src="${escapeHtml(item.previewUrl || item.url)}" alt="${escapeHtml(item.name)}"><span class="childrenwear-library-caption"><b>${escapeHtml(item.name)}</b><small>${escapeHtml(item.folder && item.folder !== '根目录' ? item.folder : '未分类文件')}</small></span></button>
-    </article>`;
+    ${key === "childrenwearMaterialAssetsPath" ? cwMaterialImageCaption(item) : ""}</article>`;
   }).join('') : `<div class="empty-inline"><b>${meta.empty}</b><span>点击右上角按钮，可添加文件或上传整个文件夹。</span></div>`;
   const pagination = $(`[data-childrenwear-pagination="${key}"]`);
   if (pagination) {
@@ -6024,7 +6186,7 @@ function setChildrenwearAssetTab(key) {
 
 const CHILDRENWEAR_PRODUCTION_HINTS = Object.freeze({
   master: '实拍产品图 + 成品参考图 → 平铺图',
-  model: '已生成平铺图 + 参考模特图 → 模特上身图',
+  model: '上衣 / 裤子 / 人物 / 动作参考（可选）→ 模特成品图',
   combination: '选择 2～4 个已生成平铺图 → 多 SKU 组合图'
 });
 
@@ -6233,6 +6395,7 @@ async function changeChildrenwearLibraryPage(key, page) {
 }
 
 async function loadChildrenwearLibraries() {
+  await refreshCwMaterials();
   await Promise.all(Object.keys(CHILDRENWEAR_LIBRARY_META).map(loadChildrenwearLibrary));
 }
 
@@ -7121,13 +7284,14 @@ function cwImage(value, fallback = '待选择') {
 }
 
 function cwDraftReady(draft) {
+  if (draft.poseAnalyzing) return false;
   if (draft.stage === 'master') return Boolean(draft.real?.path && draft.reference?.path);
   if (draft.stage === 'model') {
     const operation = draft.operationType === 'scene_only' ? 'scene_only' : 'dress';
     if (operation === 'scene_only') return Boolean(draft.existingModel?.path
       && ['solid', 'scene_reference'].includes(draft.backgroundMode)
       && (draft.backgroundMode !== 'scene_reference' || draft.scene?.path));
-    return Boolean(draft.master?.path && draft.reference?.path
+    return Boolean((draft.master?.path || draft.top?.path || draft.bottom?.path || draft.reference?.path || draft.pose?.path)
       && (draft.backgroundMode !== 'scene_reference' || draft.scene?.path));
   }
   return Boolean(draft.masters?.length >= 2 && draft.reference?.path);
@@ -7144,7 +7308,7 @@ function cwDraftFlow(draft) {
         ? cwImage(draft.scene, '场景参考图')
         : '<figure class="cw-flow-figure cw-background-mode"><span>同</span><figcaption>跟随模特背景</figcaption></figure>';
     if (operation === 'scene_only') return `${cwImage(draft.existingModel, '已有模特图')}<i>+</i>${background}<i>→</i>${cwImage(draft.result, '换场景结果')}`;
-    return `${cwImage(draft.master, '已生成平铺图')}<i>+</i>${cwImage(draft.reference, '参考模特图')}<i>+</i>${background}<i>→</i>${cwImage(draft.result, '模特上身图')}`;
+    return `${cwMaterialReferences(draft).filter(ref => ref.item !== draft.scene).map(ref => cwImage(ref.item, ref.item.name)).join('<i>+</i>')}<i>+</i>${background}<i>→</i>${cwImage(draft.result, '模特成品图')}`;
   }
   const masters = draft.masters?.length ? draft.masters.map((item, index) => `${index ? '<i>+</i>' : ''}<div class="cw-ordered-sku"><em>SKU ${String.fromCharCode(65 + index)}</em>${cwImage(item, `平铺图 ${index + 1}`)}<div><button type="button" data-cw-master-move="-1" data-cw-master-index="${index}"${index === 0 ? ' disabled' : ''}>←</button><button type="button" data-cw-master-move="1" data-cw-master-index="${index}"${index === draft.masters.length - 1 ? ' disabled' : ''}>→</button></div></div>`).join('') : cwImage(null, '选择 2～4 张平铺图');
   return `${masters}<i>+</i>${cwImage(draft.reference, '组合参考图')}<i>→</i>${cwImage(draft.result, '多 SKU 组合图')}`;
@@ -7297,8 +7461,7 @@ function cwDraftMissingLabels(draft) {
       if (!draft.existingModel?.path) missing.push('已有模特图');
       if (!['solid', 'scene_reference'].includes(draft.backgroundMode)) missing.push('新背景来源');
     } else {
-      if (!draft.master?.path) missing.push('已生成平铺图');
-      if (!draft.reference?.path) missing.push('参考模特图');
+      if (![draft.master, draft.top, draft.bottom, draft.reference, draft.pose].some(item => item?.path)) missing.push('至少一张服装、模特或动作参考图');
     }
     if (draft.backgroundMode === 'scene_reference' && !draft.scene?.path) missing.push('场景参考图');
   } else {
@@ -7409,6 +7572,7 @@ function syncCwDraftsFromTasks() {
       draft.title = task.taskName || draft.title;
       draft.taskCode = task.taskCode || draft.taskCode;
       draft.styleName = task.styleName || draft.styleName;
+      if (!draft.materialSelections) draft.materialSelections = task.materialSelections || [];
       draft.real = { path: task.realPhotoPath, url: task.realPhotoUrl, thumbnailUrl: task.realPhotoThumbnailUrl, previewUrl: task.realPhotoPreviewUrl, name: task.realPhotoPath?.split(/[\\/]/).at(-1) || '实拍产品图', folder: task.category || '' };
       draft.reference = { path: task.referencePath, url: task.referenceUrl, thumbnailUrl: task.referenceThumbnailUrl, previewUrl: task.referencePreviewUrl, name: task.referencePath?.split(/[\\/]/).at(-1) || '成品参考图', folder: '' };
       draft.result = { path: task.masterPath, url: task.masterUrl, thumbnailUrl: task.masterThumbnailUrl, previewUrl: task.masterPreviewUrl, name: `平铺母版 v${task.masterVersion || 1}` };
@@ -7463,7 +7627,12 @@ function syncCwDraftsFromTasks() {
       draft.status = cwPersistedStatus(stage, output.approved, output.reviewStatus);
       draft.progress = '';
       draft.updatedAt = output.createdAt || task.updatedAt || draft.updatedAt;
+      if (!draft.materialSelections) draft.materialSelections = output.materialSelections || [];
       if (stage === 'model') {
+        for (const [role, key] of [['top', 'topReferencePath'], ['bottom', 'bottomReferencePath'], ['pose', 'poseReferencePath']]) {
+          if (!draft[role] && output[key]) draft[role] = { path: output[key], url: output[key + 'Url'], name: ({top:'上衣参考',bottom:'裤子参考',pose:'动作参考'})[role] };
+        }
+        if (draft.poseAnalysis === undefined) draft.poseAnalysis = output.poseAnalysis || null;
         draft.operationType = output.operationType === 'scene_only' ? 'scene_only' : 'dress';
         draft.master = cwTaskMasterImage(task, output.masterPath || task.masterPath, -1, taskByMasterPath);
         draft.reference = {
@@ -7736,6 +7905,7 @@ function cwTaskCardMarkup(stage, draft, index, reviewIndex) {
       <header><label><input type="checkbox" data-cw-select-draft="${escapeHtml(draft.id)}"${draft.selected ? ' checked' : ''}><span></span><span class="cw-task-title-line"><b title="${escapeHtml(title)}">${escapeHtml(title)}</b><em class="cw-task-state-badge ${statusKey}">${escapeHtml(cwDraftStatusLabel(draft))}</em></span></label><div><button class="secondary mini" type="button" data-cw-edit="${escapeHtml(draft.id)}">改名</button><button class="link-danger" type="button" data-cw-remove="${escapeHtml(draft.id)}"${running ? ' disabled' : ''}>删除</button></div></header>
       <div class="cw-task-flow">${cwDraftFlow(draft)}</div>
       ${modelTrace}
+      ${cwMaterialControls(draft, running)}
       ${cwFlatLayValidationMarkup(flatLayValidation)}
       ${missing.length ? `<div class="cw-task-missing">还缺：${escapeHtml(missing.join('、'))}</div>` : ''}
       <footer><span class="cw-task-status${statusKey === 'needs_regeneration' || localEditJob?.status === 'failed' ? ' error' : ''}">${escapeHtml(footerStatus)}</span><div class="cw-task-card-actions">${reviewItem ? `<button class="secondary" type="button" data-cw-inline-compare="${escapeHtml(reviewItem.id)}">${stage === 'master' ? '高清审核' : '高清查看'}</button><button class="secondary" type="button" data-cw-local-edit="${escapeHtml(reviewItem.id)}"${localEditRunning ? ' disabled' : ''}>${localEditRunning ? '微调中…' : '局部微调'}</button>${stage === 'master' && !reviewItem.approved ? `<button class="secondary" type="button" data-cw-inline-approve="${escapeHtml(reviewItem.id)}">通过</button>` : ''}` : ''}<button class="secondary" type="button" data-cw-generate-one="${escapeHtml(draft.id)}"${!ready || running || localEditRunning ? ' disabled' : ''}>${draft.result || draft.status === '失败' ? '重新生成' : `生成${escapeHtml(meta.label)}`}</button></div></footer>
@@ -7939,7 +8109,7 @@ function renderCwQueue(stage) {
   const reviewIndex = cwTaskReviewIndex();
   $(meta.count).textContent = filter !== 'all' || dateFilter !== 'all' ? `${visibleDrafts.length} / ${drafts.length} 项` : `${drafts.length} 项`;
   const cards = renderedDrafts.map((draft, index) => cwTaskCardMarkup(stage, draft, index, reviewIndex)).join('');
-  const example = cwTaskExampleMarkup(stage);
+  const example = (stage === 'model' ? '<button class="primary" type="button" data-cw-new-model>新建模特图 · 可选上传上衣 / 裤子 / 人物 / 动作</button>' : '') + cwTaskExampleMarkup(stage);
   panel.innerHTML = visibleDrafts.length
     ? `${example}${cards}${cwPaginationMarkup('queue', stage, pagination)}`
     : `${example}<div class="cw-task-empty"><b>${drafts.length ? '当前筛选没有任务' : `还没有${escapeHtml(meta.label)}任务`}</b><span>${drafts.length ? '切换其他状态查看任务。' : '点击左侧素材，系统会自动创建并补齐任务卡片。'}</span></div>`;
@@ -8655,6 +8825,7 @@ async function promptForCwRegeneration(stage, routeId = '') {
 
 function cwDraftGenerationPayload(stage, draft, promptOverride = '') {
   if (stage === 'master') return {
+    materialSelections: cwMaterialSelections(draft),
     folder: draft.taskFolder || '', realPhotoPath: draft.real.path, referencePath: draft.reference.path,
     taskName: draft.title, taskCode: draft.taskCode, category: draft.real.folder || '童装',
     material: draft.real.folder || '以实拍图为准', craft: '', extraInstruction: '', promptOverride,
@@ -8664,14 +8835,18 @@ function cwDraftGenerationPayload(stage, draft, promptOverride = '') {
   if (stage === 'model') {
     const operationType = draft.operationType === 'scene_only' ? 'scene_only' : 'dress';
     return {
-      folder: operationType === 'scene_only' ? draft.existingModel.taskFolder : draft.master.taskFolder,
-      externalMasterPath: operationType === 'dress' && draft.master.externalFlat ? draft.master.path : '',
+      folder: operationType === 'scene_only' ? draft.existingModel.taskFolder : draft.taskFolder || draft.master?.taskFolder || '',
+      externalMasterPath: operationType === 'dress' && draft.master?.externalFlat ? draft.master.path : '',
       taskName: draft.title,
+      materialSelections: cwMaterialSelections(draft),
       operationType,
       sourceModelPath: operationType === 'scene_only' ? draft.existingModel.path : '',
       sourceModelOutputId: operationType === 'scene_only' ? draft.existingModel.outputId || '' : '',
-      modelReferencePath: operationType === 'dress' ? draft.reference.path : '',
-      useFixedModel: operationType === 'dress' && Boolean(state.childrenwearFixedModelEnabled && fixedModel?.path && fixedModel.path === draft.reference.path),
+      topReferencePath: operationType === 'dress' ? draft.top?.path || '' : '',
+      bottomReferencePath: operationType === 'dress' ? draft.bottom?.path || '' : '',
+      poseReferencePath: operationType === 'dress' ? draft.pose?.path || '' : '',
+      modelReferencePath: operationType === 'dress' ? draft.reference?.path || '' : '',
+      useFixedModel: operationType === 'dress' && Boolean(state.childrenwearFixedModelEnabled && fixedModel?.path && fixedModel.path === draft.reference?.path),
       backgroundMode: draft.backgroundMode || (operationType === 'scene_only' ? 'solid' : 'model_reference'),
       solidBackgroundColor: cwNormalizeHexColor(draft.solidBackgroundColor || state.childrenwearModelSolidColor),
       sceneReferencePath: draft.backgroundMode === 'scene_reference' ? draft.scene?.path || '' : '',
@@ -8680,6 +8855,7 @@ function cwDraftGenerationPayload(stage, draft, promptOverride = '') {
     };
   }
   return {
+    materialSelections: cwMaterialSelections(draft),
     folder: draft.taskFolder || draft.masters[0]?.taskFolder || '', taskName: draft.title,
     masterPaths: draft.masters.map(item => item.path), combinationReferencePath: draft.reference.path, promptOverride,
     currentResultPath: draft.result?.path || ''
@@ -8698,6 +8874,7 @@ function applyCwDraftGenerationResult(stage, draft, result) {
     const output = (stage === 'model' ? result.modelOutputs : result.combinationOutputs)?.at(-1);
     draft.outputId = output?.id;
     if (stage === 'model' && output) {
+      draft.poseAnalysis = output.poseAnalysis || null;
       draft.operationType = output.operationType === 'scene_only' ? 'scene_only' : 'dress';
       draft.backgroundMode = output.backgroundMode || (draft.operationType === 'scene_only' ? 'solid' : 'model_reference');
       draft.solidBackgroundColor = cwNormalizeHexColor(output.solidBackgroundColor || draft.solidBackgroundColor);
@@ -9751,7 +9928,7 @@ async function regenerateCwReviewItem(item, promptOverride = '') {
   };
   try {
     const result = item.stage === 'master'
-      ? await window.caishen.generateChildrenwearMaster({ folder: item.folder, taskName: item.task.taskName, realPhotoPath: item.task.realPhotoPath, referencePath: item.task.referencePath, category: item.task.category, material: item.task.material, craft: item.task.craft, extraInstruction: '', promptOverride, currentResultPath: item.path }, onProgress)
+      ? await window.caishen.generateChildrenwearMaster({ folder: item.folder, taskName: item.task.taskName, realPhotoPath: item.task.realPhotoPath, referencePath: item.task.referencePath, category: item.task.category, material: item.task.material, materialSelections: item.task.materialSelections || [], craft: item.task.craft, extraInstruction: '', promptOverride, currentResultPath: item.path }, onProgress)
       : item.stage === 'model'
         ? await window.caishen.generateChildrenwearModel({
           folder: item.folder,
@@ -9759,6 +9936,10 @@ async function regenerateCwReviewItem(item, promptOverride = '') {
           operationType: item.output.operationType === 'scene_only' ? 'scene_only' : 'dress',
           sourceModelPath: item.output.sourceModelPath || '',
           sourceModelOutputId: item.output.sourceModelOutputId || '',
+          topReferencePath: item.output.topReferencePath || '',
+          bottomReferencePath: item.output.bottomReferencePath || '',
+          poseReferencePath: item.output.poseReferencePath || '',
+          materialSelections: item.output.materialSelections || [],
           modelReferencePath: item.output.modelReferencePath || '',
           useFixedModel: Boolean(item.output.useFixedModel),
           backgroundMode: item.output.backgroundMode || (item.output.operationType === 'scene_only' ? 'solid' : 'model_reference'),
@@ -10189,7 +10370,7 @@ function bindChildrenwearEvents() {
         if (isRegeneration && promptOverride === null) return;
         return runCwDraft(stage, draft, { promptOverride, operation: isRegeneration ? 'regeneration' : 'generation' });
       }
-      if (!event.target.closest('button,input,label')) {
+      if (!event.target.closest('button,input,label,select,textarea,summary,details')) {
         state.childrenwearActiveDraft[stage] = id;
         if (stage === 'model') {
           const draft = state.childrenwearDrafts.model.find(item => item.id === id);

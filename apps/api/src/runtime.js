@@ -1,3 +1,5 @@
+const { POSE_REFERENCE_PROMPT, normalizePosePrompt } = require('./core/pose-reference');
+const { MATERIAL_ANALYSIS_PROMPT, normalizeMaterial, materialPrompt, materialAnalysisError, parseMaterialAnalysisJson, garmentMaterialSlots, materialNamePrompt, materialNameTextureConflict } = require('./core/materials');
 ﻿const crypto = require('node:crypto');
 const { AsyncLocalStorage } = require('node:async_hooks');
 const { execFile } = require('node:child_process');
@@ -1569,6 +1571,7 @@ function defaultConfig() {
     childrenwearReferenceAssetsPath: '',
     childrenwearModelAssetsPath: '',
     childrenwearSceneAssetsPath: '',
+    childrenwearMaterialAssetsPath: '',
     childrenwearFlatAssetsPath: '',
     childrenwearCombinationAssetsPath: '',
     childrenwearAutoAnalysisEnabled: false,
@@ -1604,6 +1607,7 @@ async function saveConfig(next) {
     childrenwearReferenceAssetsPath: String(next.childrenwearReferenceAssetsPath || '').trim(),
     childrenwearModelAssetsPath: String(next.childrenwearModelAssetsPath || '').trim(),
     childrenwearSceneAssetsPath: String(next.childrenwearSceneAssetsPath || '').trim(),
+    childrenwearMaterialAssetsPath: String(next.childrenwearMaterialAssetsPath || '').trim(),
     childrenwearFlatAssetsPath: String(next.childrenwearFlatAssetsPath || '').trim(),
     childrenwearCombinationAssetsPath: String(next.childrenwearCombinationAssetsPath || '').trim(),
     childrenwearAutoAnalysisEnabled: next.childrenwearAutoAnalysisEnabled === true,
@@ -2067,12 +2071,12 @@ async function requestChildrenwearAssetAnalysis(file, role, options = {}) {
     ...relayBillingRange(api.activeRelay, 'llm'),
     ...(relayBillingRange(api.activeRelay, 'llm').amountMinMinor == null ? { amountMinMinor: 0, amountMaxMinor: 0 } : {}),
     description: '童装素材 AI 分析',
-    reference: path.basename(file),
+    reference: file ? path.basename(file) : '材质名称推导',
     recordUsage: true,
     onceKey: billingOnceKey('llm:childrenwear-analysis', currentWorkspaceId(), role, options.contentHash || '')
   });
   try {
-    const dataUrl = await imageAsAnalysisDataUrl(file);
+    const dataUrl = file ? await imageAsAnalysisDataUrl(file) : '';
     const body = await apiJson(apiEndpoint(api.baseUrl, '/chat/completions'), {
       method: 'POST',
       headers: {
@@ -2089,8 +2093,8 @@ async function requestChildrenwearAssetAnalysis(file, role, options = {}) {
           {
             role: 'user',
             content: [
-              { type: 'text', text: 'Analyze this image now. Return the required JSON object only.' },
-              { type: 'image_url', image_url: { url: dataUrl, detail: 'high' } }
+              { type: 'text', text: options.userText || 'Analyze this image now. Return the required JSON object only.' },
+              ...(dataUrl ? [{ type: 'image_url', image_url: { url: dataUrl, detail: 'high' } }] : [])
             ]
           }
         ]
@@ -2103,7 +2107,7 @@ async function requestChildrenwearAssetAnalysis(file, role, options = {}) {
       const responseKeys = Object.keys(body && typeof body === 'object' ? body : {}).slice(0, 12).join(',') || 'none';
       throw new Error(`AI 未返回分析结果（finish_reason=${finishReason}，response_fields=${responseKeys}）`);
     }
-    let analysis = normalizeChildrenwearAssetAnalysis(role, analysisText);
+    let analysis = options.rawJson ? parseMaterialAnalysisJson(analysisText) : normalizeChildrenwearAssetAnalysis(role, analysisText);
     if (role === 'flat_reference') {
       const measuredBackground = await extractFlatReferenceBackgroundProfile(file);
       analysis = mergeFlatReferenceBackgroundProfile(analysis, measuredBackground);
@@ -4426,6 +4430,7 @@ function publicChildrenwearTask(value = {}) {
     masterPreviewUrls: (value.masterPaths || []).map(item => item ? thumbnailUrl(item, 1200, '') : ''),
     modelOutputs: models.map(item => ({
       ...item,
+      ...Object.fromEntries(["topReferencePath", "bottomReferencePath", "poseReferencePath"].map(key => [key + "Url", item[key] ? imageUrl(item[key]) : ""])),
       url: item.path ? imageUrl(item.path) : '',
       thumbnailUrl: item.path ? thumbnailUrl(item.path, 480, '') : '',
       previewUrl: item.path ? thumbnailUrl(item.path, 1200, '') : '',
@@ -4766,6 +4771,7 @@ async function generateChildrenwearMaster(payload = {}, options = {}) {
     { label: '实拍产品图', path: realPhotoPath },
     { label: '成品参考图', path: referencePath }
   ]);
+  const materialSelections = await bindGenerationMaterials(generationInput, payload, folder, 'master');
   const prompt = generationInput.prompt;
   const transformPlan = {
     mode: 'operator_prompt_with_bound_image_roles',
@@ -4835,6 +4841,7 @@ async function generateChildrenwearMaster(payload = {}, options = {}) {
     taskName: '',
     category: String(payload.category || existing.category || '童装').trim(),
     material: String(payload.material || existing.material || '').trim(),
+    materialSelections,
     pieceCount,
     craft: String(payload.craft || existing.craft || '').trim(),
     note: String(payload.extraInstruction || existing.note || '').trim(),
@@ -5258,7 +5265,9 @@ async function generateChildrenwearLocalEdit(payload = {}, options = {}) {
     percent: 6,
     message: 'AI 正在理解选区中的具体修改对象'
   });
-  const intentAnalysis = await requestChildrenwearLocalEditIntent({
+  let intentAnalysis;
+  try {
+    intentAnalysis = await requestChildrenwearLocalEditIntent({
     sourcePath,
     previewPath: selectionPreviewPath,
     cropPath: selectionCropPath,
@@ -5268,6 +5277,17 @@ async function generateChildrenwearLocalEdit(payload = {}, options = {}) {
     editId,
     signal: options.signal
   });
+  } catch (error) {
+    const message = String(error?.message || error);
+    // Only an unavailable analysis model may fall back to direct masked editing.
+    // Authentication, billing, cancellation and other request failures must surface.
+    if (options.signal?.aborted || !/no available channel|model[_ -]not[_ -]found|model.*(?:does not exist|not available|not supported)|模型.*(?:无可用渠道|无可用通道|不存在|不支持)/i.test(message)) throw error;
+    intentAnalysis = {
+      intent: null, model: '', usage: null, billingCostMinor: 0, apiRequestCount: 1,
+      mode: 'direct_masked_edit', fallbackReason: message
+    };
+    options.reportProgress?.({ phase: 'generating', percent: 12, message: '视觉理解模型暂无可用通道，正在按选区和原始修改要求直接重绘' });
+  }
   const prompt = childrenwearLocalEditPrompt(stage, instruction, uniqueInputImages.length, intentAnalysis.intent);
   await Promise.all([
     fsp.writeFile(path.join(evidenceFolder, 'prompt.txt'), prompt, 'utf8'),
@@ -5287,6 +5307,8 @@ async function generateChildrenwearLocalEdit(payload = {}, options = {}) {
       selectionPreviewPath,
       selectionCropPath,
       model: intentAnalysis.model,
+      mode: intentAnalysis.mode || 'visual_intent',
+      fallbackReason: intentAnalysis.fallbackReason || '',
       usage: intentAnalysis.usage,
       intent: intentAnalysis.intent
     })
@@ -5296,7 +5318,7 @@ async function generateChildrenwearLocalEdit(payload = {}, options = {}) {
   options.reportProgress?.({
     phase: 'generating',
     percent: 22,
-    message: `已识别目标：${intentAnalysis.intent.targetObject}，正在局部修正`
+    message: intentAnalysis.intent ? `已识别目标：${intentAnalysis.intent.targetObject}，正在局部修正` : '正在按选区遮罩和原始修改要求局部重绘'
   });
   const bytes = await generateImage(prompt, uniqueInputImages, {
     maskPath,
@@ -5345,8 +5367,10 @@ async function generateChildrenwearLocalEdit(payload = {}, options = {}) {
     id: editId,
     stage,
     instruction,
-    resolvedInstruction: intentAnalysis.intent.expandedInstruction,
-    targetObject: intentAnalysis.intent.targetObject,
+    resolvedInstruction: intentAnalysis.intent?.expandedInstruction || instruction,
+    targetObject: intentAnalysis.intent?.targetObject || '',
+    intentMode: intentAnalysis.mode || 'visual_intent',
+    intentFallbackReason: intentAnalysis.fallbackReason || '',
     localEditIntent: intentAnalysis.intent,
     maskPath,
     selectionPreviewPath,
@@ -5471,12 +5495,137 @@ async function materializeExternalFlatTask(payload = {}, config = {}) {
   return { folder, task };
 }
 
+
+const materialWrites = new Map();
+const materialAnalyses = new Map();
+function materialImageKey(value) { return value ? path.resolve(value).replaceAll('\\', '/').toLowerCase() : ''; }
+function materialFile() { return path.join(currentWorkspaceRoot(), 'materials.json'); }
+async function listMaterials() {
+  const items = await readJsonFile(materialFile(), []);
+  return (Array.isArray(items) ? items : []).filter(item => item.imagePath).map(({ uncertainty, ...item }) => ({ ...item, ...normalizeMaterial(item), url: item.imagePath ? imageUrl(item.imagePath) : '' }));
+}
+async function saveMaterial(payload = {}) {
+  if (!payload.imagePath) throw new Error('请先上传材质图片，再分析或编辑这张图片的材质');
+  const normalized = normalizeMaterial(payload);
+  const file = materialFile();
+  const previous = materialWrites.get(file) || Promise.resolve();
+  const operation = previous.catch(() => {}).then(async () => {
+    const storedItems = await readJsonFile(file, []);
+    const items = Array.isArray(storedItems) ? storedItems : [];
+    const imagePath = payload.imagePath ? path.resolve(String(payload.imagePath)) : '';
+    const old = (imagePath && items.find(item => materialImageKey(item.imagePath) === materialImageKey(imagePath))) || items.find(item => item.id === payload.id);
+    if (imagePath && (!isWorkspacePath(imagePath) || !isImagePath(imagePath) || !fs.existsSync(imagePath))) throw new Error('材质图片无效或不属于当前账号');
+    const imageContentHash = imagePath ? (await childrenwearFileFingerprint(imagePath)).contentHash : '';
+    const item = { ...normalized, id: old?.id || crypto.randomUUID(), imagePath, imageContentHash, updatedAt: new Date().toISOString(), saved: true };
+    const next = [...items.filter(value => value.id !== item.id && (!imagePath || materialImageKey(value.imagePath) !== materialImageKey(imagePath))).map(({ url, ...value }) => value), item];
+    await fsp.mkdir(path.dirname(file), { recursive: true });
+    const temp = `${file}.${crypto.randomUUID()}.tmp`;
+    try { await fsp.writeFile(temp, JSON.stringify(next, null, 2), 'utf8'); await fsp.rename(temp, file); } finally { await fsp.rm(temp, { force: true }).catch(() => {}); }
+    return item;
+  });
+  materialWrites.set(file, operation);
+  try { return await operation; } finally { if (materialWrites.get(file) === operation) materialWrites.delete(file); }
+}
+async function analyzeMaterial(payload = {}, options = {}) {
+  const byName = payload.mode === 'name';
+  const confirmedName = String(payload.name || '').trim().slice(0, 120);
+  if (byName && !confirmedName) throw new Error('请先填写准确的材质名称');
+  const imagePath = String(payload.imagePath || '');
+  if (!imagePath) throw new Error('请先上传材质图片，再分析或修改材质名称');
+  if (imagePath && (!isWorkspacePath(imagePath) || !isImagePath(imagePath) || !fs.existsSync(imagePath))) throw new Error('材质图片无效');
+  const fingerprint = imagePath ? await childrenwearFileFingerprint(imagePath) : null;
+  const stored = (await listMaterials()).find(item => imagePath
+    ? materialImageKey(item.imagePath) === materialImageKey(imagePath)
+    : item.id === payload.id || (!item.imagePath && item.name === String(payload.name || '').trim()));
+  if (!byName && payload.force !== true && stored?.texturePrompt && (!fingerprint || !stored.imageContentHash || stored.imageContentHash === fingerprint.contentHash)) return { ...stored, reused: true };
+  const key = `${currentWorkspaceId()}:${materialImageKey(imagePath) || payload.name}:${fingerprint?.contentHash || ''}:${byName ? 'name:' + confirmedName : 'image'}`;
+  if (materialAnalyses.has(key)) return materialAnalyses.get(key);
+  const operation = (async () => {
+  let result;
+  for (let attempt = 0; attempt < (byName ? 2 : 1); attempt += 1) {
+    result = await requestChildrenwearAssetAnalysis(byName ? '' : imagePath, 'product', {
+      ...options, rawJson: true,
+      contentHash: crypto.randomUUID(),
+      analysisPrompt: byName ? materialNamePrompt(confirmedName) : MATERIAL_ANALYSIS_PROMPT,
+      userText: byName
+        ? `用户确认的材质名称：${JSON.stringify(confirmedName)}。请仅生成这种材质的表面纹理描述，名称保持原样。${attempt ? '上次返回的纹理类别不符合此名称，本次必须重新推理，不能沿用织物描述。' : ''}`
+        : `识别这张图片的材质，并生成该材质的纹理属性。${confirmedName ? '用户填写的名称供参考：' + JSON.stringify(confirmedName) : ''}`
+    }).catch(error => { throw materialAnalysisError(error); });
+    const cleanTexture = normalizeMaterial({ ...result.analysis, name: confirmedName || result.analysis?.name }).texturePrompt;
+    if (!byName || !materialNameTextureConflict(confirmedName, cleanTexture)) break;
+    if (attempt === 1) throw new Error('分析模型连续返回了与材质名称不符的纹理，未覆盖已保存的描述，请重试。');
+  }
+  if (!normalizeMaterial({ ...result.analysis, name: result.analysis?.name || payload.name }).texturePrompt) throw new Error('AI 未返回有效的面料纹理描述，请重试或手动填写');
+  return saveMaterial({ ...result.analysis, id: stored?.id || payload.id, imagePath, name: byName ? confirmedName : imagePath ? result.analysis.name || payload.name : payload.name || result.analysis.name });
+  })();
+  materialAnalyses.set(key, operation);
+  try { return await operation; } finally { if (materialAnalyses.get(key) === operation) materialAnalyses.delete(key); }
+
+}
+const poseAnalyses = new Map();
+async function analyzePoseReference(payload = {}, options = {}) {
+  const imagePath = String(payload.imagePath || '');
+  if (!imagePath || !isServablePath(imagePath) || !isImagePath(imagePath) || !fs.existsSync(imagePath)) throw new Error('动作参考图片不存在或不属于当前账号');
+  const fingerprint = await childrenwearFileFingerprint(imagePath);
+  const cacheFile = path.join(currentWorkspaceRoot(), 'pose-analysis', `${fingerprint.contentHash}-v1.json`);
+  if (payload.force !== true) {
+    const cached = await readJsonFile(cacheFile, null);
+    if (cached?.posePrompt) return { ...cached, reused: true };
+  }
+  const key = `${currentWorkspaceId()}:${fingerprint.contentHash}`;
+  if (poseAnalyses.has(key)) return poseAnalyses.get(key);
+  const operation = (async () => {
+    const result = await requestChildrenwearAssetAnalysis(imagePath, 'model_reference', {
+      ...options, rawJson: true, contentHash: crypto.randomUUID(),
+      analysisPrompt: POSE_REFERENCE_PROMPT,
+      userText: '请分析这张动作参考图，只返回可用于主任务人物的姿态描述 posePrompt。'
+    });
+    const record = { schemaVersion: 'pose-v1', contentHash: fingerprint.contentHash, posePrompt: normalizePosePrompt(result.analysis), model: result.model, updatedAt: new Date().toISOString() };
+    await writeJsonFile(cacheFile, record);
+    return record;
+  })();
+  poseAnalyses.set(key, operation);
+  try { return await operation; } finally { if (poseAnalyses.get(key) === operation) poseAnalyses.delete(key); }
+}
+
+async function bindGenerationMaterials(generationInput, payload, folder, stage) {
+  const slots = garmentMaterialSlots(generationInput.bindings, stage, payload.operationType);
+  const selections = Array.isArray(payload.materialSelections) ? payload.materialSelections.slice(0, 30) : [];
+  const materials = await listMaterials();
+  const snapshots = [];
+  for (const selection of selections) {
+    if (!selection.materialId) continue;
+    const garment = slots.find(item => item.slot === selection.slot);
+    if (!garment) continue;
+    const material = materials.find(item => item.id === selection.materialId);
+    if (!material) throw new Error('所选材质已不存在，请重新选择');
+    let imageNumber = 0;
+    if (material.imagePath) {
+      if (!isWorkspacePath(material.imagePath) || !fs.existsSync(material.imagePath)) throw new Error(`材质图片已丢失：${material.name}`);
+      const localPath = await copyChildrenwearTaskAsset(material.imagePath, folder, '材质参考图', `${material.id}${path.extname(material.imagePath)}`);
+      generationInput.inputPaths.push(localPath);
+      imageNumber = generationInput.inputPaths.length;
+      generationInput.bindings.push({ imageNumber, roleId: 'material', roleLabel: `材质：${material.name}`, fileName: path.basename(localPath) });
+    }
+    const target = garment.target;
+    generationInput.prompt += '\n\n' + materialPrompt(material, target, imageNumber);
+    snapshots.push({ ...material, slot: garment.slot, target, materialId: material.id, imageNumber });
+  }
+  if (snapshots.length) generationInput.prompt += '\n只修改明确指定商品的材质；各商品的材质分别应用，不得互相混用。未选择材质的商品保留原有材质。';
+  return snapshots;
+}
+
 async function generateChildrenwearModel(payload = {}, options = {}) {
   const generationStartedAt = new Date();
   const config = await loadConfig();
   const operationType = payload.operationType === 'scene_only' ? 'scene_only' : 'dress';
   let folder = String(payload.folder || '');
   let task = folder ? await readChildrenwearTask(folder) : null;
+  if (!task && !payload.externalMasterPath && operationType === 'dress' && (payload.topReferencePath || payload.bottomReferencePath || payload.modelReferencePath || payload.poseReferencePath)) {
+    folder = await nextChildrenwearTaskFolder(childrenwearStyleName(payload.taskName || '模特图'));
+    task = { folder, id: path.basename(folder), type: 'model_references', category: '童装', styleName: childrenwearStyleName(payload.taskName || '模特图'), taskCode: childrenwearTaskCodeFromFolder(folder), createdAt: new Date().toISOString(), modelOutputs: [] };
+    await writeChildrenwearTask(folder, task);
+  }
   if (!task && operationType === 'dress' && payload.externalMasterPath) {
     const materialized = await materializeExternalFlatTask(payload, config);
     folder = materialized.folder;
@@ -5496,10 +5645,11 @@ async function generateChildrenwearModel(payload = {}, options = {}) {
   let sourceModelPath = '';
   let sourceModelOutputId = '';
   if (operationType === 'dress') {
-    if (!payload.modelReferencePath || !fs.existsSync(payload.modelReferencePath)) throw new Error('请选择参考模特图');
-    if (!task.masterPath || !fs.existsSync(task.masterPath)) throw new Error('平铺图文件不存在，请先生成平铺图');
-    if (task.type !== 'external_flat' && (!task.realPhotoPath || !fs.existsSync(task.realPhotoPath))) throw new Error('任务实拍图已丢失，请重新选择实拍图后再生成');
-    modelReferencePath = await copyChildrenwearTaskAsset(payload.modelReferencePath, folder, '参考模特图');
+    if (![task.masterPath, payload.topReferencePath, payload.bottomReferencePath, payload.modelReferencePath, payload.poseReferencePath].some(Boolean)) throw new Error('请至少选择一张服装、模特或动作参考图');
+    if (payload.modelReferencePath) {
+      if (!isServablePath(payload.modelReferencePath) || !isImagePath(payload.modelReferencePath) || !fs.existsSync(payload.modelReferencePath)) throw new Error('人物模特参考图不存在或不属于当前账号');
+      modelReferencePath = await copyChildrenwearTaskAsset(payload.modelReferencePath, folder, '参考模特图');
+    }
   } else {
     const requestedSource = path.resolve(String(payload.sourceModelPath || ''));
     const sourceOutput = (task.modelOutputs || []).find(item => item?.path && path.resolve(item.path) === requestedSource);
@@ -5525,24 +5675,44 @@ async function generateChildrenwearModel(payload = {}, options = {}) {
   const outputId = `model-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
   const evidenceFolder = path.join(folder, '.evidence', outputId);
   await fsp.mkdir(evidenceFolder, { recursive: true });
+  const optionalReferences = {};
+  for (const [key, label] of [['topReferencePath', '上衣参考'], ['bottomReferencePath', '裤子参考'], ['poseReferencePath', '人物动作参考']]) {
+    if (payload[key]) {
+      if (!isServablePath(payload[key]) || !isImagePath(payload[key]) || !fs.existsSync(payload[key])) throw new Error(`${label}文件不存在或不属于当前账号`);
+      optionalReferences[key] = await copyChildrenwearTaskAsset(payload[key], folder, label);
+    }
+  }
   const generationInput = orderedChildrenwearGenerationInputs(promptPreset, [
     ...(operationType === 'dress'
       ? [
           { label: '已生成平铺图', path: task.masterPath },
-          { label: payload.useFixedModel === true ? '复用模特参考图' : '参考模特图', path: modelReferencePath }
+          { label: '上衣参考（只约束上衣）', path: optionalReferences.topReferencePath },
+          { label: '裤子参考（只约束下装）', path: optionalReferences.bottomReferencePath },
+          { label: payload.useFixedModel === true ? '复用模特参考图' : '参考模特图', path: modelReferencePath },
+          { label: '人物动作参考（只约束姿态）', path: optionalReferences.poseReferencePath }
         ]
       : [{ label: '已有模特图', path: sourceModelPath }]),
     ...(sceneReferencePath ? [{ label: '场景参考图', path: sceneReferencePath }] : [])
   ]);
   const routeInstruction = operationType === 'scene_only'
     ? `本次任务模式：仅更换已有模特图场景。图片1是必须完整保留的人物、面部、姿势、服装、图案、颜色、材质和构图，只允许改变背景。${backgroundMode === 'scene_reference' ? '图片2是新场景参考，只学习其环境、光线与景深。' : `新背景必须为纯色 ${solidBackgroundColor}，保持自然接触阴影。`} 严禁重画人物或服装。`
-    : `本次任务模式：生成模特上身图。图片1是商品平铺图，决定服装款式、颜色、图案、材质和工艺；图片2是模特与姿势参考。${backgroundMode === 'model_reference' ? '背景跟随图片2。' : backgroundMode === 'scene_reference' ? '图片3是独立场景参考。' : `背景使用纯色 ${solidBackgroundColor}。`} ${payload.useFixedModel === true ? '后续任务复用同一模特身份。' : ''}`;
-  const prompt = `${routeInstruction}\n\n运营当前预设提示词：\n${generationInput.prompt}`;
+    : `本次任务模式：生成模特上身图。按以下实际编号生成模特成品图。${generationInput.bindings.map(item => `图${item.imageNumber}：${item.roleLabel}`).join('；')}。上衣和裤子参考分别决定对应服装的款式、颜色、图案与工艺；模特参考决定人物身份与外观${optionalReferences.poseReferencePath ? '，独立动作图决定姿势' : '及动作姿势'}；动作参考只决定身体姿势，不带入其人物、服装或背景。独立服装参考优先于模特/动作图中的原衣服。未提供的参考由模型合理补全。${backgroundMode === 'solid' ? `背景使用纯色 ${solidBackgroundColor}。` : backgroundMode === 'scene_reference' ? '背景以场景参考为准。' : modelReferencePath ? '背景跟随人物模特参考。' : '使用简洁的电商摄影背景。'}以下预设如与本次图片角色冲突，以本段实际图片角色为准。`;
+  let poseAnalysis = null;
+  if (operationType === 'dress' && optionalReferences.poseReferencePath) {
+    options.reportProgress?.({ phase: 'analyzing_pose', percent: 8, message: '正在读取动作参考并提取姿态提示词' });
+    poseAnalysis = await analyzePoseReference({ imagePath: optionalReferences.poseReferencePath }, options);
+  }
+  const materialSelections = await bindGenerationMaterials(generationInput, payload, folder, 'model');
+  const poseInstruction = poseAnalysis ? `动作参考反推提示词（只作用于主任务模特的姿态）：${poseAnalysis.posePrompt}` : '';
+  const compositionInstruction = operationType === 'dress' ? '参考合并规则：上衣和裤子的款式、颜色、图案与工艺分别取自各自商品参考；人物身份与外观取自人物模特参考；姿态采用动作反推提示词；所选材质纹理仅应用于对应商品；预设提示词提供其余画面要求。各参考按上述职责合并，独立动作优先于人物参考的原姿势，所选商品材质优先于原图的面料纹理，商品款式和人物身份保持各自参考。' : '';
+  const prompt = `${routeInstruction}\n\n运营当前预设提示词：\n${generationInput.prompt}\n\n${poseInstruction}\n\n${compositionInstruction}`;
   await Promise.all([
     fsp.writeFile(path.join(evidenceFolder, 'prompt.txt'), prompt, 'utf8'),
     writeJsonFile(path.join(evidenceFolder, 'input-order.json'), {
       promptPreset: { id: promptPreset.presetId, name: promptPreset.presetName },
       imageOrder: generationInput.bindings,
+      poseAnalysis,
+      materialSelections,
       operationType,
       backgroundMode,
       solidBackgroundColor,
@@ -5554,7 +5724,7 @@ async function generateChildrenwearModel(payload = {}, options = {}) {
     size: config.imageSize || '1024x1024',
     quality: config.imageQuality || 'high',
     billingDescription: operationType === 'scene_only' ? '童装模特图场景更换' : '童装模特上身图生成',
-    billingReference: path.basename(operationType === 'scene_only' ? sourceModelPath : task.masterPath),
+    billingReference: path.basename(operationType === 'scene_only' ? sourceModelPath : task.masterPath || optionalReferences.topReferencePath || optionalReferences.bottomReferencePath || modelReferencePath || optionalReferences.poseReferencePath),
     billingOnceKey: billingOnceKey('image:childrenwear-model', folder, outputId, Date.now(), crypto.randomUUID()),
     signal: options.signal,
     onRequestState: event => options.reportProgress?.({
@@ -5570,6 +5740,7 @@ async function generateChildrenwearModel(payload = {}, options = {}) {
   await sharp(bytes, { failOn: 'none' }).png({ compressionLevel: 9 }).toFile(outputPath);
   const output = {
     id: outputId,
+    materialSelections,
     path: outputPath,
     taskName: childrenwearOutputDisplayName(payload.taskName || task.taskName, task.taskCode, task.styleName || task.category).slice(0, 80),
     masterPath: operationType === 'dress' ? task.masterPath : '',
@@ -5580,6 +5751,8 @@ async function generateChildrenwearModel(payload = {}, options = {}) {
     sourceModelPath,
     sourceModelOutputId,
     modelReferencePath,
+    ...optionalReferences,
+    poseAnalysis,
     useFixedModel: operationType === 'dress' && payload.useFixedModel === true,
     modelReferenceSpec: null,
     modelReferenceAnalysisHash: '',
@@ -5736,6 +5909,7 @@ async function generateChildrenwearCombination(payload = {}, options = {}) {
     { label: '所选平铺图', paths: localMasterPaths },
     { label: '组合参考图', path: combinationReferencePath }
   ]);
+  const materialSelections = await bindGenerationMaterials(generationInput, payload, folder, 'combination');
   const prompt = generationInput.prompt;
   await Promise.all([
     fsp.writeFile(path.join(evidenceFolder, 'prompt.txt'), prompt, 'utf8'),
@@ -5766,6 +5940,7 @@ async function generateChildrenwearCombination(payload = {}, options = {}) {
   const now = new Date().toISOString();
   const output = {
     id: outputId,
+    materialSelections,
     path: outputPath,
     taskName: childrenwearOutputDisplayName(payload.taskName || existing.taskName, existing.taskCode || childrenwearTaskCodeFromFolder(folder), existing.styleName || existing.category || '多SKU组合').slice(0, 80),
     masterPaths: localMasterPaths,
@@ -5834,6 +6009,7 @@ function compactChildrenwearBatchTask(stage, value = {}) {
   };
   if (stage === 'master') return {
     ...common,
+    materialSelections: value.materialSelections || [],
     realPhotoPath: value.realPhotoPath || '',
     realPhotoUrl: value.realPhotoUrl || '',
     realPhotoThumbnailUrl: value.realPhotoThumbnailUrl || '',
@@ -5969,6 +6145,10 @@ async function initializeRuntime() {
 const runtimeExports = {
   DATA_ROOT,
   apiSettingsStatus,
+  analyzePoseReference,
+  listMaterials,
+  saveMaterial,
+  analyzeMaterial,
   analyzeChildrenwearAssets,
   childrenwearAnalysisConcurrencyLimit,
   scanPendingChildrenwearAnalysis,
