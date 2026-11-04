@@ -1,3 +1,4 @@
+const { relocateTaskPaths } = require('./core/task-paths');
 const { POSE_REFERENCE_PROMPT, normalizePosePrompt } = require('./core/pose-reference');
 const { MATERIAL_ANALYSIS_PROMPT, normalizeMaterial, materialPrompt, materialAnalysisError, parseMaterialAnalysisJson, garmentMaterialSlots, materialNamePrompt, materialNameTextureConflict } = require('./core/materials');
 ﻿const crypto = require('node:crypto');
@@ -4467,7 +4468,7 @@ function publicChildrenwearTask(value = {}) {
 
 async function readChildrenwearTask(folder) {
   const value = await readJsonFile(childrenwearMetadataFile(folder), null);
-  return value && typeof value === 'object' ? value : null;
+  return value && typeof value === 'object' ? relocateTaskPaths(value, folder) : null;
 }
 
 async function readChildrenwearTaskForOutput(file) {

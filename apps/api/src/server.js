@@ -1233,7 +1233,7 @@ const rpc = {
   generateFree: ([payload], context) => runtime.generateFree({ ...(payload || {}), sourcePath: workspacePath(payload?.sourcePath) }, context || {}),
   generateChildrenwearMaster: ([payload], context) => runtime.generateChildrenwearMaster({
     ...(payload || {}),
-    folder: payload?.folder ? managedPath(payload.folder) : '',
+    folder: payload?.folder ? managedPath(payload.folder, { message: '任务目录不属于当前工作区，请刷新任务列表后重试；若移动过服务器目录，请更新到最新版本' }) : '',
     realPhotoPath: managedPath(payload?.realPhotoPath, { message: '实拍图不属于当前工作区或任务目录' }),
     referencePath: managedPath(payload?.referencePath, { message: '参考成品图不属于当前工作区或任务目录' }),
     currentResultPath: managedPath(payload?.currentResultPath, { allowEmpty: true, message: '当前生成结果不属于当前输出目录' })
@@ -1242,9 +1242,9 @@ const rpc = {
     ...(payload || {}),
     folder: managedPath(payload?.folder, { allowEmpty: true, message: '童装任务不属于当前输出目录' }),
     externalMasterPath: managedPath(payload?.externalMasterPath, { allowEmpty: true, message: '外部平铺图不属于当前工作区' }),
-    topReferencePath: managedPath(payload?.topReferencePath, { allowEmpty: true }),
-    bottomReferencePath: managedPath(payload?.bottomReferencePath, { allowEmpty: true }),
-    poseReferencePath: managedPath(payload?.poseReferencePath, { allowEmpty: true }),
+    topReferencePath: managedPath(payload?.topReferencePath, { allowEmpty: true, message: '上衣参考图不属于当前工作区，请重新选择这张参考图' }),
+    bottomReferencePath: managedPath(payload?.bottomReferencePath, { allowEmpty: true, message: '裤子参考图不属于当前工作区，请重新选择这张参考图' }),
+    poseReferencePath: managedPath(payload?.poseReferencePath, { allowEmpty: true, message: '动作参考图不属于当前工作区，请重新选择这张参考图' }),
     modelReferencePath: managedPath(payload?.modelReferencePath, { allowEmpty: true, message: '模特参考图不属于当前工作区或任务目录' }),
     currentResultPath: managedPath(payload?.currentResultPath, { allowEmpty: true, message: '当前生成结果不属于当前输出目录' }),
     useFixedModel: payload?.useFixedModel === true
@@ -1261,7 +1261,7 @@ const rpc = {
     const items = (Array.isArray(payload?.items) ? payload.items : []).slice(0, 500).map(item => {
       if (stage === 'master') return {
         ...(item || {}),
-        folder: item?.folder ? managedPath(item.folder) : '',
+        folder: item?.folder ? managedPath(item.folder, { message: '任务目录不属于当前工作区，请刷新任务列表后重试；若移动过服务器目录，请更新到最新版本' }) : '',
         realPhotoPath: managedPath(item?.realPhotoPath, { message: '实拍图不属于当前工作区或任务目录' }),
         referencePath: managedPath(item?.referencePath, { message: '参考成品图不属于当前工作区或任务目录' }),
         currentResultPath: managedPath(item?.currentResultPath, { allowEmpty: true, message: '当前生成结果不属于当前输出目录' })
@@ -1270,9 +1270,9 @@ const rpc = {
         ...(item || {}),
         folder: managedPath(item?.folder, { allowEmpty: true, message: '童装任务不属于当前输出目录' }),
         externalMasterPath: managedPath(item?.externalMasterPath, { allowEmpty: true, message: '外部平铺图不属于当前工作区' }),
-        topReferencePath: managedPath(item?.topReferencePath, { allowEmpty: true }),
-        bottomReferencePath: managedPath(item?.bottomReferencePath, { allowEmpty: true }),
-        poseReferencePath: managedPath(item?.poseReferencePath, { allowEmpty: true }),
+        topReferencePath: managedPath(item?.topReferencePath, { allowEmpty: true, message: '上衣参考图不属于当前工作区，请重新选择这张参考图' }),
+        bottomReferencePath: managedPath(item?.bottomReferencePath, { allowEmpty: true, message: '裤子参考图不属于当前工作区，请重新选择这张参考图' }),
+        poseReferencePath: managedPath(item?.poseReferencePath, { allowEmpty: true, message: '动作参考图不属于当前工作区，请重新选择这张参考图' }),
         modelReferencePath: managedPath(item?.modelReferencePath, { allowEmpty: true, message: '模特参考图不属于当前工作区或任务目录' }),
         currentResultPath: managedPath(item?.currentResultPath, { allowEmpty: true, message: '当前生成结果不属于当前输出目录' }),
         useFixedModel: item?.useFixedModel === true
