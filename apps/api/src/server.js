@@ -175,8 +175,8 @@ let activeThumbnails = 0;
 let activeJobs = 0;
 const upload = multer({
   storage: multer.diskStorage({
-    destination: (_req, _file, callback) => {
-      const destination = tempRoot();
+    destination: (req, _file, callback) => {
+      const destination = runtime.runWithWorkspace(req.user.workspaceId, () => tempRoot());
       fs.mkdirSync(destination, { recursive: true });
       callback(null, destination);
     },
@@ -184,6 +184,18 @@ const upload = multer({
   }),
   limits: { fileSize: UPLOAD_FILE_LIMIT_BYTES, files: 10000 }
 });
+
+// Multipart stream callbacks originate from the request socket, outside the
+// AsyncLocalStorage context established by authentication. Restore it before
+// continuing into upload handlers so assets and signed URLs use the owner.
+function workspaceUpload(middleware) {
+  return (req, res, next) => {
+    const user = req.user;
+    if (!user?.workspaceId) return res.status(401).json({ error: '请先登录' });
+    const scoped = worker => runtime.runWithWorkspace(user.workspaceId, worker, { userRole: user.role, userId: user.id });
+    return scoped(() => middleware(req, res, error => scoped(() => next(error))));
+  };
+}
 
 function safeSegment(value, fallback = 'file') {
   const cleaned = String(value || '').normalize('NFC').replace(/[<>:"|?*\u0000-\u001f]/g, '-').replace(/^\.+$/, '').trim();
@@ -1168,7 +1180,7 @@ async function renameAssetFolder(kindValue, requestedRoot, folderId, nextNameVal
 }
 
 const rpc = {
-  analyzePoseReference: ([payload], context) => runtime.analyzePoseReference({ ...(payload || {}), imagePath: managedPath(payload?.imagePath) }, context || {}),
+  analyzePoseReference: ([payload], context) => runtime.analyzePoseReference({ ...(payload || {}), imagePath: managedPath(payload?.imagePath, { message: '动作图片不属于当前账号，请重新上传动作图片后再试' }) }, context || {}),
   listMaterials: () => runtime.listMaterials(),
   saveMaterial: ([payload]) => runtime.saveMaterial({ ...(payload || {}), imagePath: workspacePath(payload?.imagePath, { allowEmpty: true }) }),
   analyzeMaterial: ([payload], context) => runtime.analyzeMaterial({ ...(payload || {}), imagePath: workspacePath(payload?.imagePath, { allowEmpty: true }) }, context || {}),
@@ -1587,7 +1599,7 @@ async function startServer() {
   app.post('/api/alipay/settings/qr', (req, res, next) => {
     if (!isSuperAdmin(req.user)) return res.status(403).json({ error: '无权修改 Alipay 配置' });
     return next();
-  }, upload.single('qr'), async (req, res) => {
+  }, workspaceUpload(upload.single('qr')), async (req, res) => {
     if (!req.file?.path) return res.status(400).json({ error: '请选择支付宝收款码图片' });
     const temporary = `${alipayRecharge.qrFile}.${process.pid}.tmp.png`;
     try {
@@ -1953,7 +1965,7 @@ async function startServer() {
     } catch (error) { next(error); }
   });
 
-  app.post('/api/assets/sync/upload/:sessionId', upload.array('files', 80), async (req, res, next) => {
+  app.post('/api/assets/sync/upload/:sessionId', workspaceUpload(upload.array('files', 80)), async (req, res, next) => {
     try {
       let relativePaths = [];
       let lastModifiedValues = [];
@@ -1969,7 +1981,7 @@ async function startServer() {
     } catch (error) { next(error); }
   });
 
-  app.post('/api/assets/files/:kind', upload.array('files', 500), async (req, res, next) => {
+  app.post('/api/assets/files/:kind', workspaceUpload(upload.array('files', 500)), async (req, res, next) => {
     try {
       let relativePaths = [];
       try { relativePaths = JSON.parse(req.body.relativePaths || '[]'); } catch {}
@@ -2009,11 +2021,11 @@ async function startServer() {
     } catch (error) { next(error); }
   });
 
-  app.post('/api/upload/folder/:kind', upload.array('files', 10000), (req, res, next) => {
+  app.post('/api/upload/folder/:kind', workspaceUpload(upload.array('files', 10000)), (req, res, next) => {
     handleFolderUpload(req, res).catch(next);
   });
 
-  app.post('/api/upload/image', upload.single('file'), async (req, res, next) => {
+  app.post('/api/upload/image', workspaceUpload(upload.single('file')), async (req, res, next) => {
     try {
       if (!req.file) return res.status(400).json({ error: '没有收到图片' });
       const originalName = uploadName(req.file);
