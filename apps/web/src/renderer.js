@@ -1,3 +1,4 @@
+import { modelAssetSlot, selectModelAssetDraft, assignModelAsset, nextModelAssetSlot } from './model-asset-slots.mjs';
 const QUEUE_STORAGE_KEY = 'caishen-web-task-queue-v1';
 const TEMPLATE_MASTER_CANDIDATES_STORAGE_KEY = 'caishen-web-template-master-candidates-v1';
 const ASSET_PREVIEW_SIZE_STORAGE_KEY = 'caishen-web-asset-preview-sizes-v1';
@@ -5939,7 +5940,7 @@ function cwMaterialControls(draft, disabled) {
     const selected = (draft.materialSelections || []).find(item => item.slot === slot)?.materialId || '';
     return `<label>${escapeHtml(label)}<select data-cw-material-target="${escapeHtml(slot)}"${disabled ? ' disabled' : ''}><option value="">不额外指定材质</option>${cwMaterials.map(item => `<option value="${escapeHtml(item.id)}"${selected === item.id ? ' selected' : ''}>${escapeHtml(item.name)}${item.texturePrompt ? '' : '（待填写纹理）'}</option>`).join('')}${selected && !cwMaterials.some(item => item.id === selected) ? `<option selected value="${escapeHtml(selected)}">已删除的材质，请重选</option>` : ''}</select></label>`;
   }).join('');
-  const uploadsBase = draft.stage === 'model' && draft.operationType !== 'scene_only' ? `<div class="cw-optional-references">${[['top','上衣'],['bottom','裤子'],['reference','人物模特'],['pose','人物动作']].map(([role, name]) => `<span><button class="secondary" type="button" data-cw-upload-reference="${role}"${disabled ? ' disabled' : ''}>${draft[role]?.path ? '替换' : '上传'}${name}（可选）</button>${draft[role]?.path ? `<button class="text-button" type="button" data-cw-clear-reference="${role}"${disabled ? ' disabled' : ''}>移除</button>` : ''}</span>`).join('')}</div>` : '';
+  const uploadsBase = draft.stage === 'model' && draft.operationType !== 'scene_only' ? `<div class="cw-optional-references">${[['top','上衣'],['bottom','裤子'],['reference','人物模特'],['pose','人物动作']].map(([role, name]) => `<span><button class="secondary" type="button" data-cw-upload-reference="${role}"${disabled ? ' disabled' : ''}>${draft[role]?.path ? '替换' : '上传'}${name}（可选）</button><button class="text-button" type="button" data-cw-pick-reference="${role}"${disabled ? ' disabled' : ''}>从资产选${name}</button>${draft[role]?.path ? `<button class="text-button" type="button" data-cw-clear-reference="${role}"${disabled ? ' disabled' : ''}>移除</button>` : ''}</span>`).join('')}</div>` : '';
   const poseDetails = draft.stage === 'model' && draft.operationType !== 'scene_only' && draft.pose?.path ? `<details class="cw-material-controls"><summary>动作提示词（自动分析并保存）</summary><p>${escapeHtml(draft.poseAnalysis?.posePrompt || (draft.poseAnalyzing ? '正在分析动作参考…' : draft.poseAnalysisError || '生成时自动分析这张图的动作，并合并到生图提示词。'))}</p><button class="secondary" type="button" data-cw-analyze-pose${disabled || draft.poseAnalyzing ? ' disabled' : ''}>${draft.poseAnalysis ? '重新分析动作' : '分析动作'}</button></details>` : '';
   const uploads = uploadsBase + poseDetails;
   if (!slots.length) return uploads;
@@ -5969,11 +5970,18 @@ document.addEventListener('change', event => {
   draft.materialSelections = [...(draft.materialSelections || []).filter(item => item.slot !== select.dataset.cwMaterialTarget), ...(select.value ? [{ slot: select.dataset.cwMaterialTarget, materialId: select.value }] : [])];
 });
 document.addEventListener('click', async event => {
-  const button = event.target.closest('[data-material-edit],[data-material-image],[data-material-analyze-page],[data-material-manage],[data-cw-upload-reference],[data-cw-clear-reference],[data-cw-analyze-pose],[data-cw-new-model],#cwMaterialAnalyze,#cwMaterialInferName,#cwMaterialSave');
+  const button = event.target.closest('[data-material-edit],[data-material-image],[data-material-analyze-page],[data-material-manage],[data-cw-upload-reference],[data-cw-clear-reference],[data-cw-analyze-pose],[data-cw-asset-slot],[data-cw-pick-reference],[data-cw-new-model],#cwMaterialAnalyze,#cwMaterialInferName,#cwMaterialSave');
   if (!button) return;
   try {
     if (button.hasAttribute('data-material-manage')) return openChildrenwearLibrary('childrenwearMaterialAssetsPath');
+    if (button.hasAttribute('data-cw-asset-slot')) return chooseCwModelAssetSlot(button.dataset.cwAssetSlot);
+    if (button.hasAttribute('data-cw-pick-reference')) {
+      const card = button.closest('[data-cw-draft]');
+      return chooseCwModelAssetSlot(button.dataset.cwPickReference, card.dataset.cwDraft);
+    }
     if (button.hasAttribute('data-cw-new-model')) {
+      state.childrenwearModelAssetExplicit = false;
+      state.childrenwearModelAssetRole = 'top';
       const draft = cwNewDraft('model');
       draft.operationType = 'dress';
       draft.backgroundMode = 'solid';
@@ -8524,7 +8532,30 @@ async function confirmCwSourceBuilder(stage) {
   toast(`已新建 ${created} 张独立任务卡片`);
 }
 
+function renderCwModelAssetSlots() {
+  const column = $('.cw-model-source-column');
+  if (!column) return;
+  let bar = $('#cwModelAssetSlots');
+  if (!bar) { bar = document.createElement('div'); bar.id = 'cwModelAssetSlots'; bar.className = 'cw-model-asset-slots'; column.querySelector('.cw-source-tabs').before(bar); }
+  bar.hidden = state.childrenwearModelOperationType === 'scene_only' || Boolean(state.childrenwearSourceBuilderModes.model);
+  const selected = state.childrenwearModelAssetRole || 'top';
+  const active = state.childrenwearDrafts.model.find(item => item.id === state.childrenwearActiveDraft.model);
+  bar.innerHTML = `<b>资产图片填入位置</b><div>${[['top','上衣'],['bottom','裤子'],['reference','模特'],['pose','动作'],['master','整件商品']].map(([role,label]) => `<button class="secondary${role === selected ? ' active' : ''}" type="button" data-cw-asset-slot="${role}">${label}</button>`).join('')}</div><small>选择位置后点击下方资产，填入同一张任务卡${active && !active.result?.path ? '：' + escapeHtml(active.title || '当前新任务') : ''}。新搭配请点“新建模特图”。</small>`;
+}
+function chooseCwModelAssetSlot(role, draftId = '') {
+  if (draftId) state.childrenwearActiveDraft.model = draftId;
+  state.childrenwearModelAssetRole = role;
+  state.childrenwearModelAssetExplicit = true;
+  state.childrenwearModelOperationType = 'dress';
+  if (['reference', 'pose'].includes(role)) state.childrenwearSourceTabs.model = 'model-reference';
+  else if (!['model-master', 'model-external'].includes(state.childrenwearSourceTabs.model)) state.childrenwearSourceTabs.model = 'model-master';
+  renderCwSource('model');
+  const key = cwLibrarySource('model').key;
+  if (key) void loadChildrenwearLibrary(key).then(() => renderCwSource('model'));
+}
+
 function renderCwSource(stage) {
+  if (stage === 'model') renderCwModelAssetSlots();
   if (stage === 'model') renderCwModelControls();
   renderCwSourceBuilder(stage);
   const source = cwLibrarySource(stage);
@@ -8645,6 +8676,22 @@ function addCwSource(stage, role, pathValue, options = {}) {
   const shouldRender = options.render !== false;
   const source = cwFindSource(stage, role, pathValue);
   if (!source) return;
+  if (stage === 'model' && ['master', 'reference'].includes(role) && state.childrenwearModelOperationType !== 'scene_only') {
+    const slot = modelAssetSlot(role, state.childrenwearModelAssetRole || 'top');
+    if (slot !== 'master') {
+      const draft = selectModelAssetDraft(state.childrenwearDrafts.model, state.childrenwearActiveDraft.model, state.childrenwearModelAssetExplicit) || cwNewDraft('model');
+      assignModelAsset(draft, slot, source);
+      draft.backgroundMode ||= state.childrenwearModelBackgroundMode || 'model_reference';
+      draft.solidBackgroundColor ||= state.childrenwearModelSolidColor;
+      state.childrenwearActiveDraft.model = draft.id;
+      state.childrenwearModelAssetRole = nextModelAssetSlot(slot);
+      cwRememberSelection(draft, slot, source);
+      draft.status = cwDraftReady(draft) ? '待生成' : '待补齐素材';
+      if (shouldRender) { renderCwQueue('model'); chooseCwModelAssetSlot(state.childrenwearModelAssetRole); }
+      if (slot === 'pose') void analyzeCwDraftPose(draft);
+      return;
+    }
+  }
   let draft;
   let selectionAdded = true;
   if (stage === 'master') {
