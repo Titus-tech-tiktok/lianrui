@@ -155,3 +155,58 @@ test('relay choices expose only names and descriptions while superadmin settings
     assert.deepEqual((await runtime.loadApiSettings()).relays, []);
   });
 });
+
+
+test('model-only selection uses stored credentials, validates membership and cannot modify other settings', async () => {
+  await withRuntime('model-only', async (runtime, temp) => {
+    const saved = await runtime.saveApiSettings({ activeRelayId: 'primary', relays: [relay({ analysisBaseUrl: 'https://analysis.example/v1', analysisApiKey: 'analysis-secret', analysisModel: 'vision-old' })] });
+    assert.equal(Object.hasOwn(saved.relays[0], 'analysisKey'), false);
+    const file = path.join(temp, 'system', 'api-settings.json');
+    const before = JSON.parse(await fs.readFile(file, 'utf8'));
+    const selection = await runtime.getModelSelection();
+    assert.deepEqual(Object.keys(selection).sort(), ['analysisModel','imageModel','name','relayId']);
+    const originalFetch = global.fetch;
+    const calls = [];
+    global.fetch = async (url, options) => {
+      calls.push({ url: String(url), options });
+      if (options.method === 'GET') return new Response(JSON.stringify({ data: [{ id: 'vision-ok' }, { id: 'image-ok' }] }), { status: 200 });
+      const body = JSON.parse(options.body);
+      assert.equal(body.model, 'vision-ok');
+      assert.ok(body.messages[1].content.some(item => item.type === 'image_url'));
+      return new Response(JSON.stringify({ choices: [{ message: { content: '{"shape":"square","color":"red"}' } }] }), { status: 200 });
+    };
+    try {
+      const list = await runtime.readSelectableModels({ channel: 'analysis', baseUrl: 'https://attacker.example', imageApiKey: 'bad' });
+      assert.equal(list.modelCount, 2);
+      assert.ok(calls[0].url.startsWith('https://analysis.example/v1/'));
+      assert.equal(calls[0].options.headers.Authorization, 'Bearer analysis-secret');
+      await assert.rejects(runtime.saveSelectedModel({ relayId: 'primary', channel: 'image', model: 'invented' }), /请选择/);
+      await assert.rejects(runtime.saveSelectedModel({ relayId: 'stale', channel: 'image', model: 'image-ok' }), /已变化/);
+      await runtime.saveSelectedModel({ relayId: 'primary', channel: 'image', model: 'image-ok', baseUrl: 'https://attacker.example', imageApiKey: 'bad', imagePriceMinMinor: 1 });
+      const after = JSON.parse(await fs.readFile(file, 'utf8'));
+      assert.deepEqual(after, { ...before, relays: before.relays.map(item => ({ ...item, imageModel: 'image-ok' })) });
+      await runtime.runWithWorkspace('model-only', () => runtime.saveSelectedModel({ relayId: 'primary', channel: 'analysis', model: 'vision-ok' }), { userRole: 'superadmin' });
+      assert.equal((await runtime.getModelSelection()).analysisModel, 'vision-ok');
+      const post = calls.find(item => item.options.method === 'POST');
+      assert.ok(post.url.startsWith('https://analysis.example/v1/'));
+      assert.equal(post.options.headers.Authorization, 'Bearer analysis-secret');
+    } finally { global.fetch = originalFetch; }
+  });
+});
+
+test('analysis probe rejects unavailable channels despite successful model listing', async () => {
+  await withRuntime('probe-failure', async runtime => {
+    await runtime.saveApiSettings({ activeRelayId: 'primary', relays: [relay()] });
+    const originalFetch = global.fetch;
+    global.fetch = async (url, options) => options.method === 'GET'
+      ? new Response(JSON.stringify({ data: [{ id: 'unavailable' }] }), { status: 200 })
+      : new Response(JSON.stringify({ error: { message: 'No available channel for model unavailable' } }), { status: 503 });
+    try {
+      await runtime.runWithWorkspace('probe-failure', async () => {
+        assert.equal((await runtime.readSelectableModels()).modelCount, 1);
+        await assert.rejects(runtime.testAnalysisSettings({ relay: { id: 'primary', analysisModel: 'unavailable' } }), /可用通道/);
+        assert.notEqual((await runtime.getModelSelection()).analysisModel, 'unavailable');
+      }, { userRole: 'superadmin' });
+    } finally { global.fetch = originalFetch; }
+  });
+});

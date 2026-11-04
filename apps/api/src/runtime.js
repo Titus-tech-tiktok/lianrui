@@ -1,3 +1,4 @@
+const { analysisTransport, analysisChannelError } = require('./core/analysis-api');
 const { relocateTaskPaths } = require('./core/task-paths');
 const { POSE_REFERENCE_PROMPT, normalizePosePrompt } = require('./core/pose-reference');
 const { MATERIAL_ANALYSIS_PROMPT, normalizeMaterial, materialPrompt, materialAnalysisError, parseMaterialAnalysisJson, garmentMaterialSlots, materialNamePrompt, materialNameTextureConflict } = require('./core/materials');
@@ -526,6 +527,8 @@ function normalizeRelays(value, currentSettings = {}) {
     seen.add(id);
     const current = currentById.get(id) || {};
     const imageKeyInput = String(item?.imageApiKey ?? item?.imageKey ?? item?.apiKey ?? '').trim();
+    const analysisKey = item?.clearAnalysisKey === true ? '' : String(item?.analysisApiKey ?? item?.analysisKey ?? '').trim() || current.analysisKey || '';
+    const analysisBaseUrl = normalizeApiBaseUrl(item?.analysisBaseUrl ?? current.analysisBaseUrl ?? '');
     const baseUrl = normalizeApiBaseUrl(item?.baseUrl || current.baseUrl || '');
     const imageRange = relayMinorRange(item, current, 'image');
     const llmRange = relayMinorRange(item, current, 'llm');
@@ -537,6 +540,8 @@ function normalizeRelays(value, currentSettings = {}) {
       baseUrl,
       imageKey: item?.clearImageKey === true ? '' : imageKeyInput || current.imageKey || '',
       imageModel: normalizeOptionalModelName(item?.imageModel ?? current.imageModel ?? ''),
+      ...(analysisKey ? { analysisKey } : {}),
+      ...(analysisBaseUrl ? { analysisBaseUrl } : {}),
       analysisModel: normalizeOptionalModelName(item?.analysisModel ?? current.analysisModel ?? ENV_API.analysisModel),
       healthPath: normalizeRelayPath(item?.healthPath || current.healthPath, '/models'),
       modelsPath: normalizeRelayPath(item?.modelsPath || current.modelsPath, '/models'),
@@ -552,11 +557,13 @@ function normalizeRelays(value, currentSettings = {}) {
 }
 
 function publicRelay(item) {
-  const { imageKey, ...rest } = item;
+  const { imageKey, analysisKey, ...rest } = item;
   return {
     ...rest,
     imageKeyConfigured: Boolean(imageKey),
-    imageKeyMasked: maskedApiKey(imageKey)
+    imageKeyMasked: maskedApiKey(imageKey),
+    analysisKeyConfigured: Boolean(analysisKey),
+    analysisKeyMasked: maskedApiKey(analysisKey)
   };
 }
 
@@ -1040,8 +1047,8 @@ async function testApiSettings(payload = {}) {
   const current = await readPrivateApiSettings();
   const relay = relayForRequestPayload(payload, current);
   const draft = {
-    baseUrl: relay.baseUrl,
-    key: relay.imageKey,
+    baseUrl: payload.channel === 'analysis' ? relay.analysisBaseUrl || relay.baseUrl : relay.baseUrl,
+    key: payload.channel === 'analysis' ? relay.analysisKey || relay.imageKey : relay.imageKey,
     modelsPath: relay.modelsPath || '/models',
     requestTimeoutSeconds: normalizeRequestTimeoutSeconds(payload.requestTimeoutSeconds, current.requestTimeoutSeconds)
   };
@@ -1061,7 +1068,63 @@ async function testApiSettings(payload = {}) {
     created: Number.isFinite(Number(item?.created)) ? Number(item.created) : 0,
     ownedBy: String(item?.owned_by || '').trim().slice(0, 120)
   })).filter(item => item.id);
-  return { ok: true, channel: 'image', latencyMs: Date.now() - startedAt, modelCount: models.length, models };
+  return { ok: true, channel: payload.channel === 'analysis' ? 'analysis' : 'image', latencyMs: Date.now() - startedAt, modelCount: models.length, models };
+}
+
+// Restricted model-only API: never accept transport, credentials or billing fields.
+async function getModelSelection() {
+  const settings = await readPrivateApiSettings();
+  const relay = activeRelayFromSettings(settings);
+  return { relayId: relay?.id || '', name: relay?.name || '', imageModel: relay?.imageModel || '', analysisModel: relay?.analysisModel || '' };
+}
+async function readSelectableModels(payload = {}) {
+  const settings = await readPrivateApiSettings();
+  const relay = activeRelayFromSettings(settings);
+  if (!relay) throw new Error('当前没有可用中转站');
+  try { return await testApiSettings({ relayId: relay.id, channel: payload.channel === 'analysis' ? 'analysis' : 'image' }); }
+  catch { throw new Error('读取模型失败，请联系超级管理员检查当前接口配置'); }
+}
+async function saveSelectedModel(payload = {}) {
+  const channel = payload.channel === 'analysis' ? 'analysis' : 'image';
+  const model = String(payload.model || '').trim();
+  const snapshot = await getModelSelection();
+  if (payload.relayId !== snapshot.relayId) throw new Error('当前中转站已变化，请重新读取模型');
+  const result = await readSelectableModels({ channel });
+  if (!result.models.some(item => item.id === model)) throw new Error('请选择当前接口返回的模型');
+  const operation = apiSettingsWriteChain.then(async () => {
+    const current = await readPrivateApiSettings();
+    if (current.activeRelayId !== snapshot.relayId) throw new Error('当前中转站已变化，请重新读取模型');
+    if (channel === 'analysis') {
+      try { await testAnalysisSettings({ relay: { id: snapshot.relayId, analysisModel: model } }); }
+      catch { throw new Error('分析模型图片理解测试失败，请联系超级管理员检查模型权限或通道'); }
+    }
+    const stored = { ...current, relays: current.relays.map(item => item.id === snapshot.relayId ? { ...item, [channel === 'analysis' ? 'analysisModel' : 'imageModel']: model } : item) };
+    // Persist only the canonical settings fields, never the flattened private transport.
+    const canonical = storedApiSettings(stored);
+    await fsp.writeFile(apiSettingsFile(), JSON.stringify(canonical, null, 2), { encoding: 'utf8', mode: 0o600 });
+    runtimeApiSettings = withActiveRelay(canonical);
+    return getModelSelection();
+  });
+  apiSettingsWriteChain = operation.catch(() => {});
+  return operation;
+}
+
+async function testAnalysisSettings(payload = {}) {
+  const current = await readPrivateApiSettings();
+  const relay = relayForRequestPayload(payload, current);
+  const api = analysisTransport({ ...current, baseUrl: relay.baseUrl, imageKey: relay.imageKey, analysisModel: relay.analysisModel, activeRelay: relay });
+  if (!api.baseUrl || !api.imageKey) throw new Error('请先填写分析接口地址和密钥，或配置可供复用的图片接口');
+  if (!relay.analysisModel) throw new Error('请先读取并选择素材分析模型');
+  const png = await sharp({ create: { width: 64, height: 64, channels: 3, background: '#ff0000' } }).png().toBuffer();
+  const startedAt = Date.now();
+  const result = await requestChildrenwearAssetAnalysis('', 'product', {
+    apiConfig: api, rawJson: true, analysisModel: relay.analysisModel, configurationProbe: true,
+    analysisDataUrl: `data:image/png;base64,${png.toString('base64')}`,
+    analysisPrompt: '观察用户给出的测试图片，只返回 JSON：{"shape":"形状的英文小写单词","color":"颜色的英文小写单词"}。不要添加其他内容。',
+    userText: '请识别这张测试图片的形状和主要颜色。'
+  });
+  if (String(result.analysis.shape).toLowerCase() !== 'square' || String(result.analysis.color).toLowerCase() !== 'red') throw new Error('分析接口已响应，但没有正确识别测试图片，请确认所选模型支持图片理解');
+  return { ok: true, channel: 'analysis', relayId: relay.id, model: result.model, latencyMs: Date.now() - startedAt, visualCheck: 'passed' };
 }
 
 async function testRelayHealth(payload = {}) {
@@ -2062,10 +2125,10 @@ function childrenwearAnalysisText(body) {
 }
 
 async function requestChildrenwearAssetAnalysis(file, role, options = {}) {
-  const api = options.apiConfig || await activeApiConfig();
+  const api = analysisTransport(options.apiConfig || await activeApiConfig());
   const model = String(options.analysisModel || api.analysisModel || ENV_API.analysisModel).trim();
   if (!model) throw new Error('请先配置素材分析模型');
-  const reservation = currentActorRole() === 'superadmin' ? null : await billing.reserve(currentWorkspaceId(), 'llm', {
+  const reservation = options.configurationProbe || currentActorRole() === 'superadmin' ? null : await billing.reserve(currentWorkspaceId(), 'llm', {
     relayId: api.activeRelay?.id,
     relayName: api.activeRelay?.name,
     modelId: model,
@@ -2077,7 +2140,7 @@ async function requestChildrenwearAssetAnalysis(file, role, options = {}) {
     onceKey: billingOnceKey('llm:childrenwear-analysis', currentWorkspaceId(), role, options.contentHash || '')
   });
   try {
-    const dataUrl = file ? await imageAsAnalysisDataUrl(file) : '';
+    const dataUrl = options.analysisDataUrl || (file ? await imageAsAnalysisDataUrl(file) : '');
     const body = await apiJson(apiEndpoint(api.baseUrl, '/chat/completions'), {
       method: 'POST',
       headers: {
@@ -2117,7 +2180,7 @@ async function requestChildrenwearAssetAnalysis(file, role, options = {}) {
     return { analysis, model, usage: body?.usage || null };
   } catch (error) {
     if (reservation) await billing.release(reservation).catch(() => {});
-    throw error;
+    throw analysisChannelError(error, model);
   }
 }
 
@@ -5118,7 +5181,7 @@ function childrenwearLocalEditIntentSystemPrompt(stage, instruction, referenceCo
 }
 
 async function requestChildrenwearLocalEditIntent({ sourcePath, previewPath, cropPath, referencePaths = [], stage, instruction, editId, signal }) {
-  const api = await activeApiConfig();
+  const api = analysisTransport(await activeApiConfig());
   const model = String(api.analysisModel || ENV_API.analysisModel).trim();
   if (!model) throw new Error('请先配置局部微调使用的视觉理解模型');
   const references = referencePaths.filter(file => file && fs.existsSync(file)).slice(0, 3);
@@ -6234,6 +6297,8 @@ const runtimeExports = {
   syncPromptSettingsFromWorkspace,
   syncPromptPresetGroupFromWorkspace,
   testApiSettings,
+  testAnalysisSettings,
+  getModelSelection, readSelectableModels, saveSelectedModel,
   testRelayHealth,
   validateTemplateOutputLayout,
   prepareTemplateGenerationCanvas,

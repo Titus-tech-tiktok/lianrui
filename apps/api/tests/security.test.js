@@ -86,3 +86,15 @@ test('改密请求在响应丢失后可用同一请求号安全重试', async ()
   assert.ok(await auth.authenticate('retry-user', 'new-password'));
   await fs.rm(root, { recursive: true, force: true });
 });
+
+
+test('model-only RPCs are available to admins without granting full API settings access', () => {
+  for (const method of ['getModelSelection', 'readSelectableModels', 'saveSelectedModel']) {
+    assert.equal(canAccessRpc({ role: 'member' }, method), false);
+    assert.equal(canAccessRpc({ role: 'admin' }, method), true);
+    assert.equal(canAccessRpc({ role: 'superadmin' }, method), true);
+  }
+  for (const method of ['getApiSettings', 'saveApiSettings', 'testApiSettings', 'testAnalysisSettings']) {
+    assert.equal(canAccessRpc({ role: 'admin' }, method), false);
+  }
+});

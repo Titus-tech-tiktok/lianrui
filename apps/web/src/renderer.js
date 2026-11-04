@@ -5482,6 +5482,8 @@ function relayRowPayload(row) {
     enabled: read('enabled')?.checked !== false,
     baseUrl: read('baseUrl')?.value.trim() || '',
     imageApiKey: read('imageKey')?.value.trim() || '',
+    analysisBaseUrl: read('analysisBaseUrl')?.value.trim() || '',
+    analysisApiKey: read('analysisKey')?.value.trim() || '',
     imageModel: read('imageModel')?.value.trim() || '',
     analysisModel: read('analysisModel')?.value.trim() || '',
     healthPath: read('healthPath')?.value.trim() || '/models',
@@ -5525,6 +5527,9 @@ function renderRelayStations() {
         <span><b>${escapeHtml(item.name)}</b><small>${escapeHtml(item.description || '可用中转站')}</small></span>
         <em>${item.id === activeId ? '当前使用' : '切换'}</em>
       </button>`).join('');
+    if (state.currentUser?.role === 'admin') {
+      list.innerHTML += `<article class="relay-station-editor" data-relay-id="${escapeHtml(activeId || '')}"><h3>当前 API 模型</h3><p>生图：${escapeHtml(state.adminModelSelection?.imageModel || '未选择')} · 分析：${escapeHtml(state.adminModelSelection?.analysisModel || '未选择')}</p><p>读取接口返回的模型并选择，确认后立即用于后续任务。</p><div class="inline-actions"><button class="secondary" type="button" data-relay-models>读取并选择生图模型</button><button class="secondary" type="button" data-relay-analysis-models>读取并选择分析模型</button></div><div data-relay-status></div></article>`;
+    }
     return;
   }
   list.innerHTML = relays.map(item => {
@@ -5540,7 +5545,9 @@ function renderRelayStations() {
           <label>OpenAI Base URL<input data-relay-field="baseUrl" type="url" value="${escapeHtml(item.baseUrl || '')}" placeholder="https://example.com/v1" spellcheck="false"></label>
           <label>图片 API Key<input data-relay-field="imageKey" type="password" placeholder="${item.imageKeyConfigured ? `已保存：${escapeHtml(item.imageKeyMasked || '')}` : '输入图片 API Key'}" autocomplete="new-password"></label>
           <label>图片模型（读取后选择）<input data-relay-field="imageModel" value="${escapeHtml(item.imageModel || '')}" readonly placeholder="请点击读取图片模型"></label>
-          <label>素材分析模型<input data-relay-field="analysisModel" value="${escapeHtml(item.analysisModel || 'gpt-5-6')}" placeholder="支持图片理解的多模态模型" spellcheck="false"></label>
+          <label>素材分析模型（读取后选择）<input data-relay-field="analysisModel" value="${escapeHtml(item.analysisModel || '')}" readonly placeholder="请点击读取分析模型"></label>
+          <label>分析 API 地址（可选）<input data-relay-field="analysisBaseUrl" type="url" value="${escapeHtml(item.analysisBaseUrl || '')}" placeholder="留空复用图片 API 地址"></label>
+          <label>分析 API Key（可选）<input data-relay-field="analysisKey" type="password" autocomplete="new-password" placeholder="${item.analysisKeyConfigured ? '已保存独立分析密钥；留空保留' : '留空复用图片 API 密钥'}"></label>
           <label>健康检测接口<input data-relay-field="healthPath" value="${escapeHtml(item.healthPath || '/models')}" placeholder="/models" spellcheck="false"></label>
           <label>模型列表接口<input data-relay-field="modelsPath" value="${escapeHtml(item.modelsPath || '/models')}" placeholder="/models" spellcheck="false"></label>
           <label>每张最低扣费<div class="money-input"><span>$</span><input data-relay-field="imagePriceMinMinor" type="number" min="0" max="1000000" step="0.000001" inputmode="decimal" placeholder="0.000000" value="${moneyMinorToSixDecimalInput(item.imagePriceMinMinor ?? 0)}"></div></label>
@@ -5554,6 +5561,8 @@ function renderRelayStations() {
         <div class="relay-station-actions">
           <button class="secondary" type="button" data-relay-health>健康检测</button>
           <button class="secondary" type="button" data-relay-models>读取图片模型</button>
+          <button class="secondary" type="button" data-relay-analysis-models>读取分析模型</button>
+          <button class="secondary" type="button" data-relay-analysis-test>测试分析接口</button>
           <label><input data-relay-field="enabled" type="checkbox"${item.enabled !== false ? ' checked' : ''}> 启用</label>
         </div>
         <div class="relay-station-status" data-relay-status>请使用健康检测和模型读取验证本站配置。</div>
@@ -5592,6 +5601,7 @@ async function loadRelayChoices() {
   if (!isTeamAdmin()) return;
   try {
     state.relayChoices = await window.caishen.getRelayChoices();
+    if (state.currentUser?.role === 'admin') state.adminModelSelection = await window.caishen.getModelSelection();
     state.selectedRelayId = state.relayChoices?.activeRelayId || '';
     state.allowAdminPromptView = state.relayChoices?.allowAdminPromptView === true;
     $('#promptSettingsNav').hidden = !canViewPrompts();
@@ -5632,7 +5642,7 @@ function renderApiSettings() {
   if (!superAdmin) {
     if (heading) heading.textContent = '中转站选择';
     if (description) {
-      description.textContent = '管理员只能查看名称和介绍，并切换当前中转站。';
+      description.textContent = '管理员可以切换中转站，以及读取并选择当前 API 的生图模型和分析模型。';
       description.hidden = false;
     }
     if (footnoteRow) footnoteRow.hidden = true;
@@ -5700,7 +5710,7 @@ function renderApiModelList() {
   if (!models.length) return;
   if (!models.some(model => model.id === state.selectedApiModelId)) {
     const row = $(`.relay-station-editor[data-relay-id="${CSS.escape(state.apiModelRelayId || '')}"]`);
-    const configuredModel = row?.querySelector('[data-relay-field="imageModel"]')?.value || '';
+    const configuredModel = row?.querySelector(`[data-relay-field="${state.apiModelChannel === 'analysis' ? 'analysisModel' : 'imageModel'}"]`)?.value || '';
     const configured = models.find(model => model.id === configuredModel);
     state.selectedApiModelId = configured?.id || models[0].id;
   }
@@ -5722,8 +5732,8 @@ function openApiModelModal(relayId = state.apiModelRelayId) {
   const models = state.imageApiModels;
   if (!models.length) return toast('请先读取图片模型列表', true);
   state.selectedApiModelId = '';
-  $('#apiModelModalTitle').textContent = '选择图片模型';
-  $('#apiModelModalDescription').textContent = '显示当前中转站图片密钥返回的全部模型。';
+  $('#apiModelModalTitle').textContent = state.apiModelChannel === 'analysis' ? '选择素材分析模型' : '选择生图模型';
+  $('#apiModelModalDescription').textContent = '列表来自当前接口；分析模型选择后需通过真实图片理解测试。';
   $('#apiModelModal').hidden = false;
   $('#apiModelSearch').focus();
   renderApiModelList();
@@ -5733,14 +5743,32 @@ function closeApiModelModal() {
   $('#apiModelModal').hidden = true;
 }
 
-function applySelectedApiModel() {
+async function applySelectedApiModel() {
   if (!state.selectedApiModelId) return toast('请先选择一个模型', true);
   const row = $(`.relay-station-editor[data-relay-id="${CSS.escape(state.apiModelRelayId || '')}"]`);
-  const input = row?.querySelector('[data-relay-field="imageModel"]');
-  if (!input) return toast('中转站配置已变化，请重新读取模型', true);
-  input.value = state.selectedApiModelId;
-  closeApiModelModal();
-  toast('图片模型已选择，保存设置后生效');
+  if (!row) return toast('中转站配置已变化，请重新读取模型', true);
+  const channel = state.apiModelChannel === 'analysis' ? 'analysis' : 'image';
+  const model = state.selectedApiModelId;
+  const button = $('#applyApiModelButton');
+  button.disabled = true;
+  try {
+    if (!isSuperAdmin()) {
+      state.adminModelSelection = await window.caishen.saveSelectedModel({ relayId: state.apiModelRelayId, channel, model });
+      renderRelayStations();
+      setRelayStatus($(`.relay-station-editor[data-relay-id="${CSS.escape(state.apiModelRelayId)}"]`), `${channel === 'analysis' ? '分析' : '生图'}模型已保存：${model}`);
+    } else {
+      if (channel === 'analysis') {
+        $('#selectedApiModel').textContent = '正在测试图片理解能力…';
+        await window.caishen.testAnalysisSettings({ relay: { ...relayRowPayload(row), analysisModel: model } });
+      }
+      row.querySelector(`[data-relay-field="${channel === 'analysis' ? 'analysisModel' : 'imageModel'}"]`).value = model;
+    }
+    closeApiModelModal();
+    toast(isSuperAdmin() ? '模型已选择，保存设置后生效' : '模型已保存，后续任务立即生效');
+  } catch (error) {
+    $('#selectedApiModel').textContent = apiTestErrorText(error);
+    toast(errorText(error), true);
+  } finally { button.disabled = false; }
 }
 
 async function loadApiSettings() {
@@ -5797,14 +5825,17 @@ async function testRelayHealth(row, button) {
   }
 }
 
-async function readRelayModels(row, button) {
-  setRelayStatus(row, '正在读取图片模型…');
+async function readRelayModels(row, button, channel = 'image') {
+  setRelayStatus(row, channel === 'analysis' ? '正在读取分析模型…' : '正在读取生图模型…');
   button.disabled = true;
   try {
-    const result = await window.caishen.testApiSettings({ relay: relayRowPayload(row), requestTimeoutSeconds: Number($('#apiRequestTimeout').value) });
+    const result = isSuperAdmin()
+      ? await window.caishen.testApiSettings({ channel, relay: relayRowPayload(row), requestTimeoutSeconds: Number($('#apiRequestTimeout').value) })
+      : await window.caishen.readSelectableModels({ channel });
+    state.apiModelChannel = channel;
     state.imageApiModels = result.models || [];
     state.apiModelRelayId = row.dataset.relayId;
-    setRelayStatus(row, `图片模型读取成功 · ${result.modelCount || 0} 个 · ${result.latencyMs ?? 0} ms`);
+    setRelayStatus(row, `${channel === 'analysis' ? '分析' : '生图'}模型读取成功 · ${result.modelCount || 0} 个 · ${result.latencyMs ?? 0} ms`);
     if (result.modelCount) openApiModelModal(row.dataset.relayId);
     else toast('接口正常，但没有返回可用模型', true);
   } catch (error) {
@@ -5813,6 +5844,16 @@ async function readRelayModels(row, button) {
   } finally {
     button.disabled = false;
   }
+}
+
+async function testRelayAnalysis(row, button) {
+  button.disabled = true;
+  setRelayStatus(row, '正在发送测试图片，检查分析模型的图片理解能力…');
+  try {
+    const result = await window.caishen.testAnalysisSettings({ relay: relayRowPayload(row) });
+    setRelayStatus(row, `图片理解测试通过 · ${result.model} · ${result.latencyMs} ms`);
+  } catch (error) { setRelayStatus(row, apiTestErrorText(error), true); }
+  finally { button.disabled = false; }
 }
 
 async function saveSettings() {
@@ -11089,6 +11130,10 @@ function bindEvents() {
     if (!row) return;
     const health = event.target.closest('[data-relay-health]');
     if (health) return testRelayHealth(row, health);
+    const analysisModels = event.target.closest('[data-relay-analysis-models]');
+    if (analysisModels) return readRelayModels(row, analysisModels, 'analysis');
+    const analysisTest = event.target.closest('[data-relay-analysis-test]');
+    if (analysisTest) return testRelayAnalysis(row, analysisTest);
     const models = event.target.closest('[data-relay-models]');
     if (models) return readRelayModels(row, models);
   };

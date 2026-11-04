@@ -41,7 +41,7 @@ const LONG_JOB_METHODS = new Set([
   'generateChildrenwearLocalEdit'
 ]);
 const SUPERADMIN_RPC_METHODS = new Set([
-  'getApiSettings', 'saveApiSettings', 'testApiSettings', 'testRelayHealth'
+  'getApiSettings', 'saveApiSettings', 'testApiSettings', 'testRelayHealth', 'testAnalysisSettings'
 ]);
 const childrenwearAutoAnalysisLastRuns = new Map();
 let childrenwearAutoAnalysisSweepRunning = false;
@@ -81,6 +81,7 @@ async function runChildrenwearAutoAnalysisSweep() {
 
 function canAccessRpc(user, method) {
   const name = String(method || '');
+  if (['getModelSelection', 'readSelectableModels', 'saveSelectedModel'].includes(name)) return ['admin', 'superadmin'].includes(user?.role);
   if (SUPERADMIN_RPC_METHODS.has(name)) return user?.role === 'superadmin';
   return true;
 }
@@ -1189,6 +1190,10 @@ const rpc = {
   getApiSettings: () => runtime.loadApiSettings(),
   saveApiSettings: ([payload]) => runtime.saveApiSettings(payload || {}),
   testApiSettings: ([payload]) => runtime.testApiSettings(payload || {}),
+  getModelSelection: () => runtime.getModelSelection(),
+  readSelectableModels: ([payload]) => runtime.readSelectableModels(payload || {}),
+  saveSelectedModel: ([payload]) => runtime.saveSelectedModel(payload || {}),
+  testAnalysisSettings: ([payload]) => runtime.testAnalysisSettings(payload || {}),
   testRelayHealth: ([payload]) => runtime.testRelayHealth(payload || {}),
   saveConfig: async ([config]) => publicConfig(await runtime.saveConfig(safeConfig(config || {}))),
   resetConfig: async () => publicConfig(await runtime.resetConfig()),
