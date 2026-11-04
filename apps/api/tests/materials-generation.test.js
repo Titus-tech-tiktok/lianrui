@@ -94,6 +94,8 @@ test('material analysis persists image/name descriptions and optional model refe
   assert.match(generations[0], /左腿支撑/);
   assert.match(generations[0], /生成电商模特成品图/);
   assert.match(generations[0], /人物身份与外观取自人物模特参考/);
+  assert.match(generations[0], /鞋子不属于人物身份锁定范围/);
+  assert.match(generations[0], /每次生成都要根据本次上衣和裤子的主色、辅色及整体风格重新搭配并生成鞋子/);
   const poseCalls = analyses.filter(item => item.messages[0].content.includes('POSE_REFERENCE_V1')).length;
   const reusedPose = await runtime.analyzePoseReference({ imagePath: files.pose });
   assert.equal(reusedPose.reused, true);

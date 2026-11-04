@@ -6021,7 +6021,9 @@ document.addEventListener('click', async event => {
       return chooseCwModelAssetSlot(button.dataset.cwPickReference, card.dataset.cwDraft);
     }
     if (button.hasAttribute('data-cw-new-model')) {
-      state.childrenwearModelAssetExplicit = false;
+      state.childrenwearModelAssetTargetId = '';
+      state.childrenwearSourceBuilderModes.model = false;
+      cwSourceBuilderSelection('model').clear();
       state.childrenwearModelAssetRole = 'top';
       const draft = cwNewDraft('model');
       draft.operationType = 'dress';
@@ -6031,7 +6033,10 @@ document.addEventListener('click', async event => {
       state.childrenwearQueueFilters.model = 'all';
       state.childrenwearQueueDateFilters.model = 'all';
       state.childrenwearQueuePages.model = 1;
-      return renderCwQueue('model');
+      renderCwSource('model');
+      renderCwQueue('model');
+      $(CW_STAGE_META.model.queue)?.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
     }
     if (button.hasAttribute('data-cw-analyze-pose')) {
       const card = button.closest('[data-cw-draft]');
@@ -8586,7 +8591,7 @@ function renderCwModelAssetSlots() {
 function chooseCwModelAssetSlot(role, draftId = '') {
   if (draftId) state.childrenwearActiveDraft.model = draftId;
   state.childrenwearModelAssetRole = role;
-  state.childrenwearModelAssetExplicit = true;
+  state.childrenwearModelAssetTargetId = draftId || '';
   state.childrenwearModelOperationType = 'dress';
   if (['reference', 'pose'].includes(role)) state.childrenwearSourceTabs.model = 'model-reference';
   else if (!['model-master', 'model-external'].includes(state.childrenwearSourceTabs.model)) state.childrenwearSourceTabs.model = 'model-master';
@@ -8720,8 +8725,9 @@ function addCwSource(stage, role, pathValue, options = {}) {
   if (stage === 'model' && ['master', 'reference'].includes(role) && state.childrenwearModelOperationType !== 'scene_only') {
     const slot = modelAssetSlot(role, state.childrenwearModelAssetRole || 'top');
     if (slot !== 'master') {
-      const draft = selectModelAssetDraft(state.childrenwearDrafts.model, state.childrenwearActiveDraft.model, state.childrenwearModelAssetExplicit) || cwNewDraft('model');
+      const draft = selectModelAssetDraft(state.childrenwearDrafts.model, state.childrenwearActiveDraft.model, state.childrenwearModelAssetTargetId === state.childrenwearActiveDraft.model) || cwNewDraft('model');
       assignModelAsset(draft, slot, source);
+      state.childrenwearModelAssetTargetId = '';
       draft.backgroundMode ||= state.childrenwearModelBackgroundMode || 'model_reference';
       draft.solidBackgroundColor ||= state.childrenwearModelSolidColor;
       state.childrenwearActiveDraft.model = draft.id;

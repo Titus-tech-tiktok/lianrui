@@ -5768,7 +5768,7 @@ async function generateChildrenwearModel(payload = {}, options = {}) {
   }
   const materialSelections = await bindGenerationMaterials(generationInput, payload, folder, 'model');
   const poseInstruction = poseAnalysis ? `动作参考反推提示词（只作用于主任务模特的姿态）：${poseAnalysis.posePrompt}` : '';
-  const compositionInstruction = operationType === 'dress' ? '参考合并规则：上衣和裤子的款式、颜色、图案与工艺分别取自各自商品参考；人物身份与外观取自人物模特参考；姿态采用动作反推提示词；所选材质纹理仅应用于对应商品；预设提示词提供其余画面要求。各参考按上述职责合并，独立动作优先于人物参考的原姿势，所选商品材质优先于原图的面料纹理，商品款式和人物身份保持各自参考。' : '';
+  const compositionInstruction = operationType === 'dress' ? '参考合并规则：上衣和裤子的款式、颜色、图案与工艺分别取自各自商品参考；人物身份与外观取自人物模特参考；姿态采用动作反推提示词；所选材质纹理仅应用于对应商品；预设提示词提供其余画面要求。各参考按上述职责合并，独立动作优先于人物参考的原姿势，所选商品材质优先于原图的面料纹理，商品款式和人物身份保持各自参考。鞋子不属于人物身份锁定范围：每次生成都要根据本次上衣和裤子的主色、辅色及整体风格重新搭配并生成鞋子，鞋子配色与本次服装协调。不要锁定或照搬人物参考图、动作参考图中的原鞋款与鞋色。保留人物身份及脚部合理解剖，但鞋款与鞋色按本次服装重新确定。此鞋子搭配规则优先于预设中保留模特外观或原鞋的要求。' : '';
   const prompt = `${routeInstruction}\n\n运营当前预设提示词：\n${generationInput.prompt}\n\n${poseInstruction}\n\n${compositionInstruction}`;
   await Promise.all([
     fsp.writeFile(path.join(evidenceFolder, 'prompt.txt'), prompt, 'utf8'),
